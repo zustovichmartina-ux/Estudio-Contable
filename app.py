@@ -231,17 +231,6 @@ st.markdown(
 
     /* Selectboxes: no CSS agresivo de BaseWeb (anti removeChild). */
 
-    [data-testid="stException"][data-ec-hidden-noise="1"],
-    .stException[data-ec-hidden-noise="1"],
-    [data-testid="stAlert"][data-ec-hidden-noise="1"] {
-        display: none !important;
-        height: 0 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        overflow: hidden !important;
-        border: none !important;
-    }
-
     .stMarkdown p, [data-testid="stCaptionContainer"] {
         font-size: 15px !important;
         color: var(--ec-slate) !important;
@@ -413,9 +402,10 @@ st.markdown(
         pointer-events: none !important;
     }
 
-    /* Chips Biblioteca/Menú: fijos arriba a la derecha.
-       NO usar position:absolute + width/height 0 en wrappers: eso interceptaba
-       clicks del nav (radio/botones) y dejaba el módulo desincronizado. */
+    /* Chips Biblioteca/Menú: fijos arriba a la derecha (CSS only).
+       No reparentar nodos con JS (insertBefore/appendChild): React de Streamlit
+       dispara NotFoundError removeChild. Tampoco absolute+size 0 en wrappers
+       (interceptaba clicks del nav segmented_control). */
     div[data-testid="stHorizontalBlock"]:has(.st-key-ec_toolbar_bib):has(.st-key-ec_toolbar_menu) {
         position: fixed !important;
         top: 0.35rem !important;
@@ -571,142 +561,12 @@ st.markdown(
 )
 
 
-def _inyectar_autoheal_frontend() -> None:
-    """Oculta/elimina banners rojos de removeChild (bug Streamlit/React) sin ensuciar la UI.
-
-    El script corre en un iframe de components.html → opera sobre parent.document.
-    No recarga la página: eso dejaba varios errores rojos iguales en pantalla.
-    """
-    import streamlit.components.v1 as components
-
-    components.html(
-        """
-<script>
-(function () {
-  function rootDoc() {
-    try { return window.parent && window.parent.document ? window.parent.document : document; }
-    catch (e) { return document; }
-  }
-  function rootWin() {
-    try { return window.parent || window; }
-    catch (e) { return window; }
-  }
-
-  const w = rootWin();
-  if (w.__ecAutohealArmed) return;
-  w.__ecAutohealArmed = true;
-
-  function isNoise(msg) {
-    return /removeChild|NotFoundError|Error al ejecutar ['"]removeChild['"]|nodo que se va a eliminar/i.test(
-      String(msg || "")
-    );
-  }
-
-  function hideDeploy() {
-    try {
-      const doc = rootDoc();
-      const kill = function (el) {
-        if (!el) return;
-        el.style.setProperty("display", "none", "important");
-        el.style.setProperty("visibility", "hidden", "important");
-        el.style.setProperty("width", "0", "important");
-        el.style.setProperty("height", "0", "important");
-        el.style.setProperty("margin", "0", "important");
-        el.style.setProperty("padding", "0", "important");
-        el.style.setProperty("overflow", "hidden", "important");
-        el.style.setProperty("pointer-events", "none", "important");
-      };
-      doc.querySelectorAll(
-        '[data-testid="stAppDeployButton"], [data-testid="stDeployButton"], .stDeployButton'
-      ).forEach(kill);
-      doc.querySelectorAll(
-        '[data-testid="stToolbar"] button, [data-testid="stToolbar"] a, [data-testid="stHeader"] button'
-      ).forEach(function (el) {
-        const t = (
-          (el.innerText || "") +
-          " " +
-          (el.textContent || "") +
-          " " +
-          (el.getAttribute("title") || "") +
-          " " +
-          (el.getAttribute("aria-label") || "")
-        );
-        if (/deploy|desplegar/i.test(t)) kill(el);
-      });
-    } catch (e) {}
-  }
-
-  function mountEcChipsToHeader() {
-    /* No mover nodos React (rompe el main). Solo CSS fixed + hideDeploy. */
-    return;
-  }
-
-  function scrub() {
-    try {
-      hideDeploy();
-      mountEcChipsToHeader();
-      const doc = rootDoc();
-      const sels = [
-        '[data-testid="stException"]',
-        '.stException',
-        '[data-testid="stAlert"]',
-        '[kind="error"]',
-        'div[role="alert"]',
-      ];
-      doc.querySelectorAll(sels.join(",")).forEach(function (el) {
-        const t = (el.innerText || el.textContent || "");
-        if (isNoise(t)) {
-          // Solo ocultar: NO el.remove() — romper nodos React desincroniza el nav/módulo.
-          el.style.setProperty("display", "none", "important");
-          el.style.setProperty("height", "0", "important");
-          el.style.setProperty("margin", "0", "important");
-          el.style.setProperty("padding", "0", "important");
-          el.style.setProperty("overflow", "hidden", "important");
-          el.setAttribute("data-ec-hidden-noise", "1");
-        }
-      });
-    } catch (e) {}
-  }
-
-  w.addEventListener("error", function (e) {
-    if (isNoise((e && (e.message || (e.error && e.error.message))) || "")) {
-      try { e.preventDefault(); e.stopImmediatePropagation(); } catch (err) {}
-      scrub();
-      return true;
-    }
-  }, true);
-  w.addEventListener("unhandledrejection", function (e) {
-    const r = e && e.reason;
-    if (isNoise((r && (r.message || String(r))) || "")) {
-      try { e.preventDefault(); e.stopImmediatePropagation(); } catch (err) {}
-      scrub();
-    }
-  }, true);
-
-  try {
-    const doc = rootDoc();
-    const obs = new MutationObserver(function () { scrub(); });
-    function arm() {
-      if (!doc.body) return;
-      obs.observe(doc.body, { childList: true, subtree: true });
-      scrub();
-      setInterval(scrub, 700);
-    }
-    if (doc.body) arm();
-    else doc.addEventListener("DOMContentLoaded", arm);
-  } catch (e) {}
-})();
-</script>
-        """,
-        height=0,
-        width=0,
-    )
-
-
-_inyectar_autoheal_frontend()
+# No inyectar JS (components.html + MutationObserver / hideDeploy / scrub de
+# excepciones): mutar el DOM de Streamlit mientras React reconcilia provoca
+# NotFoundError removeChild en Cloud. Deploy se oculta solo con CSS arriba;
+# chips Biblioteca/Menú van con position:fixed CSS-only (sin reparent).
 
 db.inicializar_bd()
-
 NUEVOS_MONOTRIBUTISTAS: list[dict[str, str]] = [
     {"nombre": "PERNAS ROSARIO", "cuit": "27274162282", "tipo": "Monotributista"},
     {"nombre": "SELVA, MAXIMILIANO", "cuit": "20253936755", "tipo": "Monotributista"},
