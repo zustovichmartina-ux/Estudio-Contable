@@ -68,6 +68,10 @@ informacion sobre tango/
 # Keep project templates under plantillas/
 !plantillas/
 !plantillas/**
+!plantillas/**/*.xlsx
+
+# Template vacío Tango (Streamlit Cloud / export asientos)
+!Asientos contables VACIO PARA LLENAR E IMPORTAR.xlsx
 
 # Cloud seed: sociedades PJ + planes de cuentas (catálogo, repo privado)
 !data/

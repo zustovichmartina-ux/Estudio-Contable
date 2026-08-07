@@ -41,6 +41,9 @@ PLANTILLA_CONCILIACION = BASE_DIR / "planilla de conciliacion" / "Planilla de Co
 PLAN_CUENTAS_DEFAULT = BASE_DIR / "planes de cuentas" / "Cuentas contables (4).xlsx"
 COMPRAS_TANGO_PATH = BASE_DIR / "Compras_Tango.xlsx"
 PLANTILLA_ASIENTOS_CONTABLES = BASE_DIR / "Asientos contables (11).xlsx"
+PLANTILLA_ASIENTOS_TANGO_VACIO = (
+    BASE_DIR / "Asientos contables VACIO PARA LLENAR E IMPORTAR.xlsx"
+)
 HOJA_ASIENTOS = "Asientos contables"
 HOJA_RENGLONES = "Renglones"
 COLUMNAS_GRILLA_PRESTAMOS = [
@@ -2384,6 +2387,21 @@ def _resolver_ruta_plantilla_asientos() -> Path:
         if ruta.exists():
             return ruta
     return PLANTILLA_ASIENTOS_CONTABLES
+
+
+def _resolver_ruta_plantilla_asientos_tango_vacio() -> Path:
+    """Template vacío oficial Tango (raíz o plantillas/; Cloud-friendly)."""
+    nombre = "Asientos contables VACIO PARA LLENAR E IMPORTAR.xlsx"
+    candidatas = [
+        BASE_DIR / nombre,
+        BASE_DIR / "plantillas" / nombre,
+        Path(__file__).resolve().parent / nombre,
+        Path(__file__).resolve().parent / "plantillas" / nombre,
+    ]
+    for ruta in candidatas:
+        if ruta.exists():
+            return ruta
+    return PLANTILLA_ASIENTOS_TANGO_VACIO
 
 
 def leer_estructura_plantilla_asientos(ruta: str | Path | None = None) -> dict[str, list[str]]:
@@ -13271,7 +13289,7 @@ def generar_excel_tango_nativo(
     if validar:
         asientos = preparar_asientos_export_tango(asientos, plan_cuentas)
 
-    template = BASE_DIR / "Asientos contables VACIO PARA LLENAR E IMPORTAR.xlsx"
+    template = _resolver_ruta_plantilla_asientos_tango_vacio()
     exportaciones_dir = BASE_DIR / "exportaciones"
     exportaciones_dir.mkdir(exist_ok=True)
     if nombre_archivo:
@@ -13283,7 +13301,7 @@ def generar_excel_tango_nativo(
         raise FileNotFoundError(
             f"No se encontró el template Tango en: {template}\n"
             "Copiá el archivo 'Asientos contables VACIO PARA LLENAR E IMPORTAR.xlsx' "
-            "a la raíz del proyecto."
+            "a la raíz del proyecto o a plantillas/."
         )
 
     shutil.copy(str(template), str(destino))
