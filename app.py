@@ -416,7 +416,7 @@ st.markdown(
        clicks del nav (radio/botones) y dejaba el módulo desincronizado. */
     div[data-testid="stHorizontalBlock"]:has(.st-key-ec_toolbar_bib):has(.st-key-ec_toolbar_menu) {
         position: fixed !important;
-        top: 0.4rem !important;
+        top: 0.35rem !important;
         right: 2.75rem !important;
         z-index: 999990 !important;
         width: max-content !important;
@@ -424,8 +424,11 @@ st.markdown(
         height: auto !important;
         margin: 0 !important;
         padding: 0 !important;
-        gap: 0.5rem !important;
+        gap: 0.85rem !important;
+        column-gap: 0.85rem !important;
+        row-gap: 0 !important;
         align-items: center !important;
+        justify-content: flex-end !important;
         background: transparent !important;
         border: none !important;
         box-shadow: none !important;
@@ -437,7 +440,13 @@ st.markdown(
         flex: 0 0 auto !important;
         min-width: 0 !important;
         padding: 0 !important;
+        margin: 0 !important;
         pointer-events: auto;
+    }
+    /* Separación extra entre chips (Streamlit a veces comprime el gap de columns). */
+    div[data-testid="stHorizontalBlock"]:has(.st-key-ec_toolbar_bib):has(.st-key-ec_toolbar_menu)
+      > div[data-testid="stColumn"]:has(.st-key-ec_toolbar_menu) {
+        margin-left: 0.35rem !important;
     }
     /* Colapsar solo el alto reservado en el flujo (sin overlay absoluto).
        overflow:visible para que los popovers fijos sigan clickeables. */
@@ -459,17 +468,31 @@ st.markdown(
     .st-key-ec_toolbar_menu button,
     .st-key-ec_toolbar_bib [data-testid="stPopoverButton"] button,
     .st-key-ec_toolbar_menu [data-testid="stPopoverButton"] button {
-        min-height: 1.9rem !important;
-        height: 1.9rem !important;
-        padding: 0 0.75rem !important;
-        font-size: 0.8rem !important;
-        font-weight: 600 !important;
-        border-radius: 0.4rem !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        box-sizing: border-box !important;
+        min-height: 2rem !important;
+        height: 2rem !important;
+        padding: 0 0.95rem !important;
+        font-size: 0.8125rem !important;
+        font-weight: 500 !important;
+        letter-spacing: 0.01em !important;
+        line-height: 1 !important;
+        border-radius: 0.5rem !important;
         background: #FFFFFF !important;
         color: #1F4E79 !important;
-        border: 1px solid #CBD5E1 !important;
-        box-shadow: none !important;
+        border: 1px solid #D0D7DE !important;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
         white-space: nowrap !important;
+        transition: background 0.12s ease, border-color 0.12s ease !important;
+    }
+    .st-key-ec_toolbar_bib button:hover,
+    .st-key-ec_toolbar_menu button:hover,
+    .st-key-ec_toolbar_bib [data-testid="stPopoverButton"] button:hover,
+    .st-key-ec_toolbar_menu [data-testid="stPopoverButton"] button:hover {
+        background: #F8FAFC !important;
+        border-color: #94A3B8 !important;
     }
     /* Nav principal: segmented control compacto */
     div[data-testid="stSegmentedControl"] label,
@@ -867,7 +890,7 @@ def _render_barra_superior_cuenta() -> None:
     label_bib = f"Biblioteca · {total_meses}"
 
     # Fila mínima: solo chips (CSS las sube al header y colapsa el hueco del main)
-    col_bib, col_menu = st.columns([1.2, 1.0], gap="small")
+    col_bib, col_menu = st.columns([1.2, 1.0], gap="medium")
     with col_bib:
         with st.popover(label_bib, key="ec_toolbar_bib", width="content"):
             sociedad_id = st.session_state.get(_SOCiedad_KEY)
