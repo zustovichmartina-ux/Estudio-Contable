@@ -135,6 +135,25 @@ def ruta_plan_cifrado(usuario: str | None, cuit: str) -> Path:
     return directorio_seguro(usuario, "planes") / f"plan_{cuit}.xlsx{ENC_SUFFIX}"
 
 
+def guardar_plan_cifrado_por_cliente(
+    usuario: str | None,
+    cliente_id: int | str,
+    archivo_bytes: bytes,
+) -> Path:
+    """Plan cifrado asociado al id de cliente (CUIT placeholder / temporal no importa)."""
+    dest = (
+        directorio_seguro(usuario, "planes")
+        / f"plan_id_{int(cliente_id)}.xlsx{ENC_SUFFIX}"
+    )
+    return escribir_cifrado(dest, archivo_bytes)
+
+
+def ruta_plan_cifrado_por_cliente(usuario: str | None, cliente_id: int | str) -> Path:
+    return (
+        directorio_seguro(usuario, "planes")
+        / f"plan_id_{int(cliente_id)}.xlsx{ENC_SUFFIX}"
+    )
+
 def guardar_balance_cifrado(
     usuario: str | None,
     sociedad_id: int | str,

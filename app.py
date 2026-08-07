@@ -1831,8 +1831,9 @@ def _seccion_clientes() -> None:
         st.markdown("---")
         st.markdown("**Plan de Cuentas del Cliente**")
         pc_actual = cliente_edit.get("plan_cuentas_path") if cliente_edit else None
-        if pc_actual and Path(pc_actual).exists():
-            st.success(f"Plan vinculado: {Path(pc_actual).name}")
+        pc_resuelto = _path_plan_bd(pc_actual) if pc_actual else None
+        if pc_resuelto and pc_resuelto.exists() and not _es_plan_generico_default(pc_resuelto):
+            st.success(f"Plan vinculado: {pc_resuelto.name}")
         else:
             st.info("Sin plan asociado. Se usará el plan por defecto del proyecto.")
 
@@ -1843,7 +1844,11 @@ def _seccion_clientes() -> None:
         )
         if archivo_pc and cliente_edit:
             try:
-                xlsx_path = _guardar_plan_cliente_en_disco(cliente_edit["cuit"], archivo_pc.getvalue())
+                xlsx_path = _guardar_plan_cliente_en_disco(
+                    cliente_edit["cuit"],
+                    archivo_pc.getvalue(),
+                    cliente_id=int(cliente_edit["id"]),
+                )
                 db.actualizar_cliente(
                     cliente_edit["id"],
                     cliente_edit["nombre"],
@@ -1852,7 +1857,9 @@ def _seccion_clientes() -> None:
                     str(xlsx_path),
                     cliente_edit.get("mes_cierre_balance", 12),
                 )
+                df = _cargar_df_desde_ruta_plan(xlsx_path)
                 _invalidar_cache_plan(cliente_edit["id"])
+                _confirmar_plan_propio_en_session(int(cliente_edit["id"]), xlsx_path, df)
                 _sincronizar_plan_cuentas_session(cliente_edit["id"], forzar=True)
                 if st.session_state.get(_SOCiedad_KEY) == cliente_edit["id"]:
                     actualizar_sociedad_activa()
@@ -2173,20 +2180,43 @@ def _ruta_plan_csv(cuit: str) -> Path:
     return _directorio_planes_canonico() / f"plan_{cuit}.csv"
 
 
+def _path_plan_bd(raw: str | None) -> Path | None:
+    """Resuelve path de plan guardado en BD (absoluto o relativo al repo)."""
+    if not raw or not str(raw).strip():
+        return None
+    ruta = Path(str(raw).strip())
+    if ruta.exists():
+        return ruta
+    if not ruta.is_absolute():
+        alt = BASE_DIR / ruta
+        if alt.exists():
+            return alt
+    return ruta
+
+
 def _rutas_plan_candidatas(cliente: dict) -> list[Path]:
     cuit = str(cliente.get("cuit", "")).strip()
+    cliente_id = cliente.get("id")
     # Primero la red compartida, después local — así todos ven el último upload.
     candidatas: list[Path] = [
         _ruta_plan_xlsx_red(cuit),
         _ruta_plan_xlsx_local(cuit),
         LEGACY_PLANES_DIR / f"{cuit}_plan.xlsx",
     ]
+    if cliente_id is not None:
+        candidatas.insert(0, DATA_PLANES_DIR / f"plan_id_{int(cliente_id)}.xlsx")
+        candidatas.insert(1, _directorio_planes_canonico() / f"plan_id_{int(cliente_id)}.xlsx")
     # Cloud: planes cifrados por usuario (y fallback sin usuario)
     try:
-        from seguridad_datos import ruta_plan_cifrado
+        from seguridad_datos import ruta_plan_cifrado, ruta_plan_cifrado_por_cliente
 
         candidatas.insert(0, ruta_plan_cifrado(_usuario_oficina_actual(), cuit))
         candidatas.insert(1, ruta_plan_cifrado(None, cuit))
+        if cliente_id is not None:
+            candidatas.insert(
+                0, ruta_plan_cifrado_por_cliente(_usuario_oficina_actual(), cliente_id)
+            )
+            candidatas.insert(1, ruta_plan_cifrado_por_cliente(None, cliente_id))
     except Exception:
         pass
     carpeta_cliente = RUTA_RAIZ_CLIENTES / cuit
@@ -2199,10 +2229,10 @@ def _rutas_plan_candidatas(cliente: dict) -> list[Path]:
                 "cuentas" in nombre or "plan" in nombre
             ):
                 candidatas.append(archivo)
-    if cliente.get("plan_cuentas_path"):
-        bd_path = Path(cliente["plan_cuentas_path"])
-        if bd_path.suffix.lower() in (".xlsx", ".enc") and bd_path not in candidatas:
-            candidatas.append(bd_path)
+    bd_path = _path_plan_bd(cliente.get("plan_cuentas_path"))
+    if bd_path is not None and bd_path.suffix.lower() in (".xlsx", ".xls", ".enc"):
+        if bd_path not in candidatas:
+            candidatas.insert(0, bd_path)
     candidatas.append(_directorio_planes_canonico() / f"plan_{cuit}.csv")
     candidatas.append(DATA_PLANES_DIR / f"plan_{cuit}.csv")
     vistos: set[str] = set()
@@ -2252,16 +2282,34 @@ def _es_plan_generico_default(ruta: Path) -> bool:
     return False
 
 
-def _es_plan_propio_cliente(cuit: str, ruta: Path) -> bool:
+def _es_plan_propio_cliente(cuit: str, ruta: Path, cliente_id: int | None = None) -> bool:
     """True solo si el archivo es el Excel específico del cliente (no el genérico del proyecto)."""
     ruta = Path(ruta)
     if not ruta.exists():
         return False
     if _es_plan_generico_default(ruta):
         return False
-    # Plan cifrado del usuario = propio
-    if "data" in ruta.parts and "secure" in ruta.parts and f"plan_{cuit}" in ruta.name:
-        return True
+    nombre = ruta.name.lower()
+    # Plan cifrado / secure del usuario = propio (por CUIT o por cliente_id)
+    if "data" in ruta.parts and "secure" in ruta.parts and "planes" in ruta.parts:
+        if cuit and f"plan_{cuit}".lower() in nombre:
+            return True
+        if cliente_id is not None and f"plan_id_{int(cliente_id)}" in nombre:
+            return True
+        # Path BD bajo secure/planes (nombre libre) cuenta como propio de esa sociedad
+        if nombre.startswith("plan_") and nombre.endswith((".xlsx.enc", ".xlsx", ".enc")):
+            return True
+    if cliente_id is not None:
+        for carpeta in (_directorio_planes_canonico(), DATA_PLANES_DIR, PLANES_RED_DIR):
+            cand = carpeta / f"plan_id_{int(cliente_id)}.xlsx"
+            try:
+                if cand.exists() and ruta.resolve() == cand.resolve():
+                    return True
+            except OSError:
+                if str(ruta).lower() == str(cand).lower():
+                    return True
+        if f"plan_id_{int(cliente_id)}" in nombre:
+            return True
     for cand in (_ruta_plan_xlsx_red(cuit), _ruta_plan_xlsx_local(cuit), _ruta_plan_xlsx(cuit)):
         try:
             if cand.exists() and ruta.resolve() == cand.resolve():
@@ -2278,7 +2326,6 @@ def _es_plan_propio_cliente(cuit: str, ruta: Path) -> bool:
     try:
         if carpeta_cliente.is_dir() and carpeta_cliente.resolve() == ruta.parent.resolve():
             # En carpeta del cliente: Excel con 'plan'/'cuentas' en el nombre (no default)
-            nombre = ruta.name.lower()
             if ruta.suffix.lower() in (".xlsx", ".xls") and (
                 "cuentas" in nombre or "plan" in nombre
             ):
@@ -2286,22 +2333,24 @@ def _es_plan_propio_cliente(cuit: str, ruta: Path) -> bool:
     except OSError:
         pass
     # plan_{cuit}.xlsx en carpeta planes_cuentas (red o local)
-    if ruta.name.lower() == f"plan_{cuit}.xlsx".lower() and "planes_cuentas" in str(ruta).lower():
+    if cuit and ruta.name.lower() == f"plan_{cuit}.xlsx".lower() and "planes_cuentas" in str(ruta).lower():
         return True
-    # Path registrado en BD (nombre libre) solo si el nombre contiene el CUIT
-    nombre = ruta.name.lower()
-    cuit_norm = re.sub(r"\D", "", str(cuit))
+    # Path registrado en BD (nombre libre) si el nombre contiene el CUIT
+    cuit_norm = re.sub(r"\D", "", str(cuit or ""))
     if cuit_norm and cuit_norm in re.sub(r"\D", "", nombre):
         return True
     return False
 
 
-def _promover_plan_a_canonico(cuit: str, ruta: Path) -> Path:
+def _promover_plan_a_canonico(cuit: str, ruta: Path, cliente_id: int | None = None) -> Path:
     """Copia el Excel encontrado al canónico compartido (red o local) si aún no existe."""
     canon = _ruta_plan_xlsx(cuit)
     if canon.exists():
         return canon
-    if not _es_plan_propio_cliente(cuit, ruta):
+    if not _es_plan_propio_cliente(cuit, ruta, cliente_id=cliente_id):
+        return ruta
+    # No promover .enc (ya está en secure); devolver tal cual
+    if str(ruta).endswith(".enc"):
         return ruta
     canon.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(ruta, canon)
@@ -2322,41 +2371,103 @@ def _promover_plan_a_canonico(cuit: str, ruta: Path) -> Path:
     return canon
 
 
-def _guardar_plan_cliente_en_disco(cuit: str, archivo_bytes: bytes) -> Path:
+def _guardar_plan_cliente_en_disco(
+    cuit: str,
+    archivo_bytes: bytes,
+    cliente_id: int | None = None,
+) -> Path:
     """
     Persiste el plan en el servidor compartido (T:\\…\\planes_cuentas) y espejo local.
-    En Cloud: cifrado Fernet namespaced por usuario (data/secure/<user>/planes/).
+    En Cloud: cifrado Fernet namespaced por usuario (data/secure/<user>/planes/),
+    asociado por CUIT y —si hay— por cliente_id (CUIT temporal/placeholder no bloquea).
+    Si no hay DATA_ENCRYPTION_KEY, guarda plaintext en data/planes_cuentas (mejor que fallar).
     """
-    # Cloud: no dejar plaintext en disco del contenedor
+    cuit = re.sub(r"\D", "", str(cuit or "")) or str(cuit or "sin_cuit")
+
+    # Cloud: preferir cifrado; si no hay clave, plaintext durable en data/planes_cuentas
     if _es_entorno_cloud():
         from seguridad_datos import (
             guardar_plan_cifrado,
+            guardar_plan_cifrado_por_cliente,
             materializar_descifrado,
             tiene_clave_cifrado,
         )
 
-        if not tiene_clave_cifrado():
-            raise RuntimeError(
-                "En Cloud hace falta DATA_ENCRYPTION_KEY en Secrets para guardar planes."
+        usuario = _usuario_oficina_actual()
+        if tiene_clave_cifrado():
+            if cliente_id is not None:
+                enc = guardar_plan_cifrado_por_cliente(usuario, cliente_id, archivo_bytes)
+                # Espejo por CUIT para búsquedas legacy
+                try:
+                    guardar_plan_cifrado(usuario, cuit, archivo_bytes)
+                except Exception:
+                    pass
+            else:
+                enc = guardar_plan_cifrado(usuario, cuit, archivo_bytes)
+            tmp = materializar_descifrado(enc, suffix=".xlsx")
+            df = cargar_plan_cuentas(tmp)
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
+            # Espejo plaintext en data/planes_cuentas (reconocimiento inmediato + redeploy parcial)
+            try:
+                DATA_PLANES_DIR.mkdir(parents=True, exist_ok=True)
+                if cliente_id is not None:
+                    (DATA_PLANES_DIR / f"plan_id_{int(cliente_id)}.xlsx").write_bytes(archivo_bytes)
+                (DATA_PLANES_DIR / f"plan_{cuit}.xlsx").write_bytes(archivo_bytes)
+                df[["codigo", "descripcion", "imputable"]].to_csv(
+                    DATA_PLANES_DIR / f"plan_{cuit}.csv", index=False,
+                )
+            except OSError:
+                pass
+            _dbg_log(
+                "C",
+                "_guardar_plan_cliente_en_disco",
+                "saved_xlsx_encrypted",
+                {
+                    "cuit": cuit,
+                    "cliente_id": cliente_id,
+                    "path": str(enc),
+                    "rows": len(df),
+                },
             )
-        enc = guardar_plan_cifrado(_usuario_oficina_actual(), cuit, archivo_bytes)
-        tmp = materializar_descifrado(enc, suffix=".xlsx")
-        df = cargar_plan_cuentas(tmp)
-        try:
-            tmp.unlink(missing_ok=True)
-        except OSError:
-            pass
+            return enc
+
+        # Sin clave: no bloquear al usuario; plaintext en carpeta del repo
+        ruta_xlsx = DATA_PLANES_DIR / (
+            f"plan_id_{int(cliente_id)}.xlsx" if cliente_id is not None else f"plan_{cuit}.xlsx"
+        )
+        ruta_xlsx.parent.mkdir(parents=True, exist_ok=True)
+        ruta_xlsx.write_bytes(archivo_bytes)
+        espejo_cuit = DATA_PLANES_DIR / f"plan_{cuit}.xlsx"
+        if espejo_cuit.resolve() != ruta_xlsx.resolve():
+            espejo_cuit.write_bytes(archivo_bytes)
+        df = cargar_plan_cuentas(ruta_xlsx)
+        df[["codigo", "descripcion", "imputable"]].to_csv(
+            DATA_PLANES_DIR / f"plan_{cuit}.csv", index=False,
+        )
         _dbg_log(
             "C",
             "_guardar_plan_cliente_en_disco",
-            "saved_xlsx_encrypted",
-            {"cuit": cuit, "path": str(enc), "rows": len(df)},
+            "saved_xlsx_cloud_plaintext_fallback",
+            {"cuit": cuit, "cliente_id": cliente_id, "path": str(ruta_xlsx), "rows": len(df)},
         )
-        return enc
+        return ruta_xlsx
 
     ruta_xlsx = _ruta_plan_xlsx(cuit)
     ruta_xlsx.parent.mkdir(parents=True, exist_ok=True)
     ruta_xlsx.write_bytes(archivo_bytes)
+    if cliente_id is not None:
+        try:
+            por_id = _directorio_planes_canonico() / f"plan_id_{int(cliente_id)}.xlsx"
+            por_id.write_bytes(archivo_bytes)
+            local_id = DATA_PLANES_DIR / f"plan_id_{int(cliente_id)}.xlsx"
+            if local_id.resolve() != por_id.resolve():
+                local_id.parent.mkdir(parents=True, exist_ok=True)
+                local_id.write_bytes(archivo_bytes)
+        except OSError:
+            pass
     df = cargar_plan_cuentas(ruta_xlsx)
     df[["codigo", "descripcion", "imputable"]].to_csv(_ruta_plan_csv(cuit), index=False)
 
@@ -2381,6 +2492,7 @@ def _guardar_plan_cliente_en_disco(cuit: str, archivo_bytes: bytes) -> Path:
         "saved_xlsx_shared",
         {
             "cuit": cuit,
+            "cliente_id": cliente_id,
             "path": str(ruta_xlsx),
             "shared": str(PLANES_RED_DIR),
             "rows": len(df),
@@ -2388,6 +2500,43 @@ def _guardar_plan_cliente_en_disco(cuit: str, archivo_bytes: bytes) -> Path:
     )
     return ruta_xlsx
 
+
+def _clave_plan_propio_confirmado(cliente_id: int) -> str:
+    return f"plan_propio_confirmado_{int(cliente_id)}"
+
+
+def _confirmar_plan_propio_en_session(
+    cliente_id: int,
+    ruta: Path,
+    df: pd.DataFrame | None = None,
+) -> None:
+    """Marca en session que esta sociedad tiene plan propio (verde inmediato post-upload)."""
+    st.session_state[_clave_plan_propio_confirmado(cliente_id)] = True
+    st.session_state[f"plan_propio_ruta_{int(cliente_id)}"] = str(ruta)
+    if df is not None and len(df) > 0:
+        st.session_state[f"plan_cuentas_df_{int(cliente_id)}"] = df
+        st.session_state[f"plan_cuentas_meta_{int(cliente_id)}"] = {
+            "cliente_id": int(cliente_id),
+            "path": str(ruta),
+            "using_default": False,
+            "mtime": _mtime_archivo(ruta),
+        }
+        st.session_state.plan_cuentas_df = df
+        st.session_state.plan_cuentas_cliente_id = int(cliente_id)
+        st.session_state.plan_cuentas_path_resuelto = str(ruta)
+        st.session_state.plan_cuentas_es_default = False
+        st.session_state.plan_cuentas_mtime = _mtime_archivo(ruta)
+
+
+def _cargar_df_desde_ruta_plan(ruta: Path) -> pd.DataFrame:
+    ruta_lectura = _resolver_ruta_plan_para_lectura(Path(ruta))
+    df = cargar_plan_cuentas(ruta_lectura)
+    if Path(ruta_lectura) != Path(ruta):
+        try:
+            Path(ruta_lectura).unlink(missing_ok=True)
+        except OSError:
+            pass
+    return df
 
 def _invalidar_cache_plan(cliente_id: int) -> None:
     st.session_state.pop(f"plan_cuentas_df_{cliente_id}", None)
@@ -2413,6 +2562,7 @@ def _cargar_plan_cuentas_cliente(
     if not cliente:
         raise ValueError(f"Cliente id={cliente_id} no encontrado.")
     cliente = _limpiar_plan_bd_si_archivo_ausente(cliente)
+    cuit = str(cliente.get("cuit", "")).strip()
 
     cache_key = f"plan_cuentas_df_{cliente_id}"
     meta_key = f"plan_cuentas_meta_{cliente_id}"
@@ -2423,41 +2573,53 @@ def _cargar_plan_cuentas_cliente(
             # Preferir primera candidata no-genérica; propio se prioriza abajo
             if ruta_resuelta is None:
                 ruta_resuelta = candidata
-            if _es_plan_propio_cliente(str(cliente.get("cuit", "")).strip(), candidata):
+            if _es_plan_propio_cliente(cuit, candidata, cliente_id=cliente_id):
                 ruta_resuelta = candidata
                 break
 
-    cuit = str(cliente.get("cuit", "")).strip()
-    bd_raw = (cliente.get("plan_cuentas_path") or "").strip()
-    bd_path = Path(bd_raw) if bd_raw else None
+    bd_path = _path_plan_bd(cliente.get("plan_cuentas_path"))
     bd_vinculado = bool(
         bd_path and bd_path.exists() and not _es_plan_generico_default(bd_path)
     )
 
-    # Verde/vinculado: plan_{cuit} o path BD real (no plan_default).
-    if ruta_resuelta is not None and _es_plan_propio_cliente(cuit, ruta_resuelta):
+    # Verde/vinculado: plan_{cuit} / plan_id_{id} / path BD real (no plan_default).
+    if ruta_resuelta is not None and _es_plan_propio_cliente(
+        cuit, ruta_resuelta, cliente_id=cliente_id
+    ):
         using_default = False
         if not str(ruta_resuelta).endswith(".enc"):
-            ruta_resuelta = _promover_plan_a_canonico(cuit, ruta_resuelta)
+            ruta_resuelta = _promover_plan_a_canonico(cuit, ruta_resuelta, cliente_id=cliente_id)
     elif bd_vinculado:
         ruta_resuelta = bd_path  # type: ignore[assignment]
         using_default = False
     else:
         propio_hallado: Path | None = None
         for candidata in _rutas_plan_candidatas(cliente):
-            if candidata.exists() and _es_plan_propio_cliente(cuit, candidata):
+            if candidata.exists() and _es_plan_propio_cliente(
+                cuit, candidata, cliente_id=cliente_id
+            ):
                 propio_hallado = candidata
                 break
         if propio_hallado is not None:
             ruta_resuelta = propio_hallado
             using_default = False
             if not str(ruta_resuelta).endswith(".enc"):
-                ruta_resuelta = _promover_plan_a_canonico(cuit, ruta_resuelta)
+                ruta_resuelta = _promover_plan_a_canonico(
+                    cuit, ruta_resuelta, cliente_id=cliente_id
+                )
         else:
             ruta_resuelta = Path(db._plan_cuentas_default_path())
             if not ruta_resuelta.is_file():
                 ruta_resuelta = Path(PLAN_CUENTAS_DEFAULT)
             using_default = True
+
+    # Si en esta sesión ya se subió plan propio, no degradar a default
+    if using_default and st.session_state.get(_clave_plan_propio_confirmado(cliente_id)):
+        ruta_ss = st.session_state.get(f"plan_propio_ruta_{cliente_id}")
+        p_ss = _path_plan_bd(ruta_ss) if ruta_ss else None
+        if p_ss and p_ss.exists() and not _es_plan_generico_default(p_ss):
+            ruta_resuelta = p_ss
+            using_default = False
 
     mtime = _mtime_archivo(ruta_resuelta)
 
@@ -2488,13 +2650,7 @@ def _cargar_plan_cuentas_cliente(
         st.session_state.pop(cache_key, None)
         st.session_state.pop(meta_key, None)
 
-    ruta_lectura = _resolver_ruta_plan_para_lectura(ruta_resuelta)
-    df = cargar_plan_cuentas(ruta_lectura)
-    if ruta_lectura != ruta_resuelta:
-        try:
-            Path(ruta_lectura).unlink(missing_ok=True)
-        except OSError:
-            pass
+    df = _cargar_df_desde_ruta_plan(ruta_resuelta)
     if usar_cache:
         st.session_state[cache_key] = df
         st.session_state[meta_key] = {
@@ -2504,6 +2660,8 @@ def _cargar_plan_cuentas_cliente(
             "cuit": cliente.get("cuit"),
             "mtime": mtime,
         }
+    if not using_default:
+        _confirmar_plan_propio_en_session(cliente_id, ruta_resuelta, df)
     _dbg_log("A", "_cargar_plan_cuentas_cliente", "loaded_from_disk", {
         "cliente_id": cliente_id,
         "path": str(ruta_resuelta),
@@ -2546,7 +2704,9 @@ def _sincronizar_plan_cuentas_session(cliente_id: int, forzar: bool = False) -> 
 
     if not forzar:
         for candidata in _rutas_plan_candidatas(cliente):
-            if candidata.exists() and _es_plan_propio_cliente(cuit, candidata):
+            if candidata.exists() and _es_plan_propio_cliente(
+                cuit, candidata, cliente_id=cliente_id
+            ):
                 if bool(st.session_state.get("plan_cuentas_es_default", False)):
                     forzar = True
                     # #region agent log
@@ -2557,6 +2717,9 @@ def _sincronizar_plan_cuentas_session(cliente_id: int, forzar: bool = False) -> 
                     })
                     # #endregion
                 break
+        if st.session_state.get(_clave_plan_propio_confirmado(cliente_id)):
+            if bool(st.session_state.get("plan_cuentas_es_default", False)):
+                forzar = True
 
     cached_id = st.session_state.get("plan_cuentas_cliente_id")
     plan_ss = st.session_state.get("plan_cuentas_df")
@@ -4955,10 +5118,18 @@ def _asegurar_plan_cuentas_export(
         key=f"uploader_plan_export_{slug}_{sociedad_id}",
         help="Se guarda para este cliente y habilita el export a Tango.",
     )
-    if archivo and cuit_activo:
+    if archivo and (cuit_activo or sociedad_id is not None):
         try:
-            xlsx_path = _guardar_plan_cliente_en_disco(str(cuit_activo), archivo.getvalue())
-            cli = db.obtener_cliente(int(sociedad_id))
+            cuit_guardar = str(cuit_activo or "").strip()
+            if not cuit_guardar and sociedad_id is not None:
+                cli_tmp = db.obtener_cliente(int(sociedad_id))
+                cuit_guardar = str((cli_tmp or {}).get("cuit") or "sin_cuit")
+            xlsx_path = _guardar_plan_cliente_en_disco(
+                cuit_guardar,
+                archivo.getvalue(),
+                cliente_id=int(sociedad_id) if sociedad_id is not None else None,
+            )
+            cli = db.obtener_cliente(int(sociedad_id)) if sociedad_id is not None else None
             if cli:
                 db.actualizar_cliente(
                     cli["id"],
@@ -4968,7 +5139,9 @@ def _asegurar_plan_cuentas_export(
                     str(xlsx_path),
                     cli.get("mes_cierre_balance", 12),
                 )
+            df = _cargar_df_desde_ruta_plan(xlsx_path)
             _invalidar_cache_plan(int(sociedad_id))
+            _confirmar_plan_propio_en_session(int(sociedad_id), xlsx_path, df)
             _sincronizar_plan_cuentas_session(int(sociedad_id), forzar=True)
             st.success(f"Plan vinculado: {xlsx_path.name}")
             st.rerun()
@@ -7693,19 +7866,24 @@ def _widget_subir_plan_inline(
     key_suffix: str,
 ) -> None:
     """Uploader compacto para vincular el plan cuando falta en la sociedad activa."""
-    if sociedad_id is None or not cuit_activo:
+    if sociedad_id is None:
         return
     archivo = st.file_uploader(
         "Subir Plan de Cuentas (.xlsx) para esta sociedad",
         type=["xlsx"],
         key=f"uploader_plan_inline_{key_suffix}_{sociedad_id}",
-        help="Se guarda en planes_cuentas (red/local) y queda vinculado a este CUIT.",
+        help="Se guarda en planes_cuentas / secure y queda vinculado a esta sociedad (aunque el CUIT sea temporal).",
     )
     if not archivo:
         return
     try:
-        xlsx_path = _guardar_plan_cliente_en_disco(str(cuit_activo), archivo.getvalue())
         cli = db.obtener_cliente(int(sociedad_id))
+        cuit_guardar = str(cuit_activo or (cli or {}).get("cuit") or "").strip() or "sin_cuit"
+        xlsx_path = _guardar_plan_cliente_en_disco(
+            cuit_guardar,
+            archivo.getvalue(),
+            cliente_id=int(sociedad_id),
+        )
         if cli:
             db.actualizar_cliente(
                 cli["id"],
@@ -7715,7 +7893,9 @@ def _widget_subir_plan_inline(
                 str(xlsx_path),
                 cli.get("mes_cierre_balance", 12),
             )
+        df = _cargar_df_desde_ruta_plan(xlsx_path)
         _invalidar_cache_plan(int(sociedad_id))
+        _confirmar_plan_propio_en_session(int(sociedad_id), xlsx_path, df)
         _sincronizar_plan_cuentas_session(int(sociedad_id), forzar=True)
         st.success(f"Plan vinculado: {xlsx_path.name}")
         st.rerun()
@@ -7733,8 +7913,8 @@ def _mensaje_plan_no_vinculado(cliente: dict | None = None) -> str:
             "Subí el Excel de Tango en Gestión de Clientes."
         )
     cuit = str(cli.get("cuit") or "").strip()
-    ruta_bd = cli.get("plan_cuentas_path")
-    if ruta_bd and not Path(ruta_bd).exists():
+    ruta_bd = _path_plan_bd(cli.get("plan_cuentas_path"))
+    if (cli.get("plan_cuentas_path") or "").strip() and (ruta_bd is None or not ruta_bd.exists()):
         # Ruta fantasma en BD: limpiar para no confundir
         try:
             db.actualizar_cliente(
@@ -7749,7 +7929,7 @@ def _mensaje_plan_no_vinculado(cliente: dict | None = None) -> str:
             pass
         return (
             f"⚠️ El plan de **{cli.get('nombre')}** figura en la base pero el archivo "
-            f"no está en disco (`{Path(ruta_bd).name}`). "
+            f"no está en disco (`{Path(str(cli.get('plan_cuentas_path'))).name}`). "
             "Volvé a subirlo en Gestión de Clientes (CUIT "
             f"`{cuit}`)."
         )
@@ -7764,7 +7944,7 @@ def _limpiar_plan_bd_si_archivo_ausente(cliente: dict) -> dict:
     raw = (cliente.get("plan_cuentas_path") or "").strip()
     if not raw:
         return cliente
-    ruta = Path(raw)
+    ruta = _path_plan_bd(raw) or Path(raw)
     cuit = str(cliente.get("cuit", "")).strip()
     # Ausente en disco, o genérico/default: no es vínculo real de la sociedad
     debe_limpiar = (not ruta.exists()) or _es_plan_generico_default(ruta)
@@ -7779,6 +7959,8 @@ def _limpiar_plan_bd_si_archivo_ausente(cliente: dict) -> dict:
             None,
             cliente.get("mes_cierre_balance", 12),
         )
+        st.session_state.pop(_clave_plan_propio_confirmado(int(cliente["id"])), None)
+        st.session_state.pop(f"plan_propio_ruta_{int(cliente['id'])}", None)
         _dbg_log("P", "_limpiar_plan_bd_si_archivo_ausente", "cleared_stale_path", {
             "cliente_id": cliente.get("id"),
             "cuit": cuit,
@@ -7793,18 +7975,36 @@ def _limpiar_plan_bd_si_archivo_ausente(cliente: dict) -> dict:
 
 def _plan_existe_para_cliente(cliente: dict) -> bool:
     """True solo si hay plan propio de ESA sociedad (no plan_default ni genérico)."""
+    cliente_id = cliente.get("id")
+    if cliente_id is not None and st.session_state.get(
+        _clave_plan_propio_confirmado(int(cliente_id))
+    ):
+        ruta_ss = st.session_state.get(f"plan_propio_ruta_{int(cliente_id)}")
+        p_ss = _path_plan_bd(ruta_ss) if ruta_ss else None
+        if p_ss and p_ss.exists() and not _es_plan_generico_default(p_ss):
+            return True
+        # Sesión confirma upload aunque el path efímero se haya movido: DF en memoria
+        plan_df = st.session_state.get("plan_cuentas_df")
+        if (
+            plan_df is not None
+            and len(plan_df) > 0
+            and st.session_state.get("plan_cuentas_cliente_id") == cliente_id
+            and not bool(st.session_state.get("plan_cuentas_es_default", False))
+        ):
+            return True
+
     cliente = _limpiar_plan_bd_si_archivo_ausente(cliente)
     cuit = str(cliente.get("cuit", "")).strip()
-    if not cuit:
+    if not cuit and cliente_id is None:
         return False
-    bd_raw = (cliente.get("plan_cuentas_path") or "").strip()
-    if bd_raw:
-        bd_path = Path(bd_raw)
-        # Path BD real existente (nombre libre) cuenta; plan_default ya fue limpiado arriba
-        if bd_path.exists() and not _es_plan_generico_default(bd_path):
-            return True
+    bd_path = _path_plan_bd(cliente.get("plan_cuentas_path"))
+    if bd_path and bd_path.exists() and not _es_plan_generico_default(bd_path):
+        return True
     return any(
-        p.exists() and _es_plan_propio_cliente(cuit, p)
+        p.exists()
+        and _es_plan_propio_cliente(
+            cuit, p, cliente_id=int(cliente_id) if cliente_id is not None else None
+        )
         for p in _rutas_plan_candidatas(cliente)
     )
 
@@ -7813,8 +8013,27 @@ def _sociedad_tiene_plan_vinculado_por_session() -> bool:
     """True si el plan Excel de la sociedad activa está en session_state o en disco."""
     sociedad_id = st.session_state.get(_SOCiedad_KEY)
     cuit = st.session_state.get("cuit_activo")
-    if sociedad_id is None or not cuit:
+    if sociedad_id is None:
         return False
+    if st.session_state.get(_clave_plan_propio_confirmado(int(sociedad_id))):
+        # Confirmado en esta sesión (upload reciente) — verde inmediato
+        if not bool(st.session_state.get("plan_cuentas_es_default", False)):
+            plan_df = st.session_state.get("plan_cuentas_df")
+            if (
+                plan_df is not None
+                and len(plan_df) > 0
+                and st.session_state.get("plan_cuentas_cliente_id") == sociedad_id
+            ):
+                return True
+        # Aún sin DF: si el archivo sigue en disco, alcanza
+        ruta_ss = st.session_state.get(f"plan_propio_ruta_{int(sociedad_id)}")
+        p_ss = _path_plan_bd(ruta_ss) if ruta_ss else None
+        if p_ss and p_ss.exists() and not _es_plan_generico_default(p_ss):
+            return True
+    if not cuit:
+        # CUIT vacío no bloquea si hay plan por cliente_id en disco/BD
+        cliente = db.obtener_cliente(sociedad_id)
+        return bool(cliente) and _plan_existe_para_cliente(cliente)
     plan_df = st.session_state.get("plan_cuentas_df")
     if (
         plan_df is not None
@@ -7831,6 +8050,18 @@ def _sociedad_tiene_plan_vinculado_por_session() -> bool:
 
 def _sociedad_tiene_plan_vinculado(cliente: dict) -> bool:
     """True si el Excel del plan existe en disco o está cargado en session_state."""
+    cliente_id = cliente.get("id")
+    if cliente_id is not None and st.session_state.get(
+        _clave_plan_propio_confirmado(int(cliente_id))
+    ):
+        plan_df = st.session_state.get("plan_cuentas_df")
+        if (
+            plan_df is not None
+            and len(plan_df) > 0
+            and st.session_state.get("plan_cuentas_cliente_id") == cliente_id
+            and not bool(st.session_state.get("plan_cuentas_es_default", False))
+        ):
+            return True
     plan_df = st.session_state.get("plan_cuentas_df")
     if (
         plan_df is not None
