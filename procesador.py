@@ -13258,6 +13258,11 @@ def _nombre_banco_export(tipo_str: str) -> str:
 
 _MONEDAS_EXTRANJERAS_TANGO = frozenset({"DOL", "USD", "U$S", "US$"})
 
+# Estilos de columna del template oficial Tango (VACIO PARA LLENAR).
+_TANGO_STYLES_ASIENTOS = [12, 14, 11, 11, 11, 11, 11, 11, None, None]
+_TANGO_STYLES_COTIZ = [12, 11, 11, 13, None, None]
+_TANGO_STYLES_RENGLONES = [12, 12, 11, 13, 13, 14, 11, 13, 13, None, None]
+
 
 def _purgar_cotizaciones_moneda_extranjera(ws_c) -> None:
     """Elimina filas del template con moneda extranjera que Tango rechaza al importar."""
@@ -13268,6 +13273,167 @@ def _purgar_cotizaciones_moneda_extranjera(ws_c) -> None:
         moneda = str(val).strip().upper()
         if moneda in _MONEDAS_EXTRANJERAS_TANGO:
             ws_c.delete_rows(row_idx, 1)
+
+
+def _assert_xlsx_sano(ruta: Path, *, exigir_shared_strings: bool = True) -> None:
+    """Valida que el xlsx sea un ZIP OOXML legible (no puntero LFS / HTML / truncado)."""
+    raw = Path(ruta).read_bytes()
+    if len(raw) < 64 or not raw.startswith(b"PK"):
+        raise ValueError(f"El archivo no es un Excel válido (firma PK ausente): {ruta}")
+    with zipfile.ZipFile(ruta) as zf:
+        bad = zf.testzip()
+        if bad is not None:
+            raise ValueError(f"ZIP corrupto en entrada '{bad}': {ruta}")
+        names = set(zf.namelist())
+        if "xl/workbook.xml" not in names or "[Content_Types].xml" not in names:
+            raise ValueError(f"Excel incompleto (falta workbook/Content_Types): {ruta}")
+        if exigir_shared_strings and "xl/sharedStrings.xml" not in names:
+            raise ValueError(
+                f"Plantilla Tango sin sharedStrings.xml (probable resave openpyxl): {ruta}"
+            )
+
+
+def _excel_serial_date(d: date) -> int:
+    """Serial Excel (sistema 1900, epoch 1899-12-30)."""
+    return (d - date(1899, 12, 30)).days
+
+
+def _col_letter_xlsx(n: int) -> str:
+    s = ""
+    while n:
+        n, r = divmod(n - 1, 26)
+        s = chr(65 + r) + s
+    return s
+
+
+def _escape_xml_text(s: str) -> str:
+    return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _celda_xml_tango(col: int, row: int, value, style=None) -> str:
+    if value is None or value == "":
+        return ""
+    ref = f"{_col_letter_xlsx(col)}{row}"
+    s_attr = f' s="{style}"' if style is not None else ""
+    if isinstance(value, datetime):
+        value = value.date()
+    if isinstance(value, date):
+        return f'<c r="{ref}"{s_attr}><v>{_excel_serial_date(value)}</v></c>'
+    if isinstance(value, bool):
+        return f'<c r="{ref}"{s_attr} t="b"><v>{1 if value else 0}</v></c>'
+    if isinstance(value, (int, float)):
+        return f'<c r="{ref}"{s_attr}><v>{value}</v></c>'
+    return (
+        f'<c r="{ref}"{s_attr} t="inlineStr">'
+        f"<is><t>{_escape_xml_text(value)}</t></is></c>"
+    )
+
+
+def _fila_xml_tango(row_idx: int, values: list, styles: list | None, spans: str) -> str:
+    cells: list[str] = []
+    for i, v in enumerate(values, 1):
+        st = styles[i - 1] if styles and i - 1 < len(styles) else None
+        c = _celda_xml_tango(i, row_idx, v, st)
+        if c:
+            cells.append(c)
+    joined = "".join(cells)
+    return f'<row r="{row_idx}" spans="{spans}">{joined}</row>'
+
+
+def _mapa_hojas_workbook_zip(zf: zipfile.ZipFile) -> dict[str, str]:
+    from xml.etree import ElementTree as ET
+
+    ns = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+    nsr = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
+    wb = ET.fromstring(zf.read("xl/workbook.xml"))
+    rels = ET.fromstring(zf.read("xl/_rels/workbook.xml.rels"))
+    id_to_target = {rel.attrib["Id"]: rel.attrib["Target"] for rel in rels}
+    out: dict[str, str] = {}
+    for sh in wb.findall(f"{ns}sheets/{ns}sheet"):
+        target = id_to_target[sh.attrib[f"{nsr}id"]]
+        if not target.startswith("xl/"):
+            target = "xl/" + target.lstrip("/")
+        out[sh.attrib["name"]] = target
+    return out
+
+
+def _append_rows_sheet_xml(
+    xml_bytes: bytes, rows_xml: list[str], last_row: int, dim_end_col: str
+) -> bytes:
+    text = xml_bytes.decode("utf-8")
+    text2, n = re.subn(
+        r'(<dimension[^>]*ref=")A1:[A-Z]+\d+(")',
+        rf"\g<1>A1:{dim_end_col}{last_row}\2",
+        text,
+        count=1,
+    )
+    if n:
+        text = text2
+    if "</sheetData>" not in text:
+        raise ValueError("La hoja del template no tiene </sheetData>")
+    text = text.replace("</sheetData>", "".join(rows_xml) + "</sheetData>", 1)
+    return text.encode("utf-8")
+
+
+def _rellenar_plantilla_tango_preservando_zip(
+    template: Path,
+    destino: Path,
+    filas_asientos: list[list],
+    filas_cotiz: list[list],
+    filas_renglones: list[list],
+) -> None:
+    """
+    Copia el xlsx oficial y agrega filas en sheet XML sin openpyxl.save().
+
+    openpyxl reescribe el paquete OOXML (rompe sharedStrings / validaciones Tango)
+    y en varias PCs el archivo deja de abrir. Este camino conserva las 29 entradas
+    del template original.
+    """
+    _assert_xlsx_sano(template, exigir_shared_strings=True)
+    shutil.copy2(template, destino)
+
+    with zipfile.ZipFile(destino, "r") as zin:
+        sm = _mapa_hojas_workbook_zip(zin)
+        parts = {name: zin.read(name) for name in zin.namelist()}
+        infos = {name: zin.getinfo(name) for name in zin.namelist()}
+
+    for requerida in ("Asientos contables", "Cotizaciones", "Renglones"):
+        if requerida not in sm:
+            raise ValueError(f"El template no tiene la hoja '{requerida}'")
+
+    a_xml = [
+        _fila_xml_tango(i + 2, row, _TANGO_STYLES_ASIENTOS, "1:10")
+        for i, row in enumerate(filas_asientos)
+    ]
+    c_xml = [
+        _fila_xml_tango(i + 2, row, _TANGO_STYLES_COTIZ, "1:6")
+        for i, row in enumerate(filas_cotiz)
+    ]
+    r_xml = [
+        _fila_xml_tango(i + 2, row, _TANGO_STYLES_RENGLONES, "1:11")
+        for i, row in enumerate(filas_renglones)
+    ]
+
+    parts[sm["Asientos contables"]] = _append_rows_sheet_xml(
+        parts[sm["Asientos contables"]], a_xml, 1 + len(filas_asientos), "J"
+    )
+    parts[sm["Cotizaciones"]] = _append_rows_sheet_xml(
+        parts[sm["Cotizaciones"]], c_xml, 1 + len(filas_cotiz), "F"
+    )
+    parts[sm["Renglones"]] = _append_rows_sheet_xml(
+        parts[sm["Renglones"]], r_xml, 1 + len(filas_renglones), "K"
+    )
+
+    tmp = destino.with_suffix(".tmp.xlsx")
+    with zipfile.ZipFile(tmp, "w") as zout:
+        for name, data in parts.items():
+            info = infos[name]
+            zi = zipfile.ZipInfo(filename=name, date_time=info.date_time)
+            zi.compress_type = info.compress_type
+            zi.external_attr = info.external_attr
+            zout.writestr(zi, data)
+    tmp.replace(destino)
+    _assert_xlsx_sano(destino, exigir_shared_strings=True)
 
 
 def generar_excel_tango_nativo(
@@ -13283,34 +13449,38 @@ def generar_excel_tango_nativo(
     validar: bool = True,
 ) -> Path:
     """Clona el template vacío de Tango y llena Asientos contables + Renglones + Cotizaciones."""
-    import shutil
-    import openpyxl
+    import tempfile
+
+    _ = nombre_cliente  # reservado (nombre de archivo / trazas)
 
     if validar:
         asientos = preparar_asientos_export_tango(asientos, plan_cuentas)
 
     template = _resolver_ruta_plantilla_asientos_tango_vacio()
-    exportaciones_dir = BASE_DIR / "exportaciones"
-    exportaciones_dir.mkdir(exist_ok=True)
-    if nombre_archivo:
-        destino = exportaciones_dir / nombre_archivo
-    else:
-        destino = exportaciones_dir / f"Devengamientos_Tango_{cuit}_{mes:02d}_{anio}.xlsx"
-
     if not template.exists():
         raise FileNotFoundError(
             f"No se encontró el template Tango en: {template}\n"
             "Copiá el archivo 'Asientos contables VACIO PARA LLENAR E IMPORTAR.xlsx' "
             "a la raíz del proyecto o a plantillas/."
         )
+    _assert_xlsx_sano(template, exigir_shared_strings=True)
 
-    shutil.copy(str(template), str(destino))
-    wb = openpyxl.load_workbook(str(destino))
+    if nombre_archivo:
+        nombre_final = nombre_archivo
+    else:
+        nombre_final = f"Devengamientos_Tango_{cuit}_{mes:02d}_{anio}.xlsx"
 
-    ws_a = wb["Asientos contables"]
-    ws_r = wb["Renglones"]
-    ws_c = wb["Cotizaciones"]
-    _purgar_cotizaciones_moneda_extranjera(ws_c)
+    # Cloud: preferir tmp writable; local: también exportaciones/
+    exportaciones_dir = BASE_DIR / "exportaciones"
+    try:
+        exportaciones_dir.mkdir(exist_ok=True)
+        destino = exportaciones_dir / nombre_final
+    except OSError:
+        destino = Path(tempfile.gettempdir()) / nombre_final
+
+    filas_asientos: list[list] = []
+    filas_cotiz: list[list] = []
+    filas_renglones: list[list] = []
 
     for i, asiento in enumerate(asientos):
         id_asiento = getattr(asiento, "identificador", None)
@@ -13334,23 +13504,23 @@ def generar_excel_tango_nativo(
 
         codigo_tipo = _codigo_tipo_asiento_tango(tipo_str)
         # Concepto del asiento (cabecera). Leyenda de renglones: siempre vacía.
-        ws_a.append([
+        filas_asientos.append([
             id_asiento, fecha_obj, "Básico", codigo_tipo, "Ingresado", "PES",
-            concepto_asiento, "", "No", "",
+            concepto_asiento, None, "No", None,
         ])
-        ws_a.cell(row=ws_a.max_row, column=2).number_format = "DD/MM/YYYY"
-        ws_c.append([id_asiento, "PES", "COTIZACIÓN", 1.0, "No", ""])
+        filas_cotiz.append([id_asiento, "PES", "COTIZACIÓN", 1.0, "No", None])
 
         for nro, renglon in enumerate(asiento.renglones, 1):
             debe = round(float(renglon.debe), 2) if renglon.debe else None
             haber = round(float(renglon.haber), 2) if renglon.haber else None
-            ws_r.append([
+            filas_renglones.append([
                 id_asiento, nro, renglon.codigo_cuenta,
-                debe, haber, fecha_obj, "", None, None, "No", "",
+                debe, haber, fecha_obj, None, None, None, "No", None,
             ])
-            ws_r.cell(row=ws_r.max_row, column=6).number_format = "DD/MM/YYYY"
 
-    wb.save(str(destino))
+    _rellenar_plantilla_tango_preservando_zip(
+        template, destino, filas_asientos, filas_cotiz, filas_renglones
+    )
     return destino
 
 

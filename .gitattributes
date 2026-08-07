@@ -1,0 +1,4 @@
+# Treat Excel templates as binary — never convert CRLF inside OOXML zips.
+*.xlsx binary
+*.xls binary
+*.xlsm binary
