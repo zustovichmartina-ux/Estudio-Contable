@@ -12427,6 +12427,13 @@ def _pantalla_login_oficina() -> None:
         help="Obligatorio en Cloud. En local, si el usuario no tiene PIN, dejalo vacío.",
     )
     if st.button("Entrar", type="primary", key="btn_login_oficina"):
+        restante = db.usuario_bloqueado_oficina(elegido)
+        if restante > 0:
+            minutos = max(1, (restante + 59) // 60)
+            st.error(
+                f"Demasiados intentos fallidos. Probá de nuevo en {minutos} minuto(s)."
+            )
+            return
         ok = db.verificar_login_oficina(elegido, pin)
         if not ok:
             st.error("Usuario o PIN incorrecto.")
