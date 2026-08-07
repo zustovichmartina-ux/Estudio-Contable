@@ -758,7 +758,7 @@ def actualizar_cuits_desde_auxiliares(
                         INSERT INTO clientes (nombre, cuit, tipo_persona, plan_cuentas_path, mes_cierre_balance)
                         VALUES (?, ?, ?, ?, ?)
                         """,
-                        (nombre.strip(), cuit, tipo, str(PLAN_CUENTAS_DEFAULT), mes_cierre),
+                        (nombre.strip(), cuit, tipo, None, mes_cierre),
                     )
                     cuits_usados.add(cuit)
                     nombres_en_bd[clave] = {"nombre": nombre, "cuit": cuit}
@@ -846,19 +846,20 @@ def actualizar_cliente(
         conn.commit()
 
 
-def _resolver_plan_path_catalogo(item: dict, cuit: str) -> str:
-    """Ruta de plan para un ítem de catálogo (repo Cloud o default)."""
+def _resolver_plan_path_catalogo(item: dict, cuit: str) -> str | None:
+    """Ruta de plan propio para catálogo. No usa plan_default (eso no es vínculo real)."""
     explicit = str(item.get("plan_cuentas") or item.get("plan_cuentas_path") or "").strip()
     if explicit:
         cand = Path(explicit)
         if not cand.is_absolute():
             cand = BASE_DIR / cand
-        if cand.is_file():
-            return str(cand)
+        if cand.is_file() and cand.name.lower() not in ("plan_default.xlsx", "plan_default.xls"):
+            if "cuentas contables (4)" not in cand.name.lower():
+                return str(cand)
     propio = DATA_PLANES_DIR / f"plan_{cuit}.xlsx"
     if propio.is_file():
         return str(propio)
-    return str(_plan_cuentas_default_path())
+    return None
 
 
 def sincronizar_clientes_catalogo(catalogo: list[dict]) -> dict[str, int]:

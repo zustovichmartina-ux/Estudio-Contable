@@ -110,6 +110,7 @@ from procesador import (
     TOL_MATCH_DIAS_SOLO_MONTO,
     TOL_MATCH_DIAS_MONTO_UNICO,
     PROVEEDORES_DEFAULT_PATH,
+
     extraer_datos_liquidacion_pdf,
     procesar_liquidaciones_tarjeta_pdfs,
     exportar_liquidaciones_tarjeta_excel,
@@ -2358,22 +2359,43 @@ def _resolver_ruta_plan_para_lectura(ruta: Path) -> Path:
     return ruta
 
 
+def _es_plan_generico_default(ruta: Path) -> bool:
+    """True si la ruta es el plan genérico del estudio (nunca cuenta como vinculado a una SA)."""
+    ruta = Path(ruta)
+    nombre = ruta.name.lower()
+    if nombre in ("plan_default.xlsx", "plan_default.xls") or "cuentas contables (4)" in nombre:
+        return True
+    defaults = [
+        Path(PLAN_CUENTAS_DEFAULT),
+        Path(getattr(db, "PLAN_CUENTAS_DEFAULT_REPO", "")),
+        Path(getattr(db, "PLAN_CUENTAS_DEFAULT_LEGACY", "")),
+    ]
+    try:
+        defaults.append(Path(db._plan_cuentas_default_path()))
+    except Exception:
+        pass
+    for d in defaults:
+        if not d or str(d) in ("", "."):
+            continue
+        try:
+            if ruta.resolve() == d.resolve():
+                return True
+        except OSError:
+            if str(ruta).lower() == str(d).lower():
+                return True
+    return False
+
+
 def _es_plan_propio_cliente(cuit: str, ruta: Path) -> bool:
     """True solo si el archivo es el Excel específico del cliente (no el genérico del proyecto)."""
     ruta = Path(ruta)
     if not ruta.exists():
         return False
+    if _es_plan_generico_default(ruta):
+        return False
     # Plan cifrado del usuario = propio
     if "data" in ruta.parts and "secure" in ruta.parts and f"plan_{cuit}" in ruta.name:
         return True
-    try:
-        if ruta.resolve() == Path(PLAN_CUENTAS_DEFAULT).resolve():
-            return False
-    except OSError:
-        if str(ruta).lower() == str(PLAN_CUENTAS_DEFAULT).lower():
-            return False
-    if "cuentas contables (4)" in ruta.name.lower():
-        return False
     for cand in (_ruta_plan_xlsx_red(cuit), _ruta_plan_xlsx_local(cuit), _ruta_plan_xlsx(cuit)):
         try:
             if cand.exists() and ruta.resolve() == cand.resolve():
@@ -2389,18 +2411,21 @@ def _es_plan_propio_cliente(cuit: str, ruta: Path) -> bool:
     carpeta_cliente = RUTA_RAIZ_CLIENTES / cuit
     try:
         if carpeta_cliente.is_dir() and carpeta_cliente.resolve() == ruta.parent.resolve():
-            return True
+            # En carpeta del cliente: Excel con 'plan'/'cuentas' en el nombre (no default)
+            nombre = ruta.name.lower()
+            if ruta.suffix.lower() in (".xlsx", ".xls") and (
+                "cuentas" in nombre or "plan" in nombre
+            ):
+                return True
     except OSError:
         pass
-    # Cualquier plan_{cuit}.xlsx en carpeta planes_cuentas (red o local)
+    # plan_{cuit}.xlsx en carpeta planes_cuentas (red o local)
     if ruta.name.lower() == f"plan_{cuit}.xlsx".lower() and "planes_cuentas" in str(ruta).lower():
         return True
-    # Path registrado en BD (nombre libre) si contiene el CUIT o está bajo planes_cuentas
+    # Path registrado en BD (nombre libre) solo si el nombre contiene el CUIT
     nombre = ruta.name.lower()
     cuit_norm = re.sub(r"\D", "", str(cuit))
     if cuit_norm and cuit_norm in re.sub(r"\D", "", nombre):
-        return True
-    if ruta.suffix.lower() in (".xlsx", ".xls") and "planes_cuentas" in str(ruta).lower():
         return True
     return False
 
@@ -2521,31 +2546,52 @@ def _cargar_plan_cuentas_cliente(
     cliente = db.obtener_cliente(cliente_id)
     if not cliente:
         raise ValueError(f"Cliente id={cliente_id} no encontrado.")
+    cliente = _limpiar_plan_bd_si_archivo_ausente(cliente)
 
     cache_key = f"plan_cuentas_df_{cliente_id}"
     meta_key = f"plan_cuentas_meta_{cliente_id}"
 
     ruta_resuelta: Path | None = None
     for candidata in _rutas_plan_candidatas(cliente):
-        if candidata.exists():
-            ruta_resuelta = candidata
-            break
+        if candidata.exists() and not _es_plan_generico_default(candidata):
+            # Preferir primera candidata no-genérica; propio se prioriza abajo
+            if ruta_resuelta is None:
+                ruta_resuelta = candidata
+            if _es_plan_propio_cliente(str(cliente.get("cuit", "")).strip(), candidata):
+                ruta_resuelta = candidata
+                break
 
     cuit = str(cliente.get("cuit", "")).strip()
     bd_raw = (cliente.get("plan_cuentas_path") or "").strip()
     bd_path = Path(bd_raw) if bd_raw else None
-    bd_existe = bool(bd_path and bd_path.exists())
+    bd_vinculado = bool(
+        bd_path and bd_path.exists() and not _es_plan_generico_default(bd_path)
+    )
 
-    # Fallback del estudio solo si no hay Excel en candidatas.
-    # Path de BD (aunque sea el genérico compartido) cuenta como vinculado.
-    if ruta_resuelta is None:
-        ruta_resuelta = Path(PLAN_CUENTAS_DEFAULT)
-        using_default = True
-    else:
-        propio = _es_plan_propio_cliente(cuit, ruta_resuelta)
-        using_default = (not propio) and (not bd_existe)
-        if propio and not str(ruta_resuelta).endswith(".enc"):
+    # Verde/vinculado: plan_{cuit} o path BD real (no plan_default).
+    if ruta_resuelta is not None and _es_plan_propio_cliente(cuit, ruta_resuelta):
+        using_default = False
+        if not str(ruta_resuelta).endswith(".enc"):
             ruta_resuelta = _promover_plan_a_canonico(cuit, ruta_resuelta)
+    elif bd_vinculado:
+        ruta_resuelta = bd_path  # type: ignore[assignment]
+        using_default = False
+    else:
+        propio_hallado: Path | None = None
+        for candidata in _rutas_plan_candidatas(cliente):
+            if candidata.exists() and _es_plan_propio_cliente(cuit, candidata):
+                propio_hallado = candidata
+                break
+        if propio_hallado is not None:
+            ruta_resuelta = propio_hallado
+            using_default = False
+            if not str(ruta_resuelta).endswith(".enc"):
+                ruta_resuelta = _promover_plan_a_canonico(cuit, ruta_resuelta)
+        else:
+            ruta_resuelta = Path(db._plan_cuentas_default_path())
+            if not ruta_resuelta.is_file():
+                ruta_resuelta = Path(PLAN_CUENTAS_DEFAULT)
+            using_default = True
 
     mtime = _mtime_archivo(ruta_resuelta)
 
@@ -7848,12 +7894,15 @@ def _mensaje_plan_no_vinculado(cliente: dict | None = None) -> str:
 
 
 def _limpiar_plan_bd_si_archivo_ausente(cliente: dict) -> dict:
-    """Si la BD apunta a un Excel que ya no existe, limpia el path (evita falso 'vinculado')."""
+    """Limpia path fantasma o plan_default en BD (evita falso 'vinculado')."""
     raw = (cliente.get("plan_cuentas_path") or "").strip()
     if not raw:
         return cliente
     ruta = Path(raw)
-    if ruta.exists():
+    cuit = str(cliente.get("cuit", "")).strip()
+    # Ausente en disco, o genérico/default: no es vínculo real de la sociedad
+    debe_limpiar = (not ruta.exists()) or _es_plan_generico_default(ruta)
+    if not debe_limpiar:
         return cliente
     try:
         db.actualizar_cliente(
@@ -7866,8 +7915,9 @@ def _limpiar_plan_bd_si_archivo_ausente(cliente: dict) -> dict:
         )
         _dbg_log("P", "_limpiar_plan_bd_si_archivo_ausente", "cleared_stale_path", {
             "cliente_id": cliente.get("id"),
-            "cuit": cliente.get("cuit"),
+            "cuit": cuit,
             "old": raw,
+            "reason": "missing" if not ruta.exists() else "generic_default",
         })
     except Exception:
         pass
@@ -7876,12 +7926,17 @@ def _limpiar_plan_bd_si_archivo_ausente(cliente: dict) -> dict:
 
 
 def _plan_existe_para_cliente(cliente: dict) -> bool:
-    """True si hay Excel de plan usable: propio en disco o path válido en BD."""
+    """True solo si hay plan propio de ESA sociedad (no plan_default ni genérico)."""
     cliente = _limpiar_plan_bd_si_archivo_ausente(cliente)
     cuit = str(cliente.get("cuit", "")).strip()
+    if not cuit:
+        return False
     bd_raw = (cliente.get("plan_cuentas_path") or "").strip()
-    if bd_raw and Path(bd_raw).exists():
-        return True
+    if bd_raw:
+        bd_path = Path(bd_raw)
+        # Path BD real existente (nombre libre) cuenta; plan_default ya fue limpiado arriba
+        if bd_path.exists() and not _es_plan_generico_default(bd_path):
+            return True
     return any(
         p.exists() and _es_plan_propio_cliente(cuit, p)
         for p in _rutas_plan_candidatas(cliente)
