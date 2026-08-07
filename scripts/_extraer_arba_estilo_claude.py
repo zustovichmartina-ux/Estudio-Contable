@@ -10,8 +10,9 @@ from pathlib import Path
 
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from excel_formato_estudio import guardar_informe_excel  # noqa: E402
 from procesador import _limpiar_monto  # noqa: E402

@@ -11,7 +11,9 @@ seguir dividiendolos por dominio, sin romper la app en producción.
   legacy la primera vez que cada usuario hace login (nadie necesita
   resetear su PIN). Rate limiting: 5 intentos fallidos bloquean el usuario
   15 minutos.
-- `requirements.txt` con versiones fijas (antes `>=`).
+- `requirements.txt` se deja con rangos flexibles (`>=`); no se pinean
+  versiones exactas (Streamlit Cloud puede usar Python reciente y un pin
+  agresivo romperia el redeploy).
 - Scripts sueltos de un solo uso (`_extraer_*`, `_cruce_*`, `diagnostico_*`,
   etc., ~30 archivos) movidos a `scripts/`. No se tocó nada que
   `app.py`/`procesador.py` importen.

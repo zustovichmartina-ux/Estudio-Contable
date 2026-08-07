@@ -13,8 +13,9 @@ import pandas as pd
 from PIL import Image
 import io
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _extraer_haberes_rele import (  # noqa: E402
     CHECKPOINT,

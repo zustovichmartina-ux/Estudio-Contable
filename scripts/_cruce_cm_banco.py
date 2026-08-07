@@ -1,3 +1,12 @@
+import sys
+from pathlib import Path
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+_REPO_ROOT = _SCRIPTS_DIR.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+
 # -*- coding: utf-8 -*-
 """Cruza liquidaciones Centro Médico 2025 vs créditos bancarios (Pago a proveedores recibido)."""
 from __future__ import annotations

@@ -6,6 +6,11 @@ import re
 from collections import defaultdict
 from datetime import date, datetime
 from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import pandas as pd
 import pdfplumber
@@ -22,7 +27,6 @@ from excel_formato_estudio import (
     guardar_informe_excel,
 )
 
-ROOT = Path(__file__).resolve().parent
 DESK = Path(r"C:\Users\recep\Desktop")
 GAL = DESK / "Debitos_Galicia_Meridiem_claro.xlsx"
 MAC = DESK / "Debitos_Macro_Meridiem_claro.xlsx"

@@ -15,8 +15,9 @@ import pandas as pd
 import pdfplumber
 from openpyxl import load_workbook
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from excel_formato_estudio import (  # noqa: E402
     _escribir_tabla,

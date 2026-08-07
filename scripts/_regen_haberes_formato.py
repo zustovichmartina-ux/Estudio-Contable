@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _extraer_haberes_rele import _parsear_lineas_haberes
 from excel_formato_estudio import guardar_informe_excel
