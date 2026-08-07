@@ -12237,18 +12237,6 @@ def _pantalla_login_oficina() -> None:
         "varios pueden trabajar a la vez sin pisarse."
     )
     if _es_entorno_cloud():
-        st.info(
-            "App pública en Streamlit Cloud: el link es abierto, pero **sin usuario y PIN no se entra**. "
-            "Los archivos sensibles se guardan cifrados si configuraste `DATA_ENCRYPTION_KEY`."
-        )
-        try:
-            from seguridad_datos import estado_cifrado_ui, instrucciones_clave_cifrado
-
-            est = estado_cifrado_ui()
-            if not est.get("fernet_ok"):
-                st.warning(instrucciones_clave_cifrado())
-        except Exception:
-            pass
         # Re-sincronizar usuarios desde Secrets en cada visita al login (Cloud)
         try:
             db._aplicar_usuarios_desde_secrets()
@@ -12262,18 +12250,6 @@ def _pantalla_login_oficina() -> None:
             "y reiniciá la app."
         )
         return
-
-    sin_pin = []
-    for u in usuarios:
-        fila = db.obtener_usuario_oficina(u["usuario"])
-        if fila and not str(fila.get("pin_hash") or ""):
-            sin_pin.append(u["usuario"])
-    if _es_entorno_cloud() and sin_pin:
-        st.warning(
-            "Estos usuarios aún no tienen PIN: "
-            + ", ".join(f"`{x}`" for x in sin_pin)
-            + ". Definilos en Secrets (`oficina_usuarios`) o pedile a un admin que los cargue."
-        )
 
     opciones = {u["usuario"]: f"{u['nombre']} ({u['usuario']})" for u in usuarios}
     elegido = st.selectbox(
