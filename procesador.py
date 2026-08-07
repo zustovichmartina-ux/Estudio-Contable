@@ -3958,8 +3958,11 @@ def detectar_tipo_comprobante_afip(texto: str) -> tuple[str, str, int]:
 
 
 def _extraer_cae_afip(texto: str) -> str:
+    """Extrae CAE/CAI de comprobantes AFIP (CAE N°, C.A.E. Nº, etc.)."""
     m = re.search(
-        r"\bCAE\b[:\s]*([0-9]{10,14})\b",
+        r"(?:C\s*\.?\s*A\s*\.?\s*E\s*\.?|CAI)\b"
+        r"[\sNnº°o.:\-]*"
+        r"([0-9]{10,14})\b",
         texto or "",
         flags=re.IGNORECASE,
     )
