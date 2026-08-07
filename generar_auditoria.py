@@ -155,20 +155,57 @@ _OCR_READER_LOCK = threading.Lock()  # protege la inicialización
 _OCR_INFER_LOCK = threading.Lock()   # serializa llamadas a readtext (PyTorch CPU)
 
 
+def _es_entorno_cloud() -> bool:
+    """True en Streamlit Community Cloud / entorno remoto sin escritorio del estudio."""
+    flags = (
+        os.environ.get("STREAMLIT_SHARING_MODE"),
+        os.environ.get("STREAMLIT_CLOUD"),
+        os.environ.get("IS_STREAMLIT_CLOUD"),
+    )
+    if any(str(f).strip().lower() in {"1", "true", "yes"} for f in flags if f):
+        return True
+    host = str(os.environ.get("HOSTNAME") or os.environ.get("COMPUTERNAME") or "").lower()
+    if host.endswith(".streamlit.app") or "streamlit" in host:
+        return True
+    if Path("/mount/src").is_dir() or Path("/home/appuser").is_dir():
+        return True
+    return False
+
+
+_OCR_UNAVAILABLE = False  # True si EasyOCR no pudo cargarse
+
+
 def _get_ocr_reader():
-    global _OCR_READER
+    """Lazy singleton EasyOCR. En Cloud reutiliza una sola instancia; no crashea si falta."""
+    global _OCR_READER, _OCR_UNAVAILABLE
+    if _OCR_UNAVAILABLE:
+        return None
     if _OCR_READER is None:
         with _OCR_READER_LOCK:
+            if _OCR_UNAVAILABLE:
+                return None
             if _OCR_READER is None:
-                import easyocr
-                print("[INFO] Inicializando EasyOCR reader...", flush=True)
-                _OCR_READER = easyocr.Reader(["es", "en"], gpu=False, verbose=False)
+                try:
+                    import easyocr
+                    print("[INFO] Inicializando EasyOCR reader...", flush=True)
+                    # Solo "es" en Cloud: menos RAM (sin modelo EN extra).
+                    langs = ["es"] if _es_entorno_cloud() else ["es", "en"]
+                    _OCR_READER = easyocr.Reader(langs, gpu=False, verbose=False)
+                except Exception as exc:
+                    _OCR_UNAVAILABLE = True
+                    print(f"[WARN] EasyOCR no disponible: {exc}", flush=True)
+                    return None
     return _OCR_READER
 
 
 def _ocr_fitz(pdf_path, rotar_grados=0, dpi=150):
     """OCR con EasyOCR a traves de imagenes fitz. rotar_grados se aplica a la imagen."""
     lector = _get_ocr_reader()
+    if lector is None:
+        print("[WARN] OCR omitido: EasyOCR no disponible", flush=True)
+        return []
+    if _es_entorno_cloud():
+        dpi = min(int(dpi or 150), 150)
     doc = fitz.open(str(pdf_path))
     textos = []
     for page in doc:
@@ -778,18 +815,26 @@ def _procesar_un_pdf(ruta_pdf):
 # ── procesamiento principal ──────────────────────────────────────────────────
 
 def procesar_todos(carpeta: Path):
-    """Procesa todos los PDFs en paralelo y retorna dict banco → lista de préstamos."""
+    """Procesa PDFs (secuencial en Cloud; hasta 4 workers en local)."""
     from concurrent.futures import ThreadPoolExecutor
     import multiprocessing
 
     pdfs = sorted(carpeta.glob("*.pdf"))
     print(f"PDFs encontrados: {len(pdfs)}")
 
-    workers = max(1, min(multiprocessing.cpu_count() - 1, 4))
-    print(f"[INFO] Procesando {len(pdfs)} PDFs en paralelo con {workers} workers...", flush=True)
+    # Cloud free: EasyOCR+torch + N workers en paralelo tumba el proceso (OOM / kill).
+    if _es_entorno_cloud():
+        workers = 1
+        print("[INFO] Cloud detectado: OCR secuencial (1 worker). Preferir texto embebido.", flush=True)
+    else:
+        workers = max(1, min(multiprocessing.cpu_count() - 1, 4))
+        print(f"[INFO] Procesando {len(pdfs)} PDFs en paralelo con {workers} workers...", flush=True)
 
-    with ThreadPoolExecutor(max_workers=workers) as executor:
-        resultados_raw = list(executor.map(_procesar_un_pdf, pdfs))
+    if workers == 1:
+        resultados_raw = [_procesar_un_pdf(pdf) for pdf in pdfs]
+    else:
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            resultados_raw = list(executor.map(_procesar_un_pdf, pdfs))
 
     # Consolidar resultados en el dict prestamos_por_banco
     prestamos_por_banco = defaultdict(dict)  # banco → {id_prestamo: {"cuotas": [], ...}}

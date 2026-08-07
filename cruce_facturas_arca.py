@@ -402,11 +402,13 @@ def _ocr_imagen_bytes(img_bytes: bytes) -> str:
     """OCR lazy con easyocr del proyecto (procesador)."""
     from PIL import Image
     import numpy as np
-    from procesador import _obtener_lector_ocr, _lector_ocr_run_lock
+    from procesador import _lector_ocr_streamlit_cached as _obtener_lector_ocr, _lector_ocr_run_lock
 
     img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
     arr = np.array(img)
     lector = _obtener_lector_ocr()
+    if lector is None:
+        return ""
     with _lector_ocr_run_lock:
         res = lector.readtext(arr, detail=0, paragraph=False)
     return "\n".join(str(x) for x in (res or []))
@@ -414,16 +416,28 @@ def _ocr_imagen_bytes(img_bytes: bytes) -> str:
 
 def _ocr_pdf_bytes(pdf_bytes: bytes, max_paginas: int = 2) -> str:
     import fitz
+    import os
     from PIL import Image
     import numpy as np
-    from procesador import _obtener_lector_ocr, _lector_ocr_run_lock
+    from procesador import _lector_ocr_streamlit_cached as _obtener_lector_ocr, _lector_ocr_run_lock
+
+    # Cloud: una pagina a DPI mas bajo para no tumbar el free tier.
+    cloud = any(
+        str(os.environ.get(k) or "").strip().lower() in {"1", "true", "yes"}
+        for k in ("STREAMLIT_SHARING_MODE", "STREAMLIT_CLOUD", "IS_STREAMLIT_CLOUD")
+    ) or Path("/mount/src").is_dir()
+    if cloud:
+        max_paginas = min(max_paginas, 1)
 
     partes: list[str] = []
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     try:
         lector = _obtener_lector_ocr()
+        if lector is None:
+            return ""
+        scale = 1.5 if cloud else 2
         for i in range(min(max_paginas, len(doc))):
-            pix = doc[i].get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
+            pix = doc[i].get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
             img = Image.open(io.BytesIO(pix.tobytes("png"))).convert("RGB")
             arr = np.array(img)
             with _lector_ocr_run_lock:
@@ -437,6 +451,7 @@ def _ocr_pdf_bytes(pdf_bytes: bytes, max_paginas: int = 2) -> str:
 def extraer_texto_comprobante(nombre: str, data: bytes, *, usar_ocr: bool = True) -> tuple[str, str]:
     """
     Extrae texto de PDF o imagen.
+    Siempre intenta texto embebido (pdfplumber/pymupdf) antes que OCR.
     Retorna (texto, metodo) donde metodo es pdfplumber|ocr_pdf|ocr_img|vacio.
     """
     from procesador import extraer_texto_factura_afip
@@ -456,15 +471,18 @@ def extraer_texto_comprobante(nombre: str, data: bytes, *, usar_ocr: bool = True
                 ocr = _ocr_pdf_bytes(data)
                 if ocr.strip():
                     return ocr, "ocr_pdf"
-            except Exception:
-                pass
+            except Exception as exc:
+                return texto or "", f"error_ocr:{exc}"
         return texto or "", "vacio" if not (texto or "").strip() else "pdfplumber"
 
     if ext in _IMG_EXT:
         if not usar_ocr:
             return "", "ocr_omitido"
         try:
-            return _ocr_imagen_bytes(data), "ocr_img"
+            out = _ocr_imagen_bytes(data)
+            if not out.strip():
+                return "", "ocr_vacio"
+            return out, "ocr_img"
         except Exception as exc:
             return "", f"error_ocr:{exc}"
 

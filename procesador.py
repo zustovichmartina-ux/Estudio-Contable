@@ -17,6 +17,7 @@ from copy import copy, deepcopy
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
+import os
 from typing import Optional
 
 import fitz
@@ -2685,14 +2686,75 @@ class ResultadoConciliacion:
     movimientos_todos: list[MovimientoBanco] = field(default_factory=list)
 
 
+_lector_ocr_unavailable = False
+
+
+class _NoOpOcrReader:
+    """Fallback cuando EasyOCR no carga: no crashea la app."""
+
+    def readtext(self, *args, **kwargs):
+        return []
+
+
+def _es_entorno_cloud_ocr() -> bool:
+    flags = (
+        os.environ.get("STREAMLIT_SHARING_MODE"),
+        os.environ.get("STREAMLIT_CLOUD"),
+        os.environ.get("IS_STREAMLIT_CLOUD"),
+    )
+    if any(str(f).strip().lower() in {"1", "true", "yes"} for f in flags if f):
+        return True
+    if Path("/mount/src").is_dir() or Path("/home/appuser").is_dir():
+        return True
+    return False
+
+
 def _obtener_lector_ocr():
-    global _lector_ocr
-    if _lector_ocr is None:
-        with _lector_ocr_init_lock:
-            if _lector_ocr is None:
-                import easyocr
-                _lector_ocr = easyocr.Reader(["es"], gpu=False, verbose=False)
+    """Lazy singleton EasyOCR (o NoOp si falla). Compatible con @st.cache_resource."""
+    global _lector_ocr, _lector_ocr_unavailable
+    if _lector_ocr is not None:
+        return _lector_ocr
+    with _lector_ocr_init_lock:
+        if _lector_ocr is not None:
+            return _lector_ocr
+        if _lector_ocr_unavailable:
+            _lector_ocr = _NoOpOcrReader()
+            return _lector_ocr
+        try:
+            import easyocr
+            _lector_ocr = easyocr.Reader(["es"], gpu=False, verbose=False)
+        except Exception as exc:
+            _lector_ocr_unavailable = True
+            print(f"[WARN] EasyOCR no disponible, OCR desactivado: {exc}", flush=True)
+            _lector_ocr = _NoOpOcrReader()
     return _lector_ocr
+
+
+def _lector_ocr_streamlit_cached():
+    """Una sola carga del reader por proceso Streamlit."""
+    try:
+        import streamlit as st
+    except Exception:
+        return _obtener_lector_ocr()
+    try:
+        return _st_cached_easyocr_reader()
+    except Exception:
+        return _obtener_lector_ocr()
+
+
+def _st_cached_easyocr_reader_impl():
+    return _obtener_lector_ocr()
+
+
+try:
+    import streamlit as _st_for_ocr
+
+    @_st_for_ocr.cache_resource(show_spinner="Cargando OCR (una sola vez)...")
+    def _st_cached_easyocr_reader():
+        return _st_cached_easyocr_reader_impl()
+except Exception:
+    def _st_cached_easyocr_reader():
+        return _obtener_lector_ocr()
 
 
 def _extraer_texto_nativo_pdf(ruta: Path, max_paginas: int | None = None) -> str:
@@ -2739,11 +2801,13 @@ def _extraer_texto_pdf_hibrido(ruta: Path, max_paginas: int | None = None) -> st
         if max_paginas is not None:
             limite = min(max_paginas, limite)
         partes: list[str] = []
+        dpi = 150 if _es_entorno_cloud_ocr() else 180
         for idx in range(limite):
-            pix = documento[idx].get_pixmap(dpi=180)
+            pix = documento[idx].get_pixmap(dpi=dpi)
             imagen = np.array(Image.open(io.BytesIO(pix.tobytes("png"))))
-            for _bbox, t, _ in lector.readtext(imagen):
-                partes.append(t)
+            with _lector_ocr_run_lock:
+                for _bbox, t, _ in lector.readtext(imagen):
+                    partes.append(t)
         return " ".join(partes)
     finally:
         documento.close()

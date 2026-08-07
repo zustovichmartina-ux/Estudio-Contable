@@ -12251,6 +12251,12 @@ def _seccion_auditoria_prestamos() -> None:
 
     saldos_iniciales = _formulario_saldos_iniciales_bancos()
 
+    if _es_entorno_cloud():
+        st.info(
+            "En Cloud el OCR corre **de a un PDF** (sin workers en paralelo) para no saturar RAM. "
+            "No hagas redeploy ni pushes a GitHub mientras procesa; si la app se reinicia a mitad, verás 'Oh no'."
+        )
+
     if st.button("Generar Excel de Auditoría", type="primary", key="btn_generar_auditoria_ga"):
         try:
             with st.spinner("Procesando PDFs con parsers especializados por banco..."):
