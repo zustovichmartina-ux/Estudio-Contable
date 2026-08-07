@@ -2697,14 +2697,20 @@ class _NoOpOcrReader:
 
 
 def _es_entorno_cloud_ocr() -> bool:
+    """Cloud/Linux: DPI bajo y sin paralelizar EasyOCR. Windows local = estudio."""
+    if str(os.environ.get("ESTUDIO_FORCE_LOCAL", "")).strip().lower() in {"1", "true", "yes"}:
+        return False
     flags = (
         os.environ.get("STREAMLIT_SHARING_MODE"),
         os.environ.get("STREAMLIT_CLOUD"),
         os.environ.get("IS_STREAMLIT_CLOUD"),
+        os.environ.get("STREAMLIT_RUNTIME_ENVIRONMENT"),
     )
-    if any(str(f).strip().lower() in {"1", "true", "yes"} for f in flags if f):
+    if any(str(f).strip().lower() in {"1", "true", "yes", "cloud"} for f in flags if f):
         return True
     if Path("/mount/src").is_dir() or Path("/home/appuser").is_dir():
+        return True
+    if os.name != "nt":
         return True
     return False
 

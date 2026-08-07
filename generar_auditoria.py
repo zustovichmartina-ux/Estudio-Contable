@@ -156,18 +156,29 @@ _OCR_INFER_LOCK = threading.Lock()   # serializa llamadas a readtext (PyTorch CP
 
 
 def _es_entorno_cloud() -> bool:
-    """True en Streamlit Community Cloud / entorno remoto sin escritorio del estudio."""
+    """True en Streamlit Community Cloud / Linux remoto.
+
+    El PC del estudio es Windows. Community Cloud corre en Linux: si no es
+    Windows, limitar OCR (1 worker, DPI bajo). Las env vars de Streamlit
+    no siempre estan seteadas, por eso no confiar solo en ellas.
+    """
+    if str(os.environ.get("ESTUDIO_FORCE_LOCAL", "")).strip().lower() in {"1", "true", "yes"}:
+        return False
     flags = (
         os.environ.get("STREAMLIT_SHARING_MODE"),
         os.environ.get("STREAMLIT_CLOUD"),
         os.environ.get("IS_STREAMLIT_CLOUD"),
+        os.environ.get("STREAMLIT_RUNTIME_ENVIRONMENT"),
     )
-    if any(str(f).strip().lower() in {"1", "true", "yes"} for f in flags if f):
+    if any(str(f).strip().lower() in {"1", "true", "yes", "cloud"} for f in flags if f):
         return True
     host = str(os.environ.get("HOSTNAME") or os.environ.get("COMPUTERNAME") or "").lower()
     if host.endswith(".streamlit.app") or "streamlit" in host:
         return True
     if Path("/mount/src").is_dir() or Path("/home/appuser").is_dir():
+        return True
+    # Cloud = Linux. Paralelo EasyOCR solo tiene sentido en Windows local.
+    if os.name != "nt":
         return True
     return False
 
@@ -704,8 +715,11 @@ def _extraer_cuotas(ruta_pdf, banco, forzar_ocr=False, rotacion_override=None):
     """
     if not forzar_ocr:
         textos_nativos = _texto_nativo(ruta_pdf)
-        tiene_texto = any(len(t.strip()) > 50 for t in textos_nativos)
+        # Umbral bajo: mejor parsear texto embebido que disparar EasyOCR en Cloud.
+        umbral = 20 if _es_entorno_cloud() else 50
+        tiene_texto = any(len(t.strip()) > umbral for t in textos_nativos)
         if tiene_texto:
+            print(f"    [TXT] texto embebido OK (sin EasyOCR) | {Path(ruta_pdf).name}", flush=True)
             if banco == "Banco Galicia":
                 return _parsear_galicia(textos_nativos)
             elif banco == "Banco Francés":
@@ -724,6 +738,8 @@ def _extraer_cuotas(ruta_pdf, banco, forzar_ocr=False, rotacion_override=None):
         90 if banco == "Banco Provincia" else 0
     )
     dpi_ocr = 200 if banco == "Banco Provincia" else 150
+    if _es_entorno_cloud():
+        dpi_ocr = min(int(dpi_ocr), 150)
     print(f"    [OCR] rotacion={rotacion}° dpi={dpi_ocr}...", flush=True)
     textos_ocr = _ocr_fitz(ruta_pdf, rotar_grados=rotacion, dpi=dpi_ocr)
 
@@ -751,7 +767,8 @@ def _procesar_un_pdf(ruta_pdf):
     ruta_pdf = Path(ruta_pdf)
     banco = _detectar_banco(ruta_pdf.name)
     pid = _detectar_id_prestamo(ruta_pdf.name)
-    INTENTOS = 3
+    # En Cloud: 1 intento (reintentos OCR x3 matan RAM/tiempo y provocan redeploy).
+    INTENTOS = 1 if _es_entorno_cloud() else 3
     motivo_error = ""
     capital_original_extra = 0.0
 
@@ -815,20 +832,34 @@ def _procesar_un_pdf(ruta_pdf):
 # ── procesamiento principal ──────────────────────────────────────────────────
 
 def procesar_todos(carpeta: Path):
-    """Procesa PDFs (secuencial en Cloud; hasta 4 workers en local)."""
+    """Procesa PDFs (secuencial en Cloud/Linux; hasta 4 workers solo en Windows local)."""
     from concurrent.futures import ThreadPoolExecutor
     import multiprocessing
 
     pdfs = sorted(carpeta.glob("*.pdf"))
     print(f"PDFs encontrados: {len(pdfs)}")
 
-    # Cloud free: EasyOCR+torch + N workers en paralelo tumba el proceso (OOM / kill).
-    if _es_entorno_cloud():
+    # IMPORTANTE: el mensaje "N workers" SOLO puede aparecer en Windows local.
+    # Streamlit Cloud es Linux; paralelizar EasyOCR+torch mata el free tier (OOM).
+    if os.name != "nt" or _es_entorno_cloud():
         workers = 1
-        print("[INFO] Cloud detectado: OCR secuencial (1 worker). Preferir texto embebido.", flush=True)
+        print(
+            "[INFO] OCR secuencial (1 worker). Texto PDF primero; EasyOCR solo si hace falta.",
+            flush=True,
+        )
     else:
-        workers = max(1, min(multiprocessing.cpu_count() - 1, 4))
-        print(f"[INFO] Procesando {len(pdfs)} PDFs en paralelo con {workers} workers...", flush=True)
+        override = str(os.environ.get("ESTUDIO_OCR_WORKERS") or "").strip()
+        if override.isdigit():
+            workers = max(1, min(int(override), 4))
+        else:
+            workers = max(1, min(multiprocessing.cpu_count() - 1, 4))
+        if workers > 1:
+            print(
+                f"[INFO] Procesando {len(pdfs)} PDFs en paralelo con {workers} workers...",
+                flush=True,
+            )
+        else:
+            print("[INFO] OCR secuencial (1 worker).", flush=True)
 
     if workers == 1:
         resultados_raw = [_procesar_un_pdf(pdf) for pdf in pdfs]
