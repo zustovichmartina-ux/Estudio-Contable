@@ -79,6 +79,7 @@ informacion sobre tango/
 !data/planes_cuentas/plan_default.xlsx
 !data/planes_cuentas/.gitkeep
 data/persistencia/
+data/secure/
 
 # Optional local Streamlit overrides (keep config.toml)
 .streamlit/secrets.toml

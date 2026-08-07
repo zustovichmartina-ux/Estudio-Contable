@@ -22,3 +22,15 @@ streamlit run app.py
 - Plantillas en `plantillas/` (si aplica)
 
 **No** se suben datos de clientes, Excel/PDF de trabajo, bases `.db`, ni secrets (`.env`, `.streamlit/secrets.toml`).
+
+## Streamlit Cloud (login + cifrado)
+
+1. En Streamlit Cloud dejá la app **Public** (el link lo pueden abrir los compañeros).
+2. La app igual exige **usuario + PIN** antes de usarla.
+3. Pegá el bloque de Secrets (ver `.streamlit/secrets.toml.example`):
+   - `DATA_ENCRYPTION_KEY` (Fernet) para cifrar planes/balances subidos
+   - `[oficina_usuarios.*]` con PIN de cada persona
+4. Tras cambiar Secrets, **Reboot** / redeploy y refrescá el navegador.
+5. Un **admin** puede crear más usuarios desde Menú → Usuarios de la oficina.
+
+Cifrado: protege archivos en disco del contenedor (`data/secure/<usuario>/`). No reemplaza el login ni HTTPS.

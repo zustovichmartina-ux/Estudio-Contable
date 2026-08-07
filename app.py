@@ -942,13 +942,26 @@ def _render_barra_superior_cuenta() -> None:
                 st.rerun()
 
             st.markdown("---")
-            st.markdown("**Compartir en la red local**")
-            ip = obtener_ip_red()
-            puerto = _obtener_puerto_streamlit()
-            st.code(f"http://{ip}:{puerto}", language=None)
-            st.caption("Mismo Wi-Fi de la oficina para compartirlo.")
+            if not _es_entorno_cloud():
+                st.markdown("**Compartir en la red local**")
+                ip = obtener_ip_red()
+                puerto = _obtener_puerto_streamlit()
+                st.code(f"http://{ip}:{puerto}", language=None)
+                st.caption("Mismo Wi-Fi de la oficina para compartirlo.")
+                st.markdown("---")
+            else:
+                try:
+                    from seguridad_datos import estado_cifrado_ui
 
-            st.markdown("---")
+                    est = estado_cifrado_ui()
+                    if est.get("fernet_ok"):
+                        st.caption("Cifrado at-rest: activo")
+                    else:
+                        st.caption("Cifrado at-rest: falta DATA_ENCRYPTION_KEY")
+                except Exception:
+                    pass
+                st.markdown("---")
+
             st.markdown("**Administración**")
             if st.button(
                 "Gestión de Clientes",
@@ -1755,11 +1768,29 @@ def _cliente_sociedad_activa(clientes: list[dict]) -> dict | None:
 
 
 def _guardar_upload(archivo) -> Path:
-    """Persiste un archivo subido en un temporal para procesarlo."""
+    """Persiste un archivo subido en un temporal para procesarlo.
+
+    En Cloud, si hay DATA_ENCRYPTION_KEY, también guarda copia cifrada
+    namespaced por usuario en data/secure/<user>/uploads/.
+    """
     sufijo = Path(archivo.name).suffix
+    contenido = bytes(archivo.getbuffer())
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=sufijo)
-    tmp.write(archivo.getbuffer())
+    tmp.write(contenido)
     tmp.close()
+    if _es_entorno_cloud():
+        try:
+            from seguridad_datos import guardar_upload_cifrado, tiene_clave_cifrado
+
+            if tiene_clave_cifrado():
+                guardar_upload_cifrado(
+                    _usuario_oficina_actual(),
+                    "uploads",
+                    archivo.name,
+                    contenido,
+                )
+        except Exception:
+            pass
     return Path(tmp.name)
 
 
@@ -2199,6 +2230,14 @@ def _rutas_plan_candidatas(cliente: dict) -> list[Path]:
         _ruta_plan_xlsx_local(cuit),
         LEGACY_PLANES_DIR / f"{cuit}_plan.xlsx",
     ]
+    # Cloud: planes cifrados por usuario (y fallback sin usuario)
+    try:
+        from seguridad_datos import ruta_plan_cifrado
+
+        candidatas.insert(0, ruta_plan_cifrado(_usuario_oficina_actual(), cuit))
+        candidatas.insert(1, ruta_plan_cifrado(None, cuit))
+    except Exception:
+        pass
     carpeta_cliente = RUTA_RAIZ_CLIENTES / cuit
     if carpeta_cliente.is_dir():
         for archivo in sorted(carpeta_cliente.iterdir()):
@@ -2211,7 +2250,7 @@ def _rutas_plan_candidatas(cliente: dict) -> list[Path]:
                 candidatas.append(archivo)
     if cliente.get("plan_cuentas_path"):
         bd_path = Path(cliente["plan_cuentas_path"])
-        if bd_path.suffix.lower() == ".xlsx" and bd_path not in candidatas:
+        if bd_path.suffix.lower() in (".xlsx", ".enc") and bd_path not in candidatas:
             candidatas.append(bd_path)
     candidatas.append(_directorio_planes_canonico() / f"plan_{cuit}.csv")
     candidatas.append(DATA_PLANES_DIR / f"plan_{cuit}.csv")
@@ -2225,11 +2264,24 @@ def _rutas_plan_candidatas(cliente: dict) -> list[Path]:
     return unicas
 
 
+def _resolver_ruta_plan_para_lectura(ruta: Path) -> Path:
+    """Si el plan está cifrado (.enc), materializa un temporal descifrado."""
+    ruta = Path(ruta)
+    if str(ruta).endswith(".enc") or ruta.suffix.lower() == ".enc":
+        from seguridad_datos import materializar_descifrado
+
+        return materializar_descifrado(ruta, suffix=".xlsx")
+    return ruta
+
+
 def _es_plan_propio_cliente(cuit: str, ruta: Path) -> bool:
     """True solo si el archivo es el Excel específico del cliente (no el genérico del proyecto)."""
     ruta = Path(ruta)
     if not ruta.exists():
         return False
+    # Plan cifrado del usuario = propio
+    if "data" in ruta.parts and "secure" in ruta.parts and f"plan_{cuit}" in ruta.name:
+        return True
     try:
         if ruta.resolve() == Path(PLAN_CUENTAS_DEFAULT).resolve():
             return False
@@ -2298,8 +2350,35 @@ def _promover_plan_a_canonico(cuit: str, ruta: Path) -> Path:
 def _guardar_plan_cliente_en_disco(cuit: str, archivo_bytes: bytes) -> Path:
     """
     Persiste el plan en el servidor compartido (T:\\…\\planes_cuentas) y espejo local.
-    Así, si un usuario sube/actualiza el plan, el resto lo ve al abrir la sociedad.
+    En Cloud: cifrado Fernet namespaced por usuario (data/secure/<user>/planes/).
     """
+    # Cloud: no dejar plaintext en disco del contenedor
+    if _es_entorno_cloud():
+        from seguridad_datos import (
+            guardar_plan_cifrado,
+            materializar_descifrado,
+            tiene_clave_cifrado,
+        )
+
+        if not tiene_clave_cifrado():
+            raise RuntimeError(
+                "En Cloud hace falta DATA_ENCRYPTION_KEY en Secrets para guardar planes."
+            )
+        enc = guardar_plan_cifrado(_usuario_oficina_actual(), cuit, archivo_bytes)
+        tmp = materializar_descifrado(enc, suffix=".xlsx")
+        df = cargar_plan_cuentas(tmp)
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        _dbg_log(
+            "C",
+            "_guardar_plan_cliente_en_disco",
+            "saved_xlsx_encrypted",
+            {"cuit": cuit, "path": str(enc), "rows": len(df)},
+        )
+        return enc
+
     ruta_xlsx = _ruta_plan_xlsx(cuit)
     ruta_xlsx.parent.mkdir(parents=True, exist_ok=True)
     ruta_xlsx.write_bytes(archivo_bytes)
@@ -2381,7 +2460,7 @@ def _cargar_plan_cuentas_cliente(
     else:
         propio = _es_plan_propio_cliente(cuit, ruta_resuelta)
         using_default = (not propio) and (not bd_existe)
-        if propio:
+        if propio and not str(ruta_resuelta).endswith(".enc"):
             ruta_resuelta = _promover_plan_a_canonico(cuit, ruta_resuelta)
 
     mtime = _mtime_archivo(ruta_resuelta)
@@ -2413,7 +2492,13 @@ def _cargar_plan_cuentas_cliente(
         st.session_state.pop(cache_key, None)
         st.session_state.pop(meta_key, None)
 
-    df = cargar_plan_cuentas(ruta_resuelta)
+    ruta_lectura = _resolver_ruta_plan_para_lectura(ruta_resuelta)
+    df = cargar_plan_cuentas(ruta_lectura)
+    if ruta_lectura != ruta_resuelta:
+        try:
+            Path(ruta_lectura).unlink(missing_ok=True)
+        except OSError:
+            pass
     if usar_cache:
         st.session_state[cache_key] = df
         st.session_state[meta_key] = {
@@ -5361,11 +5446,44 @@ def _ruta_balance_servidor_sociedad(sociedad_id: int | None) -> str:
     return sanitizar_ruta_unc(str(raw))
 
 
+def _cargar_balance_cifrado_si_existe(sociedad_id: int) -> BytesIO | None:
+    """En Cloud, rehidrata el buffer desde el último balance cifrado del usuario."""
+    if not _es_entorno_cloud():
+        return None
+    try:
+        from seguridad_datos import directorio_seguro, leer_cifrado, tiene_clave_cifrado
+
+        if not tiene_clave_cifrado():
+            return None
+        carpeta = directorio_seguro(_usuario_oficina_actual(), "balances")
+        prefijo = f"soc_{sociedad_id}_"
+        candidatos = sorted(
+            [p for p in carpeta.glob("*.enc") if p.name.startswith(prefijo)],
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        if not candidatos:
+            return None
+        return BytesIO(leer_cifrado(candidatos[0]))
+    except Exception:
+        return None
+
+
 def _buffer_balance_servidor_sociedad(sociedad_id: int | None) -> BytesIO | None:
     _inicializar_balance_servidor_por_sociedad()
     if sociedad_id is None:
         return None
-    return st.session_state.balance_servidor_buffer_por_sociedad.get(sociedad_id)
+    buf = st.session_state.balance_servidor_buffer_por_sociedad.get(sociedad_id)
+    if buf is not None:
+        return buf
+    hidratado = _cargar_balance_cifrado_si_existe(int(sociedad_id))
+    if hidratado is not None:
+        st.session_state.balance_servidor_buffer_por_sociedad[sociedad_id] = hidratado
+        st.session_state.balance_servidor_sync_at_por_sociedad[sociedad_id] = (
+            datetime.now().strftime("%d/%m/%Y %H:%M")
+        )
+        return hidratado
+    return None
 
 
 def _resolver_fuente_balance(
@@ -5493,12 +5611,32 @@ def _render_conexion_servidor_banco(sociedad_id: int | None, banco: str) -> None
             fp = f"{up_bal.name}:{getattr(up_bal, 'size', 0)}"
             fp_key = f"_bal_up_fp_bancos_{sociedad_id}"
             if st.session_state.get(fp_key) != fp:
+                raw = up_bal.getvalue()
                 buffers = st.session_state.balance_servidor_buffer_por_sociedad
                 sync_at_dict = st.session_state.balance_servidor_sync_at_por_sociedad
-                buffers[sociedad_id] = BytesIO(up_bal.getvalue())
+                buffers[sociedad_id] = BytesIO(raw)
                 sync_at_dict[sociedad_id] = datetime.now().strftime("%d/%m/%Y %H:%M")
                 st.session_state[f"{slug}_skip_default_planilla"] = True
                 st.session_state[fp_key] = fp
+                if _es_entorno_cloud():
+                    try:
+                        from seguridad_datos import guardar_balance_cifrado, tiene_clave_cifrado
+
+                        if tiene_clave_cifrado():
+                            enc = guardar_balance_cifrado(
+                                _usuario_oficina_actual(),
+                                sociedad_id,
+                                up_bal.name,
+                                raw,
+                            )
+                            st.caption(f"Balance cifrado en disco: `{enc.name}`")
+                        else:
+                            st.warning(
+                                "Balance solo en memoria de esta sesión. "
+                                "Configurá DATA_ENCRYPTION_KEY en Secrets para guardarlo cifrado."
+                            )
+                    except Exception as exc:
+                        st.warning(f"No se pudo cifrar el balance en disco: {exc}")
                 st.success(f"✓ Balance en memoria: `{up_bal.name}`.")
                 st.rerun()
 
@@ -5649,12 +5787,30 @@ def _render_conexion_servidor_local(sociedad_id: int | None, impuesto: str) -> N
             fp = f"{up_bal.name}:{getattr(up_bal, 'size', 0)}"
             fp_key = f"_bal_up_fp_dev_{slug}_{sociedad_id}"
             if st.session_state.get(fp_key) != fp:
+                raw = up_bal.getvalue()
                 buffers = st.session_state.balance_servidor_buffer_por_sociedad
                 sync_at_dict = st.session_state.balance_servidor_sync_at_por_sociedad
-                buffers[sociedad_id] = BytesIO(up_bal.getvalue())
+                buffers[sociedad_id] = BytesIO(raw)
                 sync_at_dict[sociedad_id] = datetime.now().strftime("%d/%m/%Y %H:%M")
                 st.session_state[f"{slug}_skip_default_planilla"] = True
                 st.session_state[fp_key] = fp
+                if _es_entorno_cloud():
+                    try:
+                        from seguridad_datos import guardar_balance_cifrado, tiene_clave_cifrado
+
+                        if tiene_clave_cifrado():
+                            guardar_balance_cifrado(
+                                _usuario_oficina_actual(),
+                                sociedad_id,
+                                up_bal.name,
+                                raw,
+                            )
+                        else:
+                            st.warning(
+                                "Balance solo en memoria. Configurá DATA_ENCRYPTION_KEY en Secrets."
+                            )
+                    except Exception as exc:
+                        st.warning(f"No se pudo cifrar el balance: {exc}")
                 st.success(f"✓ Balance en memoria: `{up_bal.name}`.")
                 st.rerun()
 
@@ -12080,10 +12236,44 @@ def _pantalla_login_oficina() -> None:
         "Cada persona entra con su usuario. Las sesiones son independientes: "
         "varios pueden trabajar a la vez sin pisarse."
     )
+    if _es_entorno_cloud():
+        st.info(
+            "App pública en Streamlit Cloud: el link es abierto, pero **sin usuario y PIN no se entra**. "
+            "Los archivos sensibles se guardan cifrados si configuraste `DATA_ENCRYPTION_KEY`."
+        )
+        try:
+            from seguridad_datos import estado_cifrado_ui, instrucciones_clave_cifrado
+
+            est = estado_cifrado_ui()
+            if not est.get("fernet_ok"):
+                st.warning(instrucciones_clave_cifrado())
+        except Exception:
+            pass
+        # Re-sincronizar usuarios desde Secrets en cada visita al login (Cloud)
+        try:
+            db._aplicar_usuarios_desde_secrets()
+        except Exception:
+            pass
+
     usuarios = db.listar_usuarios_oficina(solo_activos=True)
     if not usuarios:
-        st.error("No hay usuarios cargados. Reiniciá la app o contactá al administrador.")
+        st.error(
+            "No hay usuarios cargados. En Cloud, pegá el bloque `oficina_usuarios` en Secrets "
+            "y reiniciá la app."
+        )
         return
+
+    sin_pin = []
+    for u in usuarios:
+        fila = db.obtener_usuario_oficina(u["usuario"])
+        if fila and not str(fila.get("pin_hash") or ""):
+            sin_pin.append(u["usuario"])
+    if _es_entorno_cloud() and sin_pin:
+        st.warning(
+            "Estos usuarios aún no tienen PIN: "
+            + ", ".join(f"`{x}`" for x in sin_pin)
+            + ". Definilos en Secrets (`oficina_usuarios`) o pedile a un admin que los cargue."
+        )
 
     opciones = {u["usuario"]: f"{u['nombre']} ({u['usuario']})" for u in usuarios}
     elegido = st.selectbox(
@@ -12093,10 +12283,10 @@ def _pantalla_login_oficina() -> None:
         key="login_usuario_select",
     )
     pin = st.text_input(
-        "PIN (si tiene)",
+        "PIN",
         type="password",
         key="login_pin_input",
-        help="Si el usuario no tiene PIN, dejalo vacío.",
+        help="Obligatorio en Cloud. En local, si el usuario no tiene PIN, dejalo vacío.",
     )
     if st.button("Entrar", type="primary", key="btn_login_oficina"):
         ok = db.verificar_login_oficina(elegido, pin)
@@ -12311,6 +12501,7 @@ def main() -> None:
             - **Recategorización Monotributo**: facturas AFIP PDF/ZIP → períodos devengados + Excel.
             - **Herramientas**: **matcheo inteligente PDF + Tango**; completar cuadro bancario; PDF extractos → Excel; **analizador de inversiones (FIFO)**; **caja USD (dif. cotización)**; match débitos ↔ proveedores; liquidaciones de tarjeta.
             - **Usuarios de oficina**: cada persona entra con su usuario; sesiones independientes.
+            - **Cloud**: link público + muro de login (PIN). Planes/balances subidos se cifran con `DATA_ENCRYPTION_KEY`.
             - **Multi-PDF anual**: hasta {MAX_PDFS_ANUALES} extractos consolidados cronológicamente.
             - **Detección automática de banco**: Santander, Galicia, Francés, Credicoop, Provincia, Macro.
             - **Cruce con Compras Tango**: `{COMPRAS_TANGO_PATH.name}`.

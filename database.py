@@ -400,8 +400,83 @@ def _hash_pin(pin: str) -> str:
     return hashlib.sha256(texto.encode("utf-8")).hexdigest()
 
 
+def _secrets_oficina_usuarios() -> list[dict]:
+    """Lee usuarios desde st.secrets['oficina_usuarios'] (Cloud / local secrets.toml)."""
+    try:
+        import streamlit as st
+
+        bloque = st.secrets.get("oficina_usuarios")
+    except Exception:
+        return []
+    if bloque is None:
+        return []
+    out: list[dict] = []
+    try:
+        items = dict(bloque)
+    except Exception:
+        return []
+    for usuario, meta in items.items():
+        try:
+            if hasattr(meta, "get"):
+                nombre = str(meta.get("nombre") or usuario).strip()
+                pin = str(meta.get("pin") or meta.get("password") or "").strip()
+                es_admin = bool(meta.get("es_admin", str(usuario).lower() == "admin"))
+            else:
+                # Forma corta: usuario = "pin_en_texto"
+                nombre = str(usuario)
+                pin = str(meta or "").strip()
+                es_admin = str(usuario).lower() == "admin"
+            out.append(
+                {
+                    "usuario": str(usuario).strip().lower(),
+                    "nombre": nombre,
+                    "pin": pin,
+                    "es_admin": es_admin,
+                }
+            )
+        except Exception:
+            continue
+    return out
+
+
+def _aplicar_usuarios_desde_secrets() -> int:
+    """
+    Crea/actualiza usuarios definidos en Secrets (PIN hasheado en SQLite).
+    Devuelve cantidad de usuarios aplicados. No guarda PIN en texto claro en el repo.
+    """
+    definidos = _secrets_oficina_usuarios()
+    if not definidos:
+        return 0
+    aplicados = 0
+    for u in definidos:
+        user = u["usuario"]
+        if not user:
+            continue
+        existente = obtener_usuario_oficina(user)
+        if existente is None:
+            crear_usuario_oficina(
+                user,
+                u["nombre"],
+                pin=u.get("pin") or "",
+                es_admin=bool(u.get("es_admin")),
+            )
+        else:
+            kwargs: dict = {
+                "nombre": u["nombre"],
+                "es_admin": bool(u.get("es_admin")),
+                "activo": True,
+            }
+            # Solo pisa el PIN si Secrets trae uno no vacío
+            if u.get("pin"):
+                kwargs["pin"] = u["pin"]
+            actualizar_usuario_oficina(int(existente["id"]), **kwargs)
+        aplicados += 1
+    return aplicados
+
+
 def _sembrar_usuarios_oficina_default() -> None:
-    """Crea usuarios iniciales si la tabla está vacía (editables después)."""
+    """Crea usuarios iniciales si la tabla está vacía; prioriza Secrets en Cloud."""
+    _aplicar_usuarios_desde_secrets()
     existentes = listar_usuarios_oficina(solo_activos=False)
     if existentes:
         return
@@ -494,14 +569,38 @@ def actualizar_usuario_oficina(
         conn.commit()
 
 
+def _exigir_pin_en_entorno() -> bool:
+    """En Cloud (o si hay usuarios en Secrets) no permitir entrar sin PIN configurado."""
+    if _secrets_oficina_usuarios():
+        return True
+    import os
+
+    flags = (
+        os.environ.get("STREAMLIT_SHARING_MODE"),
+        os.environ.get("STREAMLIT_CLOUD"),
+        os.environ.get("IS_STREAMLIT_CLOUD"),
+    )
+    if any(str(f).strip().lower() in {"1", "true", "yes"} for f in flags if f):
+        return True
+    if Path("/mount/src").is_dir() or Path("/home/appuser").is_dir():
+        return True
+    return False
+
+
 def verificar_login_oficina(usuario: str, pin: str = "") -> dict | None:
-    """Valida usuario/PIN. Si el usuario no tiene PIN, acepta cualquier/vacío."""
+    """Valida usuario/PIN. Si el usuario no tiene PIN: local OK vacío; Cloud exige Secrets."""
     fila = obtener_usuario_oficina(usuario)
     if not fila or not fila.get("activo"):
         return None
     esperado = str(fila.get("pin_hash") or "")
-    if esperado and esperado != _hash_pin(pin):
-        return None
+    if esperado:
+        if esperado != _hash_pin(pin):
+            return None
+    else:
+        # Sin PIN en DB: en Cloud / con Secrets no dejar puerta abierta
+        if _exigir_pin_en_entorno():
+            return None
+        # Local: sin PIN → entra (igual que antes)
     return {
         "id": fila["id"],
         "usuario": fila["usuario"],
