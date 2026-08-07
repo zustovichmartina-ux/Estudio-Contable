@@ -686,7 +686,19 @@ NUEVOS_MONOTRIBUTISTAS: list[dict[str, str]] = [
 ]
 db.sincronizar_clientes_catalogo(NUEVOS_MONOTRIBUTISTAS)
 # Cloud / repo limpio: siembra PJ + planes desde data/seed y data/planes_cuentas
-db.cargar_seed_sociedades_pj()
+_cargar_seed_pj = getattr(db, "cargar_seed_sociedades_pj", None)
+if callable(_cargar_seed_pj):
+    _cargar_seed_pj()
+else:
+    # Fallback si Cloud sirve database.py viejo sin el método (redeploy a medias)
+    _seed_pj = Path(__file__).resolve().parent / "data" / "seed" / "sociedades_pj.json"
+    if _seed_pj.is_file():
+        try:
+            _data_pj = json.loads(_seed_pj.read_text(encoding="utf-8"))
+            if isinstance(_data_pj, list):
+                db.sincronizar_clientes_catalogo(_data_pj)
+        except (OSError, json.JSONDecodeError):
+            pass
 
 _SOCiedad_KEY = "sociedad_activa"
 _IMPUESTO_KEY = "selector_impuesto"

@@ -1,9 +1,11 @@
 """Gestión de la base de datos SQLite para clientes del estudio contable."""
 
 import json
+import logging
 import re
 import sqlite3
 import unicodedata
+import warnings
 from pathlib import Path
 from typing import Optional
 
@@ -827,15 +829,25 @@ def cargar_seed_sociedades_pj(ruta: str | Path | None = None) -> dict[str, int]:
     """
     Siembra Personas Jurídicas desde data/seed/sociedades_pj.json (repo / Cloud).
     Vincula plan_{cuit}.xlsx de data/planes_cuentas cuando exista.
+    Si el JSON no existe o es inválido: no-op (warning) sin levantar excepción.
     """
     path = Path(ruta) if ruta else SEED_SOCIEDADES_PJ_PATH
     if not path.is_file():
+        msg = f"Seed PJ omitido: no existe {path}"
+        warnings.warn(msg, UserWarning, stacklevel=2)
+        logging.getLogger(__name__).warning(msg)
         return {"insertados": 0, "omitidos": 0, "errores": 0, "planes_vinculados": 0, "sin_archivo": 1}
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, json.JSONDecodeError) as exc:
+        msg = f"Seed PJ omitido: no se pudo leer {path}: {exc}"
+        warnings.warn(msg, UserWarning, stacklevel=2)
+        logging.getLogger(__name__).warning(msg)
         return {"insertados": 0, "omitidos": 0, "errores": 1, "planes_vinculados": 0}
     if not isinstance(data, list):
+        msg = f"Seed PJ omitido: {path} no es una lista JSON"
+        warnings.warn(msg, UserWarning, stacklevel=2)
+        logging.getLogger(__name__).warning(msg)
         return {"insertados": 0, "omitidos": 0, "errores": 1, "planes_vinculados": 0}
     return sincronizar_clientes_catalogo(data)
 
