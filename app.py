@@ -26,6 +26,7 @@ from prestamos_listado_excel import (
     generar_excel_listado_claro as _pl_generar_excel_claro,
 )
 
+import auth_oficina
 import database as db
 from cruce_facturas_arca import procesar_cruce_facturas_arca
 from procesador import (
@@ -12401,11 +12402,11 @@ def _pantalla_login_oficina() -> None:
     if _es_entorno_cloud():
         # Re-sincronizar usuarios desde Secrets en cada visita al login (Cloud)
         try:
-            db._aplicar_usuarios_desde_secrets()
+            auth_oficina._aplicar_usuarios_desde_secrets()
         except Exception:
             pass
 
-    usuarios = db.listar_usuarios_oficina(solo_activos=True)
+    usuarios = auth_oficina.listar_usuarios_oficina(solo_activos=True)
     if not usuarios:
         st.error(
             "No hay usuarios cargados. En Cloud, pegá el bloque `oficina_usuarios` en Secrets "
@@ -12427,14 +12428,14 @@ def _pantalla_login_oficina() -> None:
         help="Obligatorio en Cloud. En local, si el usuario no tiene PIN, dejalo vacío.",
     )
     if st.button("Entrar", type="primary", key="btn_login_oficina"):
-        restante = db.usuario_bloqueado_oficina(elegido)
+        restante = auth_oficina.usuario_bloqueado_oficina(elegido)
         if restante > 0:
             minutos = max(1, (restante + 59) // 60)
             st.error(
                 f"Demasiados intentos fallidos. Probá de nuevo en {minutos} minuto(s)."
             )
             return
-        ok = db.verificar_login_oficina(elegido, pin)
+        ok = auth_oficina.verificar_login_oficina(elegido, pin)
         if not ok:
             st.error("Usuario o PIN incorrecto.")
             return
@@ -12495,7 +12496,7 @@ def _pantalla_login_oficina() -> None:
                 st.error("Los PIN nuevos no coinciden.")
             else:
                 try:
-                    res = db.resetear_pin_usuario_oficina(
+                    res = auth_oficina.resetear_pin_usuario_oficina(
                         objetivo,
                         pin_nuevo,
                         usuario_admin=admin_elegido,
@@ -12514,7 +12515,7 @@ def _seccion_usuarios_oficina() -> None:
     st.subheader("Usuarios de la oficina")
     st.caption("Cada persona tiene su propio espacio de trabajo (borradores y biblioteca).")
 
-    usuarios = db.listar_usuarios_oficina(solo_activos=False)
+    usuarios = auth_oficina.listar_usuarios_oficina(solo_activos=False)
     if usuarios:
         st.dataframe(
             pd.DataFrame([
@@ -12541,7 +12542,7 @@ def _seccion_usuarios_oficina() -> None:
     es_admin = st.checkbox("Es administrador", key="nuevo_user_admin")
     if st.button("Crear usuario", key="btn_crear_usuario_oficina"):
         try:
-            db.crear_usuario_oficina(
+            auth_oficina.crear_usuario_oficina(
                 nuevo_user, nuevo_nombre, pin=nuevo_pin or "", es_admin=es_admin
             )
             st.success(f"Usuario `{nuevo_user}` creado.")
@@ -12577,7 +12578,7 @@ def _seccion_usuarios_oficina() -> None:
         # Solo actualizar PIN si el campo tiene contenido explícito
         if pin_edit is not None and str(pin_edit) != "":
             kwargs["pin"] = pin_edit
-        db.actualizar_usuario_oficina(int(uid), **kwargs)
+        auth_oficina.actualizar_usuario_oficina(int(uid), **kwargs)
         st.success("Usuario actualizado.")
         st.rerun()
 
