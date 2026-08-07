@@ -494,11 +494,71 @@ st.markdown(
         background: #F8FAFC !important;
         border-color: #94A3B8 !important;
     }
-    /* Nav principal: segmented control compacto */
-    div[data-testid="stSegmentedControl"] label,
-    div[data-testid="stSegmentedControl"] button {
-        font-size: 0.82rem !important;
+    /* Nav principal (ventanas): pills espaciadas, coherente con chips Biblioteca/Menú */
+    .st-key-ventana_principal_v3,
+    div[data-testid="stElementContainer"]:has(.st-key-ventana_principal_v3),
+    div[data-testid="element-container"]:has(.st-key-ventana_principal_v3) {
+        margin: 0.15rem 0 0.35rem 0 !important;
+    }
+    .st-key-ventana_principal_v3 [data-testid="stSegmentedControl"],
+    .st-key-ventana_principal_v3 [data-baseweb="button-group"],
+    .st-key-ventana_principal_v3 [role="radiogroup"] {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 0.45rem !important;
+        column-gap: 0.45rem !important;
+        row-gap: 0.45rem !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+    }
+    .st-key-ventana_principal_v3 [data-testid="stSegmentedControl"] label,
+    .st-key-ventana_principal_v3 [data-testid="stSegmentedControl"] button,
+    .st-key-ventana_principal_v3 [data-baseweb="button-group"] button,
+    .st-key-ventana_principal_v3 [role="radiogroup"] label,
+    .st-key-ventana_principal_v3 [role="radiogroup"] button {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        box-sizing: border-box !important;
+        min-height: 2.15rem !important;
+        height: auto !important;
+        padding: 0.45rem 1.05rem !important;
+        margin: 0 !important;
+        font-size: 0.875rem !important;
+        font-weight: 500 !important;
+        letter-spacing: 0.01em !important;
+        line-height: 1.15 !important;
         white-space: nowrap !important;
+        border-radius: 0.55rem !important;
+        background: #FFFFFF !important;
+        color: #1F4E79 !important;
+        border: 1px solid #D0D7DE !important;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+        transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease !important;
+    }
+    .st-key-ventana_principal_v3 [data-testid="stSegmentedControl"] label:hover,
+    .st-key-ventana_principal_v3 [data-testid="stSegmentedControl"] button:hover,
+    .st-key-ventana_principal_v3 [data-baseweb="button-group"] button:hover,
+    .st-key-ventana_principal_v3 [role="radiogroup"] label:hover,
+    .st-key-ventana_principal_v3 [role="radiogroup"] button:hover {
+        background: #F8FAFC !important;
+        border-color: #94A3B8 !important;
+    }
+    .st-key-ventana_principal_v3 [data-testid="stSegmentedControl"] label[data-checked="true"],
+    .st-key-ventana_principal_v3 [data-testid="stSegmentedControl"] label[aria-checked="true"],
+    .st-key-ventana_principal_v3 [data-testid="stSegmentedControl"] button[aria-checked="true"],
+    .st-key-ventana_principal_v3 [data-testid="stSegmentedControl"] button[aria-pressed="true"],
+    .st-key-ventana_principal_v3 [data-baseweb="button-group"] button[aria-checked="true"],
+    .st-key-ventana_principal_v3 [role="radiogroup"] label[aria-checked="true"],
+    .st-key-ventana_principal_v3 [role="radiogroup"] button[aria-checked="true"],
+    .st-key-ventana_principal_v3 [role="radiogroup"] [data-checked="true"] {
+        background: #1F4E79 !important;
+        color: #FFFFFF !important;
+        border-color: #1F4E79 !important;
+        box-shadow: 0 1px 3px rgba(31, 78, 121, 0.28) !important;
+        font-weight: 600 !important;
     }
     .main .block-container {
         padding-top: 0.85rem !important;
@@ -734,8 +794,8 @@ _VENTANAS_PRINCIPALES = (
     "Devengamiento de Impuestos",
     "Conciliación Bancaria",
     "Préstamos Financieros",
-    "📊 Recategorización Monotributo",
-    "🧰 Herramientas",
+    "Recategorización Monotributo",
+    "Herramientas",
 )
 # v3: botones con keys fijas (el radio + CSS absolute del toolbar desincronizaba UI↔módulo)
 _VENTANA_KEY = "ventana_principal_v3"
@@ -744,8 +804,8 @@ _VENTANA_NAV_LABELS = {
     "Devengamiento de Impuestos": "Devengamiento",
     "Conciliación Bancaria": "Conciliación",
     "Préstamos Financieros": "Préstamos",
-    "📊 Recategorización Monotributo": "📊 Monotributo",
-    "🧰 Herramientas": "🧰 Herramientas",
+    "Recategorización Monotributo": "Monotributo",
+    "Herramientas": "Herramientas",
 }
 
 
@@ -759,10 +819,11 @@ def _migrar_ventana_principal_session() -> None:
     if not actual and st.session_state.get(_VENTANA_KEY_LEGACY):
         actual = st.session_state.get(_VENTANA_KEY_LEGACY)
     actual = str(actual or "")
-    if actual == "Herramientas":
-        actual = "🧰 Herramientas"
-    if actual == "💰 Liquidación de Sueldos":
-        actual = "🧰 Herramientas"
+    # Alias legacy (emoji / nombres cortos) → canónicos sin iconos
+    if actual in ("🧰 Herramientas", "Herramientas", "💰 Liquidación de Sueldos"):
+        actual = "Herramientas"
+    elif actual in ("📊 Recategorización Monotributo", "Recategorización Monotributo"):
+        actual = "Recategorización Monotributo"
     if actual not in _VENTANAS_PRINCIPALES:
         actual = _VENTANAS_PRINCIPALES[0]
     st.session_state[_VENTANA_KEY] = actual
@@ -872,7 +933,7 @@ def _resumen_biblioteca_sociedad_activa() -> tuple[int, dict[str, list], int, di
 
 def _render_titulo_estudio() -> None:
     st.markdown(
-        '<p style="margin:0 0 0.85rem 0;font-size:1.55rem;font-weight:700;color:#1F4E79;'
+        '<p style="margin:0.1rem 0 1.05rem 0;font-size:1.55rem;font-weight:700;color:#1F4E79;'
         'letter-spacing:-0.02em;line-height:1.2;">Estudio Contable</p>',
         unsafe_allow_html=True,
     )
@@ -12528,7 +12589,7 @@ def main() -> None:
                 _seccion_conciliacion_bancaria_balance()
         elif ventana_activa == "Préstamos Financieros":
             _seccion_auditoria_prestamos()
-        elif ventana_activa == "📊 Recategorización Monotributo":
+        elif ventana_activa == "Recategorización Monotributo":
             _seccion_recategorizacion_monotributo()
         elif _es_ventana_herramientas(ventana_activa):
             _seccion_herramientas()
