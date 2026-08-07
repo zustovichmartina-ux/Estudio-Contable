@@ -182,6 +182,7 @@ def construir_informe_excel(
     resumenes: Sequence[tuple[str, pd.DataFrame]] | None = None,
     detalle: pd.DataFrame | None = None,
     hoja_detalle: str = "Movimientos",
+    hojas_adicionales: Sequence[tuple[str, pd.DataFrame]] | None = None,
     col_moneda: Sequence[str] | None = None,
     col_fecha: Sequence[str] | None = None,
     total_col: str | None = None,
@@ -190,6 +191,7 @@ def construir_informe_excel(
     Arma un workbook:
       - Hoja Resumen (título, KPIs, tablas de resumen)
       - Hoja de detalle (opcional)
+      - Hojas adicionales (opcional): [(nombre_hoja, df), ...]
     """
     wb = Workbook()
     ws0 = wb.active
@@ -251,6 +253,25 @@ def construir_informe_excel(
             total_col=total_col,
         )
 
+    for nombre_hoja, df_extra in hojas_adicionales or []:
+        if df_extra is None:
+            continue
+        nombre = str(nombre_hoja or "Detalle").strip() or "Detalle"
+        # Excel limita a 31 chars y prohíbe algunos caracteres
+        for ch in (":", "\\", "/", "?", "*", "[", "]"):
+            nombre = nombre.replace(ch, "-")
+        nombre = nombre[:31]
+        ws_extra = wb.create_sheet(nombre)
+        _escribir_tabla(
+            ws_extra,
+            df_extra if not df_extra.empty else pd.DataFrame(),
+            1,
+            col_moneda=col_moneda,
+            col_fecha=col_fecha,
+            zebra=True,
+            total_col=total_col if (not df_extra.empty and total_col in df_extra.columns) else None,
+        )
+
     return wb
 
 
@@ -269,6 +290,7 @@ def exportar_informe_excel(
     resumenes: Sequence[tuple[str, pd.DataFrame]] | None = None,
     detalle: pd.DataFrame | None = None,
     hoja_detalle: str = "Movimientos",
+    hojas_adicionales: Sequence[tuple[str, pd.DataFrame]] | None = None,
     col_moneda: Sequence[str] | None = None,
     col_fecha: Sequence[str] | None = None,
     total_col: str | None = None,
@@ -282,6 +304,7 @@ def exportar_informe_excel(
         resumenes=resumenes,
         detalle=detalle,
         hoja_detalle=hoja_detalle,
+        hojas_adicionales=hojas_adicionales,
         col_moneda=col_moneda,
         col_fecha=col_fecha,
         total_col=total_col,
@@ -299,6 +322,7 @@ def guardar_informe_excel(
     resumenes: Sequence[tuple[str, pd.DataFrame]] | None = None,
     detalle: pd.DataFrame | None = None,
     hoja_detalle: str = "Movimientos",
+    hojas_adicionales: Sequence[tuple[str, pd.DataFrame]] | None = None,
     col_moneda: Sequence[str] | None = None,
     col_fecha: Sequence[str] | None = None,
     total_col: str | None = None,
@@ -314,6 +338,7 @@ def guardar_informe_excel(
         resumenes=resumenes,
         detalle=detalle,
         hoja_detalle=hoja_detalle,
+        hojas_adicionales=hojas_adicionales,
         col_moneda=col_moneda,
         col_fecha=col_fecha,
         total_col=total_col,

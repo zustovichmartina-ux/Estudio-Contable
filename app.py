@@ -23,6 +23,7 @@ from generar_auditoria import (
 )
 
 import database as db
+from cruce_facturas_arca import procesar_cruce_facturas_arca
 from procesador import (
     BANCOS_ARGENTINOS,
     COMPRAS_TANGO_PATH,
@@ -12076,6 +12077,120 @@ def _herramienta_caja_usd() -> None:
         )
 
 
+def _herramienta_cruce_facturas_arca() -> None:
+    """Cruza facturas PDF/fotos vs Mis Comprobantes ARCA (portal IVA)."""
+    st.markdown("#### Cruce Facturas vs ARCA")
+    st.caption(
+        "Subí las facturas del período (PDF o fotos) y el Excel/CSV de "
+        "**Mis Comprobantes Recibidos** del portal IVA de ARCA. "
+        "El cruce arma Matcheadas / A revisar / Faltantes / Diferencias de importe."
+    )
+
+    c1, c2 = st.columns(2)
+    with c1:
+        facturas = st.file_uploader(
+            "Facturas (PDF / imágenes / ZIP)",
+            type=["pdf", "png", "jpg", "jpeg", "tif", "tiff", "bmp", "webp", "zip"],
+            accept_multiple_files=True,
+            key="uploader_cruce_facturas_arca",
+            help="Varios PDF o fotos; también un ZIP con comprobantes.",
+        )
+        usar_ocr = st.checkbox(
+            "OCR si el PDF viene escaneado o es foto",
+            value=True,
+            key="chk_cruce_arca_ocr",
+            help="Más lento. Desactivá si todos los PDF tienen texto nativo.",
+        )
+    with c2:
+        arca = st.file_uploader(
+            "Listado ARCA — Mis Comprobantes (xlsx / xls / csv)",
+            type=["xlsx", "xls", "csv"],
+            accept_multiple_files=False,
+            key="uploader_cruce_arca_listado",
+            help="Export del portal Mis Comprobantes Recibidos.",
+        )
+        cuit_manual = st.text_input(
+            "CUIT contribuyente (opcional)",
+            value=str(st.session_state.get("cuit_activo") or ""),
+            key="txt_cruce_arca_cuit",
+            help="Si está vacío se toma del nombre/archivo ARCA o del CUIT receptor más frecuente.",
+        )
+
+    puede = bool(facturas) and arca is not None
+    if st.button(
+        "Procesar cruce",
+        type="primary",
+        key="btn_cruce_facturas_arca",
+        disabled=not puede,
+    ):
+        with st.spinner("Leyendo ARCA, extrayendo facturas y cruzando…"):
+            try:
+                resultado, errores, cuit_det, xlsx = procesar_cruce_facturas_arca(
+                    facturas,
+                    arca,
+                    usar_ocr=usar_ocr,
+                    cuit_contribuyente=cuit_manual,
+                    nombre_arca=str(getattr(arca, "name", "arca.xlsx")),
+                )
+            except Exception as exc:
+                st.error(f"No se pudo procesar el cruce: {exc}")
+                return
+        st.session_state["cruce_arca_resultado"] = resultado
+        st.session_state["cruce_arca_errores"] = errores
+        st.session_state["cruce_arca_cuit"] = cuit_det
+        st.session_state["cruce_arca_xlsx"] = xlsx
+        st.success("Cruce listo.")
+        st.rerun()
+
+    errores = st.session_state.get("cruce_arca_errores") or []
+    if errores:
+        with st.expander(f"Archivos con advertencias ({len(errores)})", expanded=False):
+            st.dataframe(pd.DataFrame(errores), use_container_width=True, hide_index=True)
+
+    resultado = st.session_state.get("cruce_arca_resultado")
+    xlsx = st.session_state.get("cruce_arca_xlsx")
+    if not resultado or not xlsx:
+        return
+
+    m = resultado.get("matcheadas")
+    r = resultado.get("a_revisar")
+    f = resultado.get("faltantes")
+    d = resultado.get("diferencias")
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Matcheadas", 0 if m is None else len(m))
+    k2.metric("A revisar", 0 if r is None else len(r))
+    k3.metric("Faltantes", 0 if f is None else len(f))
+    k4.metric("Diferencias", 0 if d is None else len(d))
+
+    cuit_det = st.session_state.get("cruce_arca_cuit") or ""
+    if cuit_det:
+        st.caption(f"CUIT detectado: {cuit_det}")
+
+    tabs = st.tabs(["Matcheadas", "A revisar", "Faltantes", "Diferencias"])
+    with tabs[0]:
+        st.dataframe(m if m is not None else pd.DataFrame(), use_container_width=True, hide_index=True)
+    with tabs[1]:
+        st.dataframe(r if r is not None else pd.DataFrame(), use_container_width=True, hide_index=True)
+    with tabs[2]:
+        st.dataframe(f if f is not None else pd.DataFrame(), use_container_width=True, hide_index=True)
+    with tabs[3]:
+        st.dataframe(d if d is not None else pd.DataFrame(), use_container_width=True, hide_index=True)
+
+    cuit_limpio = re.sub(r"\D", "", str(cuit_det or st.session_state.get("cuit_activo") or ""))
+    st.download_button(
+        "Descargar Excel del cruce",
+        data=xlsx,
+        file_name=(
+            f"Cruce_Facturas_vs_ARCA_{cuit_limpio or 'cliente'}_"
+            f"{date.today().strftime('%Y%m%d')}.xlsx"
+        ),
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        type="primary",
+        key="dl_cruce_facturas_arca",
+        use_container_width=True,
+    )
+
+
 def _seccion_herramientas() -> None:
     """Solapa de utilidades de oficina (selectbox → herramienta activa)."""
     st.write(
@@ -12093,9 +12208,10 @@ def _seccion_herramientas() -> None:
             "Caja USD (dif. cotización)",
             "Convertidor de Liquidaciones de Tarjeta",
             "Match débitos - proveedores",
+            "Cruce Facturas vs ARCA",
         ],
         index=0,
-        key="herramientas_selectbox_v8",
+        key="herramientas_selectbox_v9",
     )
     st.divider()
 
@@ -12113,6 +12229,8 @@ def _seccion_herramientas() -> None:
         _herramienta_liquidaciones_tarjeta()
     elif herramienta_activa == "Match débitos - proveedores":
         _herramienta_match_debitos_proveedores()
+    elif herramienta_activa == "Cruce Facturas vs ARCA":
+        _herramienta_cruce_facturas_arca()
 
 def _seccion_recategorizacion_monotributo() -> None:
     """Análisis de períodos devengados en facturas electrónicas AFIP (PDF / ZIP)."""
@@ -12614,7 +12732,7 @@ def main() -> None:
             - **Conciliación Bancaria**: extractos PDF + lista Tango → planilla Excel clonada.
             - **Préstamos Financieros**: auditoría de cuotas desde PDFs bancarios.
             - **Recategorización Monotributo**: facturas AFIP PDF/ZIP → períodos devengados + Excel.
-            - **Herramientas**: **matcheo inteligente PDF + Tango**; completar cuadro bancario; PDF extractos → Excel; **analizador de inversiones (FIFO)**; **caja USD (dif. cotización)**; match débitos ↔ proveedores; liquidaciones de tarjeta.
+            - **Herramientas**: **matcheo inteligente PDF + Tango**; completar cuadro bancario; PDF extractos → Excel; **analizador de inversiones (FIFO)**; **caja USD (dif. cotización)**; match débitos ↔ proveedores; liquidaciones de tarjeta; **cruce facturas vs ARCA**.
             - **Usuarios de oficina**: cada persona entra con su usuario; sesiones independientes.
             - **Cloud**: link público + muro de login (PIN). Planes/balances subidos se cifran con `DATA_ENCRYPTION_KEY`.
             - **Multi-PDF anual**: hasta {MAX_PDFS_ANUALES} extractos consolidados cronológicamente.
