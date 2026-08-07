@@ -1,0 +1,22 @@
+﻿---
+description: Excels del Estudio (chat y web) usan formato informe estándar
+alwaysApply: true
+---
+
+# Formato Excel del Estudio
+
+Todo Excel **nuevo** que se genere por chat o por la web Streamlit debe usar el formato de `excel_formato_estudio.py`:
+
+- Hoja **Resumen**: título Calibri 16 `#1F4E79`, subtítulo/período grises, KPIs, tablas resumen
+- Hoja de detalle (p.ej. **Movimientos**): header azul `#1F4E79` texto blanco, filas cebra `#F2F2F2`, montos con formato moneda, fechas `DD/MM/YYYY`, autofilter + freeze panes, fila TOTAL si aplica
+- API: `exportar_informe_excel` (bytes / Streamlit) o `guardar_informe_excel` (disco)
+
+## Excepciones (no reformatear)
+
+- Plantillas oficiales: conciliación, asientos Tango, cuadros bancarios con layout fijo
+- Auditoría de préstamos en formato demo aprobado
+- Libros de trabajo del cliente ya existentes (Trujillo, balances) — solo editar celdas y guardar
+
+## Al pedir extracciones (haberes, ARBA, IVA, etc.)
+
+Reutilizar OCR/cache si existe. No re-OCR innecesariamente. Salida siempre con `guardar_informe_excel`.

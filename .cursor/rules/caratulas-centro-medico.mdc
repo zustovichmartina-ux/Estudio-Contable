@@ -1,0 +1,47 @@
+---
+description: Extracción de carátulas/liquidaciones Centro Médico MDP a Excel
+alwaysApply: true
+---
+
+# Carátulas Centro Médico (liquidaciones de honorarios)
+
+Cuando el usuario pida extraer / consolidar **carátulas** o **liquidaciones** del Centro Médico de Mar del Plata (`Caratula_*.pdf`):
+
+## Módulo
+
+Usar [`caratulas_centro_medico.py`](caratulas_centro_medico.py):
+
+```python
+from caratulas_centro_medico import consolidar_carpeta, parse_caratula
+consolidar_carpeta(r"C:\Users\recep\Desktop\Centro Medico")
+```
+
+Salida típica: `C:\Users\recep\Desktop\Centro Medico\Liquidaciones_Centro_Medico_consolidado.xlsx`
+
+## Formato Excel (pedido del estudio)
+
+- **FECHA** bien visible **arriba** de cada cuadro (no solo en una columna al costado).
+- Cuadro **Concepto | Importe** (header azul `#1F4E79`, cebra, moneda, TOTAL).
+- Hojas: **Resumen** (1 fila por liquidación) + **Detalle** (bloques con fecha) + **Lista** (plana filtrable).
+
+## Conceptos a extraer (en este orden)
+
+1. Valor Honorarios Exentos / Neto Gravado Honorarios  
+2. Valor Gastos Exentos / Neto Gravado Gastos  
+3. Valor IVA  
+4. **Derecho administrativo** (5%, 4,5% o bonificado 5,75%)  
+5. Aporte fondo compensador  
+6. **Retención IIBB** (`RET. IIBB DN 70/07 (…)`) — no confundir con la línea “Imponible Alicuota”  
+7. Jubilación  
+8. Impuesto a las ganancias  
+9. Recuperaciones bancarias  
+
+Si en el PDF aparece **otro concepto que reste** (retenciones, descuentos), agregarlo al cuadro en `CONCEPTOS` del módulo y regenerar.
+
+## Montos
+
+En estos PDF los números vienen estilo US (`1,234.56`). Usar `parse_us_money` del módulo (no el parser de extractos bancarios AR).
+
+## Carpeta habitual
+
+`C:\Users\recep\Desktop\Centro Medico\`

@@ -1,0 +1,18 @@
+[theme]
+base = "light"
+primaryColor = "#8EB8E5"
+backgroundColor = "#F6F5F8"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#3A3A44"
+font = "sans serif"
+
+[server]
+headless = true
+
+[browser]
+gatherUsageStats = false
+
+[client]
+# Oculta Deploy/Desplegar del chrome nativo
+toolbarMode = "minimal"
+showSidebarNavigation = false

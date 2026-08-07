@@ -1,0 +1,81 @@
+﻿# Secrets / credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+secrets.json
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Databases / local state
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs / temp / OS
+logs/
+*.log
+_tmp*
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.tmp
+*.bak
+~$*
+
+# Debug / OCR caches / dumps
+debug*.png
+debug*.log
+*_ocr.json
+image_*.png
+
+# Client / work data (do not upload real client files)
+clientes/
+extractos*/
+exportaciones/
+data/
+sueldos/
+RELE IVA/
+planes de cuentas/
+planilla de conciliacion/
+informacion sobre tango/
+
+# Spreadsheets / PDFs / archives (work dumps at repo root)
+*.xlsx
+*.xls
+*.xlsm
+*.pdf
+*.zip
+*.rar
+*.7z
+
+# Keep project templates under plantillas/
+!plantillas/
+!plantillas/**
+
+# Optional local Streamlit overrides (keep config.toml)
+.streamlit/secrets.toml
+
+# IDE / editor noise (keep project rules)
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
+
+# Local URL shortcuts / machine-specific launchers (optional to keep scripts)
+*.url
