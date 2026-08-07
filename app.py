@@ -18,8 +18,12 @@ import streamlit as st
 
 from generar_auditoria import (
     procesar_todos as _ga_procesar_todos,
-    generar_excel as _ga_generar_excel,
     CARPETA as _GA_CARPETA_PRESTAMOS,
+)
+from prestamos_listado_excel import (
+    cargar_excel_listado as _pl_cargar_excel,
+    es_excel_listado_prestamos as _pl_es_excel_listado,
+    generar_excel_listado_claro as _pl_generar_excel_claro,
 )
 
 import database as db
@@ -12182,9 +12186,11 @@ def _seccion_recategorizacion_monotributo() -> None:
 
 
 def _seccion_auditoria_prestamos() -> None:
-    # Usa generar_auditoria.py: parsers por banco + OCR 200DPI para Provincia + reintentos automáticos
+    # Parsers por banco + OCR Provincia (1 worker en Cloud) + Excel estilo listado histórico
     st.caption(
-        "Auditoría de cuotas desde PDFs bancarios (proyecciones de préstamos)."
+        "Listado de cuotas desde PDFs bancarios (proyecciones / listado histórico). "
+        "El Excel de salida replica el formato claro: **Resumen + una hoja por préstamo** "
+        "(como Prestamos_Banco_Provincia_GlobalRecife)."
     )
 
     import os as _os
@@ -12196,13 +12202,13 @@ def _seccion_auditoria_prestamos() -> None:
     if _os.path.exists(_completo_path):
         with open(_completo_path, "rb") as _f:
             st.download_button(
-                "⬇️ Descargar Auditoría Completa (datos reales)",
+                "⬇️ Descargar última auditoría generada",
                 _f.read(),
                 file_name="Auditoria_Prestamos_Completa.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="dl_auditoria_completa",
                 type="primary",
-                help="Excel con todos los préstamos procesados desde los PDFs reales",
+                help="Excel con Resumen + una hoja por préstamo (último generado)",
             )
 
     # Botón para el Excel demo (datos ficticios de ejemplo)
@@ -12235,17 +12241,17 @@ def _seccion_auditoria_prestamos() -> None:
     col_info1.metric("CUIT", cliente["cuit"])
     col_info2.metric("Tipo", cliente["tipo_persona"])
 
-    st.markdown("#### Carga de PDFs de préstamos")
+    st.markdown("#### Carga de archivos")
     st.caption(
-        "Suba las proyecciones / tablas de amortización de cada préstamo "
-        "(Santander, Provincia, Galicia, Francés, Nación, Mercado Pago). "
-        f"Si no sube archivos, se procesará la carpeta `extractos bancarios/Prestamos Financieros`."
+        "Subí **PDFs** de proyección / listado histórico (Provincia, Santander, Galicia, "
+        "Francés, Nación, Mercado Pago) y/o un **Excel** ya armado en formato listado. "
+        f"Si no subís nada, se usa la carpeta `extractos bancarios/Prestamos Financieros`."
     )
-    pdfs_prestamo = st.file_uploader(
-        "PDFs de Proyección de Préstamos",
-        type=["pdf"],
+    archivos_prestamo = st.file_uploader(
+        "PDFs o Excel de préstamos",
+        type=["pdf", "xlsx", "xlsm"],
         accept_multiple_files=True,
-        help="Contratos y tablas de amortización con la grilla de cuotas por banco.",
+        help="Listados históricos Provincia, tablas de amortización u Excel consolidado tipo GlobalRecife.",
         key="upload_pdfs_prestamo_ga",
     )
 
@@ -12257,22 +12263,44 @@ def _seccion_auditoria_prestamos() -> None:
             "No hagas redeploy ni pushes a GitHub mientras procesa; si la app se reinicia a mitad, verás 'Oh no'."
         )
 
-    if st.button("Generar Excel de Auditoría", type="primary", key="btn_generar_auditoria_ga"):
+    if st.button("Generar Excel de Préstamos", type="primary", key="btn_generar_auditoria_ga"):
         try:
-            with st.spinner("Procesando PDFs con parsers especializados por banco..."):
-                if pdfs_prestamo:
+            bancos_data: dict = {}
+            with st.spinner("Procesando archivos (PDF con parsers por banco / Excel listado)..."):
+                if archivos_prestamo:
                     tmp_dir = Path(tempfile.mkdtemp(prefix="ec_prestamos_"))
                     try:
-                        for archivo in pdfs_prestamo:
-                            dest = tmp_dir / archivo.name
+                        pdf_dir = tmp_dir / "pdfs"
+                        pdf_dir.mkdir(parents=True, exist_ok=True)
+                        excel_paths = []
+                        for archivo in archivos_prestamo:
+                            name = archivo.name
+                            dest = tmp_dir / name
                             dest.write_bytes(archivo.getbuffer())
-                        bancos_data = _ga_procesar_todos(tmp_dir)
+                            low = name.lower()
+                            if low.endswith(".pdf"):
+                                (pdf_dir / name).write_bytes(dest.read_bytes())
+                            elif low.endswith((".xlsx", ".xlsm")):
+                                excel_paths.append(dest)
+
+                        if any(pdf_dir.glob("*.pdf")):
+                            bancos_data = _ga_procesar_todos(pdf_dir)
+
+                        for xp in excel_paths:
+                            if _pl_es_excel_listado(xp):
+                                loaded = _pl_cargar_excel(xp)
+                                for banco, prestamos in loaded.items():
+                                    bancos_data.setdefault(banco, []).extend(prestamos)
+                            else:
+                                st.warning(
+                                    f"`{xp.name}` no parece un Excel de listado de préstamos; se omite."
+                                )
                     finally:
                         shutil.rmtree(str(tmp_dir), ignore_errors=True)
                 else:
                     if not _GA_CARPETA_PRESTAMOS.exists():
                         st.error(
-                            f"No subió PDFs y la carpeta predeterminada no existe: "
+                            f"No subió archivos y la carpeta predeterminada no existe: "
                             f"`{_GA_CARPETA_PRESTAMOS}`"
                         )
                         return
@@ -12280,8 +12308,8 @@ def _seccion_auditoria_prestamos() -> None:
 
             if not bancos_data:
                 st.warning(
-                    "No se encontraron cuotas en los PDFs. "
-                    "Verifique que los archivos sean tablas de amortización de préstamos."
+                    "No se encontraron cuotas. "
+                    "Subí listados/proyecciones PDF o un Excel tipo GlobalRecife."
                 )
                 return
 
@@ -12291,17 +12319,28 @@ def _seccion_auditoria_prestamos() -> None:
                 if s.get("banco")
             }
             ruta_salida = BASE_DIR / "Auditoria_Prestamos_Completa.xlsx"
+            nombre_cliente = str(cliente.get("nombre") or "").strip()
+            titulo = (
+                f"{nombre_cliente} — Préstamos bancarios"
+                if nombre_cliente
+                else "Préstamos bancarios — Listado consolidado"
+            )
 
-            with st.spinner("Generando Excel con formato de auditoría..."):
-                _ga_generar_excel(bancos_data, saldos_dict, ruta_salida)
-
+            with st.spinner("Generando Excel (Resumen + una hoja por préstamo)..."):
+                _pl_generar_excel_claro(
+                    bancos_data,
+                    ruta_salida,
+                    titulo=titulo,
+                    saldos_iniciales=saldos_dict,
+                )
             total_cuotas = sum(
                 sum(len(p["cuotas"]) for p in prestamos)
                 for prestamos in bancos_data.values()
             )
+            total_prestamos = sum(len(p) for p in bancos_data.values())
             bancos_ok = list(bancos_data.keys())
             st.success(
-                f"✅ Excel generado: {total_cuotas} cuotas | "
+                f"✅ Excel generado: {total_prestamos} préstamos | {total_cuotas} cuotas | "
                 f"{len(bancos_ok)} banco(s): {', '.join(bancos_ok)}"
             )
 
@@ -12318,9 +12357,9 @@ def _seccion_auditoria_prestamos() -> None:
 
             with open(str(ruta_salida), "rb") as _f:
                 st.download_button(
-                    label="⬇️ Descargar Auditoria_Prestamos_Completa.xlsx",
+                    label="⬇️ Descargar Excel de Préstamos",
                     data=_f.read(),
-                    file_name="Auditoria_Prestamos_Completa.xlsx",
+                    file_name=f"Prestamos_{nombre_cliente or 'Auditoria'}.xlsx".replace(" ", "_"),
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     type="primary",
                     key="dl_auditoria_generada",

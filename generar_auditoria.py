@@ -512,6 +512,91 @@ def _parsear_santander_ocr(textos):
     return cuotas
 
 
+def _normalizar_texto_provincia(textos):
+    """Normaliza espacios OCR típicos de listados Provincia."""
+    textos_n = []
+    for texto in textos:
+        t = re.sub(r"(\d)\s+([,.])\s*(\d)", r"\1\2\3", texto)
+        t = re.sub(r"([,.])\s+(\d)", r"\1\2", t)
+        t = re.sub(r"(\d{4}-\d{2})\s+-(\d{2})", r"\1-\2", t)
+        t = re.sub(r"\b(20\d{2})\s+(0[1-9]|1[0-2])-(\d{2})\b", r"\1-\2-\3", t)
+        textos_n.append(t)
+    return textos_n
+
+
+def _extraer_meta_provincia(textos) -> dict:
+    """Cabecera + Deuda al día del Listado Histórico Provincia (si el OCR lo trae)."""
+    textos_n = _normalizar_texto_provincia(textos)
+    blob = "\n".join(textos_n)
+    meta: dict = {"deuda_al_dia": {}}
+
+    m = re.search(
+        r"PRESTAMO\s*Nro\s*:?\s*([0-9\-\s]{8,40})",
+        blob,
+        re.IGNORECASE,
+    )
+    if m:
+        meta["nro_prestamo"] = re.sub(r"\s+", " ", m.group(1)).strip()
+
+    m = re.search(r"Titular\s*:?\s*([A-Z0-9ÁÉÍÓÚÑ .,&\-]{3,80})", blob, re.IGNORECASE)
+    if m:
+        meta["titular"] = m.group(1).strip()
+
+    m = re.search(r"CUIT\s*:?\s*(\d{2}\s*\d{8}\s*\d|\d{11})", blob, re.IGNORECASE)
+    if m:
+        meta["cuit"] = re.sub(r"\s+", "", m.group(1))
+
+    m = re.search(r"Cap\.?\s*Orig\.?\s*:?\s*([\d.,\s]+)", blob, re.IGNORECASE)
+    if m:
+        cap = _limpiar_monto(m.group(1))
+        if cap > 0:
+            meta["capital_original"] = cap
+
+    m = re.search(r"Inic\.?\s*Contrato\s*:?\s*([0-9/\-]+)", blob, re.IGNORECASE)
+    if m:
+        meta["fecha_inicio"] = _parsear_fecha(m.group(1).replace("-", "/"))
+    m = re.search(r"Vto\.?\s*Contrato\s*:?\s*([0-9/\-]+)", blob, re.IGNORECASE)
+    if m:
+        meta["fecha_vto"] = _parsear_fecha(m.group(1).replace("-", "/"))
+
+    m = re.search(r"Convenio\s*:?\s*([^\n]{5,80})", blob, re.IGNORECASE)
+    if m:
+        meta["convenio"] = m.group(1).strip().rstrip("|")
+
+    m = re.search(r"Sucursal\s*:?\s*(\d{3,5})", blob, re.IGNORECASE)
+    if m:
+        meta["sucursal"] = m.group(1)
+
+    # Deuda al día
+    deuda_map = [
+        (r"Capital\s+a\s+Vencer\s*:?\s*([\d.,\s]+)", "capital_a_vencer"),
+        (r"Ajuste\s+Devengado\s+Vigente\s*:?\s*([\d.,\s]+)", "ajuste_devengado_vigente"),
+        (r"Inter[eé]s\s+Devengado\s+Vigente\s*:?\s*([\d.,\s]+)", "interes_devengado_vigente"),
+        (r"Capital\s+Vencido\s+Impago\s*:?\s*([\d.,\s]+)", "capital_vencido_impago"),
+        (r"Ajuste\s+Vencido\s+Impago\s*:?\s*([\d.,\s]+)", "ajuste_vencido_impago"),
+        (r"Inter[eé]s\s+Vencido\s+Impago\s*:?\s*([\d.,\s]+)", "interes_vencido_impago"),
+        (r"Comisi[oó]n\s+Vencida\s+Impaga\s*:?\s*([\d.,\s]+)", "comision_vencida_impaga"),
+        (r"Seguro\s+de\s+Vida\s+Vencido\s+Impago\s*:?\s*([\d.,\s]+)", "seguro_vida_vencido"),
+        (r"Seguro\s+de\s+Incendio\s+Vencido\s+Impago\s*:?\s*([\d.,\s]+)", "seguro_incendio_vencido"),
+        (r"Ajuste\s+Devengado\s+por\s+Mora\s*:?\s*([\d.,\s]+)", "ajuste_mora"),
+        (r"Inter[eé]s\s+Devengado\s+por\s+Mora\s*:?\s*([\d.,\s]+)", "interes_mora"),
+    ]
+    for pat, key in deuda_map:
+        m = re.search(pat, blob, re.IGNORECASE)
+        if m:
+            meta["deuda_al_dia"][key] = _limpiar_monto(m.group(1))
+
+    m = re.search(r"DEUDA\s+AL\s+D[IÍ]A[^\n]{0,40}?(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})", blob, re.IGNORECASE)
+    if m:
+        meta["deuda_al_dia"]["fecha"] = _parsear_fecha(m.group(1).replace("-", "/"))
+
+    if meta["deuda_al_dia"]:
+        keys_sum = [k for k in meta["deuda_al_dia"] if k != "fecha"]
+        meta["total_deuda"] = round(sum(float(meta["deuda_al_dia"].get(k) or 0) for k in keys_sum), 2)
+
+    return meta
+
+
 def _parsear_provincia_ocr(textos):
     """Provincia: Listado Historico del Prestamo (rotado 90 grados).
     Formato OCR: cada cuota tiene DOS filas (capital + interes), separadas pero con la misma fecha.
@@ -528,15 +613,7 @@ def _parsear_provincia_ocr(textos):
             print(f"  {i:02d}: {l}")
 
     # Paso 1: normalizar espacios dentro de numeros y fechas en todo el texto
-    textos_n = []
-    for texto in textos:
-        t = re.sub(r"(\d)\s+([,.])\s*(\d)", r"\1\2\3", texto)
-        t = re.sub(r"([,.])\s+(\d)", r"\1\2", t)
-        # Normalizar fechas ISO con espacio extra: "2025-03 -28" → "2025-03-28"
-        t = re.sub(r"(\d{4}-\d{2})\s+-(\d{2})", r"\1-\2", t)
-        # Normalizar "2025 03-28" (espacio en primer sep) → "2025-03-28"
-        t = re.sub(r"\b(20\d{2})\s+(0[1-9]|1[0-2])-(\d{2})\b", r"\1-\2-\3", t)
-        textos_n.append(t)
+    textos_n = _normalizar_texto_provincia(textos)
 
     pat_monto = re.compile(r"(?<!\d)[\d]+(?:[.,]\d{3})*[.,]\d{2}(?!\d)")
 
@@ -706,13 +783,10 @@ def _ajustar_estrategia(motivo_error, intento):
     return tabla.get((motivo_error, intento), {})
 
 
-def _extraer_cuotas(ruta_pdf, banco, forzar_ocr=False, rotacion_override=None):
-    """Extrae cuotas de un PDF aplicando la estrategia indicada.
+def _extraer_cuotas_y_meta(ruta_pdf, banco, forzar_ocr=False, rotacion_override=None):
+    """Extrae cuotas (+ meta Provincia si aplica). Retorna (cuotas, meta_dict)."""
+    meta: dict = {}
 
-    Si forzar_ocr=False se intenta primero extracción nativa; si el PDF no tiene
-    texto nativo suficiente se cae automáticamente a OCR.
-    rotacion_override sobreescribe la rotación por defecto por banco.
-    """
     if not forzar_ocr:
         textos_nativos = _texto_nativo(ruta_pdf)
         # Umbral bajo: mejor parsear texto embebido que disparar EasyOCR en Cloud.
@@ -720,18 +794,20 @@ def _extraer_cuotas(ruta_pdf, banco, forzar_ocr=False, rotacion_override=None):
         tiene_texto = any(len(t.strip()) > umbral for t in textos_nativos)
         if tiene_texto:
             print(f"    [TXT] texto embebido OK (sin EasyOCR) | {Path(ruta_pdf).name}", flush=True)
+            if banco == "Banco Provincia":
+                meta = _extraer_meta_provincia(textos_nativos)
+                return _parsear_provincia_ocr(textos_nativos), meta
             if banco == "Banco Galicia":
-                return _parsear_galicia(textos_nativos)
-            elif banco == "Banco Francés":
-                return _parsear_frances_cuotas(textos_nativos)
-            elif banco == "Mercado Pago":
-                return _parsear_mercadopago(textos_nativos)
-            elif banco == "Banco Santander":
-                return _parsear_santander_ocr(textos_nativos)
-            elif banco == "Banco Nación":
-                return _parsear_nacion_ocr(textos_nativos)
-            else:
-                return _parsear_mercadopago(textos_nativos)
+                return _parsear_galicia(textos_nativos), meta
+            if banco == "Banco Francés":
+                return _parsear_frances_cuotas(textos_nativos), meta
+            if banco == "Mercado Pago":
+                return _parsear_mercadopago(textos_nativos), meta
+            if banco == "Banco Santander":
+                return _parsear_santander_ocr(textos_nativos), meta
+            if banco == "Banco Nación":
+                return _parsear_nacion_ocr(textos_nativos), meta
+            return _parsear_mercadopago(textos_nativos), meta
         # Sin texto nativo suficiente → caer a OCR
 
     rotacion = rotacion_override if rotacion_override is not None else (
@@ -744,24 +820,33 @@ def _extraer_cuotas(ruta_pdf, banco, forzar_ocr=False, rotacion_override=None):
     textos_ocr = _ocr_fitz(ruta_pdf, rotar_grados=rotacion, dpi=dpi_ocr)
 
     if banco == "Banco Provincia":
-        return _parsear_provincia_ocr(textos_ocr)
-    elif banco == "Banco Santander":
-        return _parsear_santander_ocr(textos_ocr)
-    elif banco == "Banco Nación":
-        return _parsear_nacion_ocr(textos_ocr)
-    elif banco == "Banco Galicia":
-        return _parsear_galicia(textos_ocr)
-    elif banco == "Banco Francés":
-        return _parsear_frances_cuotas(textos_ocr)
-    else:
-        return _parsear_mercadopago(textos_ocr)
+        meta = _extraer_meta_provincia(textos_ocr)
+        return _parsear_provincia_ocr(textos_ocr), meta
+    if banco == "Banco Santander":
+        return _parsear_santander_ocr(textos_ocr), meta
+    if banco == "Banco Nación":
+        return _parsear_nacion_ocr(textos_ocr), meta
+    if banco == "Banco Galicia":
+        return _parsear_galicia(textos_ocr), meta
+    if banco == "Banco Francés":
+        return _parsear_frances_cuotas(textos_ocr), meta
+    return _parsear_mercadopago(textos_ocr), meta
+
+
+def _extraer_cuotas(ruta_pdf, banco, forzar_ocr=False, rotacion_override=None):
+    """Extrae cuotas de un PDF aplicando la estrategia indicada (compat)."""
+    cuotas, _meta = _extraer_cuotas_y_meta(
+        ruta_pdf, banco, forzar_ocr=forzar_ocr, rotacion_override=rotacion_override
+    )
+    return cuotas
 
 
 def _procesar_un_pdf(ruta_pdf):
     """Procesa un único PDF con loop de auto-validación y reintentos.
 
     Retorna: {"banco": str, "pid": str, "cuotas": list,
-              "capital_original_extra": float, "error": str}
+              "capital_original_extra": float, "meta": dict,
+              "archivo": str, "error": str}
     Compatible con ThreadPoolExecutor (función de módulo, sin closures).
     """
     ruta_pdf = Path(ruta_pdf)
@@ -771,6 +856,7 @@ def _procesar_un_pdf(ruta_pdf):
     INTENTOS = 1 if _es_entorno_cloud() else 3
     motivo_error = ""
     capital_original_extra = 0.0
+    meta_acum: dict = {}
 
     # Pre-check Banco Francés: puede ser comprobante de alta (texto nativo con capital, sin cuotas)
     if banco == "Banco Francés":
@@ -794,18 +880,30 @@ def _procesar_un_pdf(ruta_pdf):
         forzar_ocr = params.get("forzar_ocr", False)
         rotacion = params.get("rotacion", None)
 
-        cuotas = _extraer_cuotas(
+        cuotas, meta = _extraer_cuotas_y_meta(
             ruta_pdf, banco,
             forzar_ocr=forzar_ocr,
             rotacion_override=rotacion,
         )
+        if meta:
+            meta_acum.update({k: v for k, v in meta.items() if v})
+        if meta_acum.get("nro_prestamo"):
+            # Preferir N° completo del listado (ej. 0014-6106 330-50669866)
+            pid_txt = str(meta_acum["nro_prestamo"])
+            digitos = re.sub(r"\D", "", pid_txt)
+            if len(digitos) >= 6:
+                pid = digitos[-8:] if len(digitos) >= 8 else digitos
+        if meta_acum.get("capital_original") and capital_original_extra <= 0:
+            capital_original_extra = float(meta_acum["capital_original"])
+
         es_valido, motivo_error = _validar_cuotas(cuotas, banco, pid)
 
         if es_valido:
             print(f"  [OK] {ruta_pdf.name} | Banco: {banco} | Cuotas: {len(cuotas)}")
             return {
                 "banco": banco, "pid": pid, "cuotas": cuotas,
-                "capital_original_extra": capital_original_extra, "error": "",
+                "capital_original_extra": capital_original_extra,
+                "meta": meta_acum, "archivo": ruta_pdf.name, "error": "",
             }
 
         # Francés alta: sin cuotas pero capital conocido → no tiene sentido reintentar OCR
@@ -813,7 +911,8 @@ def _procesar_un_pdf(ruta_pdf):
             print(f"  [Francés alta] {ruta_pdf.name} | capital={capital_original_extra:,.0f}")
             return {
                 "banco": banco, "pid": pid, "cuotas": [],
-                "capital_original_extra": capital_original_extra, "error": "",
+                "capital_original_extra": capital_original_extra,
+                "meta": meta_acum, "archivo": ruta_pdf.name, "error": "",
             }
 
         if intento < INTENTOS - 1:
@@ -825,7 +924,8 @@ def _procesar_un_pdf(ruta_pdf):
     print(f"  [FALLO] {ruta_pdf.name} | Sin datos tras {INTENTOS} intentos")
     return {
         "banco": banco, "pid": pid, "cuotas": [],
-        "capital_original_extra": capital_original_extra, "error": motivo_error,
+        "capital_original_extra": capital_original_extra,
+        "meta": meta_acum, "archivo": ruta_pdf.name, "error": motivo_error,
     }
 
 
@@ -875,12 +975,37 @@ def procesar_todos(carpeta: Path):
         pid = res["pid"]
         cuotas = res["cuotas"]
         capital_original_extra = res["capital_original_extra"]
+        meta = res.get("meta") or {}
+        archivo = res.get("archivo") or ""
 
         if pid not in prestamos_por_banco[banco]:
             prestamos_por_banco[banco][pid] = {
-                "prestamo_n": pid, "capital_original": 0.0,
-                "sistema": "Francés", "cuotas": []
+                "prestamo_n": pid,
+                "nro_prestamo": meta.get("nro_prestamo") or pid,
+                "capital_original": 0.0,
+                "sistema": "Francés",
+                "cuotas": [],
+                "archivo": archivo,
+                "fecha_inicio": meta.get("fecha_inicio"),
+                "fecha_vto": meta.get("fecha_vto"),
+                "convenio": meta.get("convenio") or "",
+                "titular": meta.get("titular") or "",
+                "cuit": meta.get("cuit") or "",
+                "sucursal": meta.get("sucursal") or "",
+                "deuda_al_dia": meta.get("deuda_al_dia") or {},
+                "total_deuda": meta.get("total_deuda"),
             }
+        else:
+            # Completar meta si llegó en un reintento / segundo archivo
+            dest = prestamos_por_banco[banco][pid]
+            if archivo and not dest.get("archivo"):
+                dest["archivo"] = archivo
+            for k in ("nro_prestamo", "fecha_inicio", "fecha_vto", "convenio",
+                      "titular", "cuit", "sucursal", "total_deuda"):
+                if meta.get(k) and not dest.get(k):
+                    dest[k] = meta[k]
+            if meta.get("deuda_al_dia") and not dest.get("deuda_al_dia"):
+                dest["deuda_al_dia"] = meta["deuda_al_dia"]
 
         # Comprobante de alta francés: sólo actualiza el capital
         if capital_original_extra > 0:
@@ -1057,6 +1182,25 @@ def _escribir_cierre(ws, fila, prestamos, saldo_inicial):
 
 
 def generar_excel(bancos_data, saldos_iniciales, ruta_salida):
+    """Genera Excel claro (Resumen + una hoja por préstamo), estilo GlobalRecife."""
+    from prestamos_listado_excel import generar_excel_listado_claro
+
+    ruta = Path(ruta_salida)
+    titulo = "Préstamos bancarios — Listado consolidado"
+    bancos = list((bancos_data or {}).keys())
+    if len(bancos) == 1:
+        titulo = f"{bancos[0]} — Préstamos (listado consolidado)"
+    generar_excel_listado_claro(
+        bancos_data,
+        ruta,
+        titulo=titulo,
+        saldos_iniciales=saldos_iniciales or {},
+    )
+    print(f"\nExcel guardado: {ruta} ({ruta.stat().st_size // 1024} KB)")
+
+
+def generar_excel_legacy_por_banco(bancos_data, saldos_iniciales, ruta_salida):
+    """Formato demo clásico: una hoja por banco con bloques apilados (compat)."""
     wb = Workbook()
 
     # Hoja resumen ejecutivo
@@ -1085,7 +1229,7 @@ def generar_excel(bancos_data, saldos_iniciales, ruta_salida):
         _escribir_cierre(ws, fila, prestamos, saldo)
 
     wb.save(str(ruta_salida))
-    print(f"\nExcel guardado: {ruta_salida} ({ruta_salida.stat().st_size // 1024} KB)")
+    print(f"\nExcel legacy guardado: {ruta_salida}")
 
 
 # ── main ─────────────────────────────────────────────────────────────────────
