@@ -1,0 +1,232 @@
+codigo,descripcion,imputable
+11100,Banco Macro Cuenta Corriente  3-684-0942508301-8,True
+11101,Caja en $,True
+11102,Caja u$s,True
+11104,Banco ICBC Cuenta Corriente,True
+11105,Banco Galicia Cuenta Corriente,True
+11106,Fondo Fijo,True
+11107,Valores a Depositar,True
+11108,Banco 1 Cheque Diferido,True
+11109,Banco 2 Cheque Diferido,True
+11110,Recaudaciones Sucursal,True
+11112,Banco Macro Cuenta Corriente  4-684-0960792747-7,True
+11201,Moneda Extranjera,True
+11202,Plazo Fijo,True
+11203,Títulos y Acciones,True
+11204,Acciones con Cotización,True
+11205,Caja de Ahorro,True
+11206,Fondo de Inversión,True
+11301,Deudores por Ventas,True
+11302,Deudores por Tarjeta,True
+11303,Documentos a Cobrar $,True
+11304,Documentos a Cobrar u$s,True
+11305,Deudores Morosos,True
+11306,Deudores en Gestión Judicial,True
+11307,Cheques de Terceros Rechazados,True
+11308,Deudores del Exterior,True
+11401,Anticipos Impuesto a las Ganancias,True
+11402,IVA Crédito Fiscal,True
+11403,IVA Percepción 3337,True
+11404,Percepción Ingresos Brutos,True
+11405,Adelanto de Sueldos,True
+11406,Anticipos a Proveedores,True
+11407,Cta Particular Camporessi Jorge,True
+11408,Pagos a Cuenta Afip - Saldo Libre Disponibilidad,True
+11409,Retenciones de Iva,True
+11410,IVA Crédito Fiscal 10.5,True
+11412,Retencion Imp a los IIBB,True
+11413,Retencion Imp a los Ganancias,True
+11414,Cta Particular Varela Gonzalo,True
+11415,Saldo Tecnico IVA a Favor,True
+11416,Saldo Libre Disponibilidad IVA,True
+11417,Reten. Bancarias Imp. sobre los IIBB,True
+11418,Saldo a favor Imp. sobre los IIBB,True
+11419,Retenciones Contrib.SUSS,True
+11420,Impuesto al Deb / Cred a cta Ganancias,True
+11421,Cta Particular Minnicelli G,True
+11422,IVA Crédito Fiscal Bancos,True
+11423,IVA Crédito Fiscal 27%,True
+11424,Percepción Ingresos Brutos CABA,True
+11425,Cta Particular Selva M,True
+11426,Cta Particular Sanchez Jorge,True
+11427,Percepción Ingresos Brutos Rio Negro,True
+11428,Percepción Ganancias,True
+11430,Percepción Ingresos Brutos Tucuman,True
+11501,Productos Terminados,True
+11502,Productos en Proceso,True
+11503,Materias Primas,True
+11505,Mercaderías,True
+11506,Mercadería Cereales,True
+11601,Alquileres Pagados por Adelantado,True
+11602,Seguros Pagados por Adelantado,True
+12201,Seguros a cobrar,True
+12301,Socios Art. 33 Ley 19550,True
+12401,Terrenos,True
+12402,Inmuebles,True
+12403,Depreciación Acumulada Inmuebles,True
+12404,Rodados,True
+12405,Depreciación Acumulada Rodados,True
+12406,Muebles y Utiles,True
+12407,Depreciación Acumulada Muebles y Utiles,True
+12408,Bienes de uso,True
+12409,Maquinas de Oficina,True
+12410,Depreciación Acumulada Maquinarias,True
+12411,Instalaciones,True
+12412,Depreciación Acumulada Instalaciones,True
+12413,Equipos de computación y Telefonia,True
+12414,Depreciación Acumulada Equipos de computación,True
+12415,Otros equipos,True
+12416,Depreciaicón Acumulada Otros equipos,True
+12417,Depreciación Acumulada,True
+12418,Muebles y Utiles - Revalúo,True
+12419,Depreciación Acumulada Muebles y Utiles - Revalúo,True
+12420,Instalaciones - Revalúo,True
+12421,Depreciación Acumulada Instalaciones - Revalúo,True
+12422,Equipos de Computación - Revalúo,True
+12423,Depreciación Acumulada Equipos de computación - Revalúo,True
+12501,Llave de Negocio,True
+12502,Gastos Pre-operativos,True
+12503,Gastos de Organización,True
+12504,Marcas,True
+12505,Concesiones,True
+12506,Gastos de Investigación y Desarrollo,True
+12507,Patentes,True
+13001,Bienes en curso,True
+13201,Compra de Bienes de uso,True
+21101,Proveedores,True
+21102,Documentos a Pagar en $,True
+21103,Documentos a Pagar u$s,True
+21104,Cheques Propios Rechazados,True
+21105,Proveedores del Exterior,True
+21106,Facturas a Recibir,True
+21201,Acreedores Bancarios,True
+21202,Tarjeta Visa a Pagar,True
+21301,OSECAC a pagar,True
+21302,Contribuciones Seg. Social a pagar,True
+21303,Aportes Seg. Social a pagar,True
+21304,Aportes Obra Social a Pagar,True
+21305,Contribuciones Obra Social a Pagar,True
+21306,ART a pagar,True
+21307,FAECYS a pagar,True
+21308,INACAP a pagar,True
+21309,F.NAC.DE. a Pagar,True
+21310,O.S. a Pagar,True
+21311,INSSJP a Pagar,True
+21312,Sueldos y Jornales a Pagar,True
+21313,S.A.C. a Pagar,True
+21314,ART a Pagar,True
+21315,Dto. 1273/02 a Pagar,True
+21316,Sindicato a Pagar,True
+21317,SVC a pagar,True
+21318,Seguro de Retiro La Estrella a pagar,True
+21401,IVA Débito Fiscal,True
+21402,Retención a No Inscriptos,True
+21403,Impuesto a las Ganancias a Pagar,True
+21404,Impuesto a los Ingresos Brutos a Pagar,True
+21405,AFIP IVA a pagar,True
+21406,Imp a la Gcia Minima Pres. a p,True
+21407,Tasas Municipales a pagar,True
+21408,Plan de Facilidades a pagar,True
+21409,BP Acciones y Participaciones a pagar,True
+21410,Intereses Negativos a Devengar,True
+21411,SICORE IG a pagar,True
+21412,Retención Art.79 Ley Imp. a las Gcias.,True
+21501,Dividendos en Efectivo a Pagar,True
+21601,Anticipo de Clientes,True
+21701,Honorarios a Directores,True
+21702,Alquileres Cobrados por Adelantado,True
+21703,Comisiones Cobradas por Adelantado,True
+21704,Depósitos en Garantía Recibidos,True
+21800,Provisiones,True
+21801,Previsión para Indemnización y Despidos,True
+22200,Documentos a Pagar,True
+31100,Capital Social,True
+31101,Saldo Remedición RT 48,True
+31200,Compromisos Irrevocables,True
+31201,Ajuste al Capital,True
+32100,Primas de Emisión,True
+32200,Descuentos de Emisión,True
+33100,Reserva Legal,True
+33201,Reserva Estatutaria,True
+33202,Reserva Voluntaria,True
+34100,Resultados del Ejercicio Acumulados,True
+34101,Resultados No Asignados,True
+34200,Ajustes Resultados de Ejercicios Anteriores,True
+34300,Resultado del Ejercicio,True
+40808,RECPAM,True
+41100,Ventas Productos,True
+41200,Ventas Exportación,True
+41300,Ventas de Servicios,True
+41301,Venta de Cereales,True
+41302,Ventas Otros,True
+41400,Descuentos Obtenidos,True
+41500,Intereses Cobrados,True
+41600,Ganancia por Tenencia,True
+41700,Otros Ingresos,True
+41800,Resultado por Tenencia Acciones,True
+41801,Resultado por Tenencia,True
+41802,Traslación Monetaria,True
+41803,Diferencia de Cambio automática,True
+41804,Comisiones Ganadas,True
+41805,Alquileres Cobrados,True
+41806,Venta de Bienes de Uso,True
+41807,Diferencia de Cambio (manual),True
+42100,Costo de Servicios Prestados,True
+42201,Sueldos y Jornales,True
+42202,S.A.C.,True
+42203,Cargas Sociales,True
+42204,Gastos Generales,True
+42205,Honorarios Comerciales,True
+42301,Gastos Generales de Fabricación,True
+42401,Publicidad y Propaganda,True
+42402,Comisiones Pagadas sobre Ventas,True
+42403,Fletes y Acarreos,True
+42404,Deudores Incobrables,True
+42405,Impuestos sobre los Ingresos Brutos,True
+42406,Impuesto a las Ganancias,True
+42407,Amortizacion Bienes de Uso,True
+42408,Depreciación Rodados,True
+42409,Depreciación Muebles y Utiles,True
+42410,Depreciación Maquinarias,True
+42411,Gastos de Repuestos,True
+42412,Gastos Empresariales,True
+42413,Gastos de Librería,True
+42414,Fletes y Encomiendas,True
+42415,Gastos de Energía Eléctrica Producción,True
+42416,Gastos de Mantenimiento,True
+42417,Sueldos y Jornales Producción,True
+42418,S.A.C. Producción,True
+42419,Contribuciones y Aportes Producción,True
+42420,Gastos de Movilidad y Viaticos,True
+42421,Seguros Pagados,True
+42422,Alquileres Pagados,True
+42423,Gastos de Teléfono,True
+42424,Gastos de Servicios de Internet,True
+42425,Multas Pagadas,True
+42426,Honorarios Profesionales,True
+42427,Contribucion Obra Social Seguros,True
+42428,Gastos de Remodelacion y Mantenimiento,True
+42429,Gastos de Personal,True
+42430,Gastos Sistema de Computacion,True
+42431,Depreciación de Bienes,True
+42432,Depreciación Extraordinaria de Bienes,True
+42433,Depreciación Instalaciones,True
+42434,Depreciación Equipos de computación,True
+42435,Depreciación Otros equipos,True
+42436,Gastos de Mantenimiento de Equipos de Computacion,True
+42437,Gastos de Comercializacion de Servicios,True
+42438,Gastos Software de Gestion y Web,True
+42439,Gastos de Servicios de Terceros,True
+42440,Gastos de Capacitación,True
+42501,Gastos y Comisiones Bancarias,True
+42502,Intereses Negativos,True
+42503,Pérdida por Tenencia,True
+42504,Imp a los Mov Bancarios,True
+42505,Impuesto a los Debitos,True
+42506,Impuesto a los Creditos,True
+42507,Intereses Resarcitorios,True
+42600,Otros Gastos,True
+42601,Resultado por la baja de bienes,True
+42602,Ajuste por redondeo,True
+42700,Resultado por Exposición a la Inflación,True
+42701,Gastos de la Seguridad Social,True

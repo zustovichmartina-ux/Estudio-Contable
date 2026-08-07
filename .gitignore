@@ -69,6 +69,17 @@ informacion sobre tango/
 !plantillas/
 !plantillas/**
 
+# Cloud seed: sociedades PJ + planes de cuentas (catálogo, repo privado)
+!data/
+!data/seed/
+!data/seed/**
+!data/planes_cuentas/
+!data/planes_cuentas/plan_*.xlsx
+!data/planes_cuentas/plan_*.csv
+!data/planes_cuentas/plan_default.xlsx
+!data/planes_cuentas/.gitkeep
+data/persistencia/
+
 # Optional local Streamlit overrides (keep config.toml)
 .streamlit/secrets.toml
 

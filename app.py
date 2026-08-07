@@ -150,6 +150,29 @@ PLANES_RED_DIR = Path(r"T:\Estudio Contable") / "planes_cuentas"
 LEGACY_PLANES_DIR = BASE_DIR / "planes de cuentas"
 PLANILLA_IVA_DEFAULT = BASE_DIR / "PLANILLA PARA IMPORTAR IVA.xlsx"
 
+
+def _es_entorno_cloud() -> bool:
+    """True en Streamlit Community Cloud (sin T:/ ni Escritorio del estudio)."""
+    import os
+
+    flags = (
+        os.environ.get("STREAMLIT_SHARING_MODE"),
+        os.environ.get("STREAMLIT_CLOUD"),
+        os.environ.get("IS_STREAMLIT_CLOUD"),
+    )
+    if any(str(f).strip().lower() in {"1", "true", "yes"} for f in flags if f):
+        return True
+    host = str(os.environ.get("HOSTNAME") or os.environ.get("COMPUTERNAME") or "").lower()
+    if host.endswith(".streamlit.app") or "streamlit" in host:
+        return True
+    # Layout típico de Community Cloud
+    if Path("/mount/src").is_dir() or Path("/home/appuser").is_dir():
+        return True
+    # Linux sin red del estudio: tratar como cloud/remoto para UI de rutas
+    if os.name != "nt" and not PLANES_RED_DIR.exists():
+        return True
+    return False
+
 st.set_page_config(
     page_title="Estudio Contable",
     page_icon="📋",
@@ -662,6 +685,8 @@ NUEVOS_MONOTRIBUTISTAS: list[dict[str, str]] = [
     {"nombre": "DOMINGUEZ MARCELO", "cuit": "20168259779", "tipo": "Monotributista"},
 ]
 db.sincronizar_clientes_catalogo(NUEVOS_MONOTRIBUTISTAS)
+# Cloud / repo limpio: siembra PJ + planes desde data/seed y data/planes_cuentas
+db.cargar_seed_sociedades_pj()
 
 _SOCiedad_KEY = "sociedad_activa"
 _IMPUESTO_KEY = "selector_impuesto"
@@ -2089,10 +2114,16 @@ _PAT_ALIC_IVA = re.compile(r"10[,.]?5|10[,.]?50|(?<!\d)21(?!\d)|(?<!\d)27(?!\d)"
 def _directorio_planes_canonico() -> Path:
     """
     Carpeta canónica del plan de cuentas.
-    Prioriza T:\\Estudio Contable\\planes_cuentas (compartido entre usuarios);
-    si la red no está, usa data/planes_cuentas local.
+    En oficina (Windows): prioriza T:\\…\\planes_cuentas.
+    En Cloud/Linux: solo data/planes_cuentas del repo (sin T:).
     """
-    for carpeta in (PLANES_RED_DIR, DATA_PLANES_DIR):
+    import os
+
+    candidatos: list[Path] = []
+    if os.name == "nt" and not _es_entorno_cloud():
+        candidatos.append(PLANES_RED_DIR)
+    candidatos.append(DATA_PLANES_DIR)
+    for carpeta in candidatos:
         try:
             carpeta.mkdir(parents=True, exist_ok=True)
             probe = carpeta / ".planes_probe"
@@ -5259,7 +5290,7 @@ def _aplicar_ruta_balance_default_sociedad(sociedad_id: int | None) -> None:
 
 def _auto_cargar_balance_local_si_existe(sociedad_id: int | None) -> bool:
     """Carga en memoria el balance local si existe en disco y no hay buffer activo."""
-    if sociedad_id is None:
+    if sociedad_id is None or _es_entorno_cloud():
         return False
     _inicializar_balance_servidor_por_sociedad()
     if st.session_state.balance_servidor_buffer_por_sociedad.get(sociedad_id):
@@ -5435,6 +5466,30 @@ def _render_conexion_servidor_banco(sociedad_id: int | None, banco: str) -> None
             f"Ejemplo local: `{BALANCE_EXCEL_PROYECTO}`"
         )
 
+        if _es_entorno_cloud():
+            st.info(
+                "Estás en **Streamlit Cloud**: no hay Escritorio ni `T:\\`. "
+                "Subí el Excel del balance con el cargador de abajo."
+            )
+        up_bal = st.file_uploader(
+            "Subir Balance (.xlsx / .xls / .csv)",
+            type=["xlsx", "xls", "csv"],
+            key=f"uploader_balance_bancos_{slug}_{sociedad_id}",
+            help="Alternativa a la ruta local/UNC. Obligatorio en Cloud.",
+        )
+        if up_bal is not None:
+            fp = f"{up_bal.name}:{getattr(up_bal, 'size', 0)}"
+            fp_key = f"_bal_up_fp_bancos_{sociedad_id}"
+            if st.session_state.get(fp_key) != fp:
+                buffers = st.session_state.balance_servidor_buffer_por_sociedad
+                sync_at_dict = st.session_state.balance_servidor_sync_at_por_sociedad
+                buffers[sociedad_id] = BytesIO(up_bal.getvalue())
+                sync_at_dict[sociedad_id] = datetime.now().strftime("%d/%m/%Y %H:%M")
+                st.session_state[f"{slug}_skip_default_planilla"] = True
+                st.session_state[fp_key] = fp
+                st.success(f"✓ Balance en memoria: `{up_bal.name}`.")
+                st.rerun()
+
         rutas = st.session_state.balance_servidor_rutas_por_sociedad
         _aplicar_ruta_balance_default_sociedad(sociedad_id)
         if _RUTA_BALANCE_BANCOS_INPUT not in st.session_state:
@@ -5442,28 +5497,31 @@ def _render_conexion_servidor_banco(sociedad_id: int | None, banco: str) -> None
                 rutas.get(sociedad_id) or BALANCE_EXCEL_PROYECTO
             )
 
-        ruta_input = st.text_input(
-            "Ruta del Balance (fija para bancos)",
-            key=_RUTA_BALANCE_BANCOS_INPUT,
-            placeholder=r".\Copia de OFTALMOLOGIA RELE Balance 2026.xlsx",
-            help="Ruta de red Windows (UNC), ruta absoluta o relativa (./) al Excel/CSV del balance mensual.",
-        )
-        rutas[sociedad_id] = sanitizar_ruta_unc(ruta_input)
-        if es_ruta_http_legacy(rutas.get(sociedad_id, "")):
-            st.warning(
-                "Las URLs web (Excel Cloud) ya no se usan. "
-                "Reemplazá la ruta por un archivo local relativo (./) o una carpeta compartida UNC."
+        if not _es_entorno_cloud():
+            ruta_input = st.text_input(
+                "Ruta del Balance (fija para bancos)",
+                key=_RUTA_BALANCE_BANCOS_INPUT,
+                placeholder=r".\Copia de OFTALMOLOGIA RELE Balance 2026.xlsx",
+                help="Ruta de red Windows (UNC), ruta absoluta o relativa (./) al Excel/CSV del balance mensual.",
             )
-            default = _ruta_balance_default_sociedad(sociedad_id) or BALANCE_EXCEL_PROYECTO
-            rutas[sociedad_id] = default
-            st.session_state[_RUTA_BALANCE_BANCOS_INPUT] = default
+            rutas[sociedad_id] = sanitizar_ruta_unc(ruta_input)
+            if es_ruta_http_legacy(rutas.get(sociedad_id, "")):
+                st.warning(
+                    "Las URLs web (Excel Cloud) ya no se usan. "
+                    "Reemplazá la ruta por un archivo local relativo (./) o una carpeta compartida UNC."
+                )
+                default = _ruta_balance_default_sociedad(sociedad_id) or BALANCE_EXCEL_PROYECTO
+                rutas[sociedad_id] = default
+                st.session_state[_RUTA_BALANCE_BANCOS_INPUT] = default
+        else:
+            rutas[sociedad_id] = rutas.get(sociedad_id) or ""
 
         buffers = st.session_state.balance_servidor_buffer_por_sociedad
         sync_at_dict = st.session_state.balance_servidor_sync_at_por_sociedad
 
         col_sync, col_clear = st.columns(2)
         with col_sync:
-            if st.button(
+            if not _es_entorno_cloud() and st.button(
                 "🔄 Cargar Saldo desde Servidor",
                 type="primary",
                 key=_BTN_CARGAR_SALDO_BANCOS,
@@ -5564,36 +5622,64 @@ def _render_conexion_servidor_local(sociedad_id: int | None, impuesto: str) -> N
             "Ejemplo local: `./Copia de OFTALMOLOGIA RELE Balance 2026.xlsx`"
         )
 
+        if _es_entorno_cloud():
+            st.info(
+                "Estás en **Streamlit Cloud**: no hay Escritorio ni `T:\\`. "
+                "Subí el Excel del balance con el cargador."
+            )
+        up_bal = st.file_uploader(
+            "Subir Balance (.xlsx / .xls / .csv)",
+            type=["xlsx", "xls", "csv"],
+            key=f"uploader_balance_dev_{slug}_{sociedad_id}",
+            help="Alternativa a la ruta local/UNC. En Cloud usá siempre el uploader.",
+        )
+        if up_bal is not None:
+            fp = f"{up_bal.name}:{getattr(up_bal, 'size', 0)}"
+            fp_key = f"_bal_up_fp_dev_{slug}_{sociedad_id}"
+            if st.session_state.get(fp_key) != fp:
+                buffers = st.session_state.balance_servidor_buffer_por_sociedad
+                sync_at_dict = st.session_state.balance_servidor_sync_at_por_sociedad
+                buffers[sociedad_id] = BytesIO(up_bal.getvalue())
+                sync_at_dict[sociedad_id] = datetime.now().strftime("%d/%m/%Y %H:%M")
+                st.session_state[f"{slug}_skip_default_planilla"] = True
+                st.session_state[fp_key] = fp
+                st.success(f"✓ Balance en memoria: `{up_bal.name}`.")
+                st.rerun()
+
         rutas = st.session_state.balance_servidor_rutas_por_sociedad
         _aplicar_ruta_balance_default_sociedad(sociedad_id)
-        _auto_cargar_balance_local_si_existe(sociedad_id)
+        if not _es_entorno_cloud():
+            _auto_cargar_balance_local_si_existe(sociedad_id)
         input_key = f"balance_servidor_ruta_{slug}_{sociedad_id}"
         if input_key not in st.session_state:
             st.session_state[input_key] = rutas.get(sociedad_id, "")
 
-        ruta_input = st.text_input(
-            "Ruta del Balance (UNC o relativa al proyecto)",
-            key=input_key,
-            placeholder=r".\Copia de OFTALMOLOGIA RELE Balance 2026.xlsx",
-            help="Ruta de red Windows (UNC), ruta absoluta o relativa (./) al Excel/CSV del balance mensual.",
-        )
-        rutas[sociedad_id] = sanitizar_ruta_unc(ruta_input)
-        if es_ruta_http_legacy(rutas.get(sociedad_id, "")):
-            st.warning(
-                "Las URLs web (Excel Cloud) ya no se usan. "
-                "Reemplazá la ruta por un archivo local relativo (./) o una carpeta compartida UNC."
+        if not _es_entorno_cloud():
+            ruta_input = st.text_input(
+                "Ruta del Balance (UNC o relativa al proyecto)",
+                key=input_key,
+                placeholder=r".\Copia de OFTALMOLOGIA RELE Balance 2026.xlsx",
+                help="Ruta de red Windows (UNC), ruta absoluta o relativa (./) al Excel/CSV del balance mensual.",
             )
-            default = _ruta_balance_default_sociedad(sociedad_id)
-            if default:
-                rutas[sociedad_id] = default
-                st.session_state[input_key] = default
+            rutas[sociedad_id] = sanitizar_ruta_unc(ruta_input)
+            if es_ruta_http_legacy(rutas.get(sociedad_id, "")):
+                st.warning(
+                    "Las URLs web (Excel Cloud) ya no se usan. "
+                    "Reemplazá la ruta por un archivo local relativo (./) o una carpeta compartida UNC."
+                )
+                default = _ruta_balance_default_sociedad(sociedad_id)
+                if default:
+                    rutas[sociedad_id] = default
+                    st.session_state[input_key] = default
+        else:
+            rutas[sociedad_id] = rutas.get(sociedad_id) or ""
 
         buffers = st.session_state.balance_servidor_buffer_por_sociedad
         sync_at_dict = st.session_state.balance_servidor_sync_at_por_sociedad
 
         col_sync, col_clear = st.columns(2)
         with col_sync:
-            if st.button(
+            if not _es_entorno_cloud() and st.button(
                 "🔄 Cargar Balance desde Servidor",
                 type="primary",
                 key=f"btn_sync_balance_servidor_{slug}_{sociedad_id}",

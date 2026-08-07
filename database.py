@@ -15,7 +15,21 @@ BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "estudio_contable.db"
 CUITS_AUXILIARES_PATH = BASE_DIR / "Cuits_Auxiliares.xlsx"
 LISTA_EMPRESAS_PATH = BASE_DIR / "Lista_empresas.xlsx"
-PLAN_CUENTAS_DEFAULT = BASE_DIR / "planes de cuentas" / "Cuentas contables (4).xlsx"
+PLAN_CUENTAS_DEFAULT_LEGACY = BASE_DIR / "planes de cuentas" / "Cuentas contables (4).xlsx"
+PLAN_CUENTAS_DEFAULT_REPO = BASE_DIR / "data" / "planes_cuentas" / "plan_default.xlsx"
+SEED_SOCIEDADES_PJ_PATH = BASE_DIR / "data" / "seed" / "sociedades_pj.json"
+DATA_PLANES_DIR = BASE_DIR / "data" / "planes_cuentas"
+
+
+def _plan_cuentas_default_path() -> Path:
+    """Plan genérico: prioriza el del repo (Cloud) y cae al legacy local."""
+    if PLAN_CUENTAS_DEFAULT_REPO.is_file():
+        return PLAN_CUENTAS_DEFAULT_REPO
+    return PLAN_CUENTAS_DEFAULT_LEGACY
+
+
+# Compat: código legacy importa PLAN_CUENTAS_DEFAULT
+PLAN_CUENTAS_DEFAULT = _plan_cuentas_default_path()
 
 TIPOS_PERSONA = ("Persona Jurídica", "Persona Física", "Monotributista")
 PREFIJO_CUIT_TEMPORAL = "99"
@@ -731,14 +745,31 @@ def actualizar_cliente(
         conn.commit()
 
 
+def _resolver_plan_path_catalogo(item: dict, cuit: str) -> str:
+    """Ruta de plan para un ítem de catálogo (repo Cloud o default)."""
+    explicit = str(item.get("plan_cuentas") or item.get("plan_cuentas_path") or "").strip()
+    if explicit:
+        cand = Path(explicit)
+        if not cand.is_absolute():
+            cand = BASE_DIR / cand
+        if cand.is_file():
+            return str(cand)
+    propio = DATA_PLANES_DIR / f"plan_{cuit}.xlsx"
+    if propio.is_file():
+        return str(propio)
+    return str(_plan_cuentas_default_path())
+
+
 def sincronizar_clientes_catalogo(catalogo: list[dict]) -> dict[str, int]:
     """Inserta clientes del catálogo estático que aún no existen (por CUIT)."""
     inicializar_bd()
-    stats = {"insertados": 0, "omitidos": 0, "errores": 0}
+    stats = {"insertados": 0, "omitidos": 0, "errores": 0, "planes_vinculados": 0}
     with obtener_conexion() as conn:
-        cuits_existentes = {
-            re.sub(r"\D", "", str(row["cuit"]))
-            for row in conn.execute("SELECT cuit FROM clientes").fetchall()
+        existentes = {
+            re.sub(r"\D", "", str(row["cuit"])): dict(row)
+            for row in conn.execute(
+                "SELECT id, cuit, plan_cuentas_path FROM clientes"
+            ).fetchall()
         }
         for item in catalogo:
             nombre = str(item.get("nombre", "")).strip()
@@ -753,7 +784,27 @@ def sincronizar_clientes_catalogo(catalogo: list[dict]) -> dict[str, int]:
             if not nombre or len(cuit) != 11:
                 stats["errores"] += 1
                 continue
-            if cuit in cuits_existentes:
+            mes_raw = item.get("mes_cierre_balance")
+            try:
+                mes_cierre = int(mes_raw) if mes_raw not in (None, "") else 12
+            except (TypeError, ValueError):
+                mes_cierre = 12
+            if mes_cierre < 1 or mes_cierre > 12:
+                mes_cierre = 12
+            if tipo_persona in ("Persona Física", "Monotributista"):
+                mes_cierre = 12
+            plan_path = _resolver_plan_path_catalogo(item, cuit)
+            if cuit in existentes:
+                # En Cloud/repo: si hay plan propio y la BD apunta a un path inexistente, actualizar.
+                row = existentes[cuit]
+                actual = Path(str(row.get("plan_cuentas_path") or ""))
+                propio = DATA_PLANES_DIR / f"plan_{cuit}.xlsx"
+                if propio.is_file() and (not actual.is_file()):
+                    conn.execute(
+                        "UPDATE clientes SET plan_cuentas_path = ? WHERE id = ?",
+                        (str(propio), row["id"]),
+                    )
+                    stats["planes_vinculados"] += 1
                 stats["omitidos"] += 1
                 continue
             try:
@@ -762,14 +813,31 @@ def sincronizar_clientes_catalogo(catalogo: list[dict]) -> dict[str, int]:
                     INSERT INTO clientes (nombre, cuit, tipo_persona, plan_cuentas_path, mes_cierre_balance)
                     VALUES (?, ?, ?, ?, ?)
                     """,
-                    (nombre, cuit, tipo_persona, str(PLAN_CUENTAS_DEFAULT), 12),
+                    (nombre, cuit, tipo_persona, plan_path, mes_cierre),
                 )
-                cuits_existentes.add(cuit)
+                existentes[cuit] = {"cuit": cuit, "plan_cuentas_path": plan_path}
                 stats["insertados"] += 1
             except sqlite3.IntegrityError:
                 stats["omitidos"] += 1
         conn.commit()
     return stats
+
+
+def cargar_seed_sociedades_pj(ruta: str | Path | None = None) -> dict[str, int]:
+    """
+    Siembra Personas Jurídicas desde data/seed/sociedades_pj.json (repo / Cloud).
+    Vincula plan_{cuit}.xlsx de data/planes_cuentas cuando exista.
+    """
+    path = Path(ruta) if ruta else SEED_SOCIEDADES_PJ_PATH
+    if not path.is_file():
+        return {"insertados": 0, "omitidos": 0, "errores": 0, "planes_vinculados": 0, "sin_archivo": 1}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"insertados": 0, "omitidos": 0, "errores": 1, "planes_vinculados": 0}
+    if not isinstance(data, list):
+        return {"insertados": 0, "omitidos": 0, "errores": 1, "planes_vinculados": 0}
+    return sincronizar_clientes_catalogo(data)
 
 
 def eliminar_cliente(cliente_id: int) -> None:

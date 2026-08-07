@@ -11678,8 +11678,13 @@ def _nombre_archivo_persistencia(nombre_base: str, usuario: str | None = None) -
 
 
 def _directorio_persistencia_escribible() -> Path:
-    """Prioriza T:\\Estudio Contable; si no es escribible, usa carpeta del proyecto."""
-    candidatos = (PERSISTENCIA_RED_DIR, PERSISTENCIA_LOCAL_DIR, BASE_DIR)
+    """Prioriza T:\\Estudio Contable en oficina Windows; en Cloud usa data/persistencia."""
+    import os
+
+    candidatos: list[Path] = []
+    if os.name == "nt":
+        candidatos.append(PERSISTENCIA_RED_DIR)
+    candidatos.extend((PERSISTENCIA_LOCAL_DIR, BASE_DIR))
     for carpeta in candidatos:
         try:
             carpeta.mkdir(parents=True, exist_ok=True)
@@ -11693,7 +11698,12 @@ def _directorio_persistencia_escribible() -> Path:
 
 
 def _ruta_persistencia_lectura(nombre: str) -> Path | None:
-    for carpeta in (PERSISTENCIA_RED_DIR, PERSISTENCIA_LOCAL_DIR, BASE_DIR):
+    import os
+
+    carpetas = [PERSISTENCIA_LOCAL_DIR, BASE_DIR]
+    if os.name == "nt":
+        carpetas.insert(0, PERSISTENCIA_RED_DIR)
+    for carpeta in carpetas:
         ruta = carpeta / nombre
         if ruta.is_file():
             return ruta
@@ -11928,8 +11938,13 @@ def cargar_borrador_grilla_persistido(usuario: str | None = None) -> dict | None
 
 
 def limpiar_borrador_grilla_persistido(usuario: str | None = None) -> None:
+    import os
+
     nombre = _nombre_archivo_persistencia(NOMBRE_BORRADOR_JSON, usuario)
-    for carpeta in (PERSISTENCIA_RED_DIR, PERSISTENCIA_LOCAL_DIR, BASE_DIR):
+    carpetas = [PERSISTENCIA_LOCAL_DIR, BASE_DIR]
+    if os.name == "nt":
+        carpetas.insert(0, PERSISTENCIA_RED_DIR)
+    for carpeta in carpetas:
         ruta = carpeta / nombre
         try:
             ruta.unlink(missing_ok=True)

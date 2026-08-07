@@ -1,0 +1,233 @@
+codigo,descripcion,imputable
+11101,Caja en $,True
+11102,Caja u$s,True
+11103,Banco Provincia Cta Cte,True
+11104,Banco Galicia Cta Cte,True
+11105,Banco Credicoop Cta Cte,True
+11106,Banco Nacion Cta Cte,True
+11107,Mercado Pago,True
+11201,Moneda Extranjera,True
+11202,Plazo Fijo en pesos,True
+11203,Plazo Fijo en Dolares,True
+11204,Fondo de Inversión,True
+11301,Deudores por Ventas,True
+11302,Deudores por Tarjeta,True
+11303,Documentos a Cobrar $,True
+11304,Documentos a Cobrar u$s,True
+11305,Deudores Morosos,True
+11306,Deudores en Gestión Judicial,True
+11307,Cheques de Terceros Rechazados,True
+11308,Deudores del Exterior,True
+11400,Anticipos Imp. sobre los Ing. Brutos,True
+11401,Anticipos Impuesto a las Ganancias,True
+11402,IVA Crédito Fiscal,True
+11403,IVA Percepción 3337,True
+11404,Percepción Ingresos Brutos PBA,True
+11405,Cta Particular Giorgi Games Esteban,True
+11406,Cta Particular Panelo Nicolas,True
+11407,Cta Particular Andrade,True
+11408,Cta Particular Leroux,True
+11409,Saldo a favor DDJJ Ganancias,True
+11410,Retenciones IVA,True
+11411,Saldo Tecnico IVA a favor,True
+11412,Saldo Libre Disponibildad IVA,True
+11413,Saldo a Favor Imp Ing. Brutos,True
+11414,Retenciones Contribuc. SUSS,True
+11415,Retenciones Contrib. O Social,True
+11416,Retenciones Imp. a las Ganancias,True
+11417,Garantias Pendientes de Devolucion,True
+11418,Retenciones Imp. sobre los Ing Brutos,True
+11419,Reten. Bancarias Imp. sobre los Ing Brutos,True
+11420,Impuesto al Credito a cta Ganancias,True
+11421,Reten. IIBB SIRTAC,True
+11422,IVA Crédito Fiscal Bancos,True
+11423,Percepción Ingresos Brutos Bancos,True
+11424,Reten.Tarjetas Imp. sobre los Ing Brutos,True
+11425,Reten.Tarjetas Imp. a las Gcias.,True
+11426,Percepcion IIBB Tarjetas,True
+11427,Saldos a Favor AFIP,True
+11428,Percepción Ganancias,True
+11430,IVA Crédito Fiscal 10.5%,True
+11431,IVA Crédito Fiscal 27%,True
+11432,IVA Crédito Fiscal Bancos 10.5%,True
+11433,IVA Credito Fiscal Tarjetas MAL,True
+11434,Retencion IVA Tarjetas MAL,True
+11435,IVA Crédito Fiscal Tarjetas,True
+11436,Retenciones IVA tarjetas,True
+11437,Percepciones IVA tarjetas,True
+11438,"Iva CF Tarjetas10,5%",True
+11503,Anticipo TSH,True
+11504,Bebidas Varias,True
+11505,Mercaderias,True
+11506,Botellon,True
+11507,Cigarrillos,True
+11601,Alquileres Pagados por Adelantado,True
+11602,Seguros Pagados por Adelantado,True
+12101,Fondos de Disp Restringida,True
+12201,Seguros a cobrar,True
+12301,Socios Art. 33 Ley 19550,True
+12400,Mejoras s/Inmuebles,True
+12401,Terrenos,True
+12402,Inmuebles,True
+12403,Amortizacion Acumulada Inmuebles,True
+12404,Rodados,True
+12405,Amortizacion Acumulada Rodados,True
+12406,Muebles y Utiles,True
+12407,Amortizacion Acumulada Muebles y Utiles,True
+12409,Muebles y Articulos Gastronomicos Menores,True
+12410,Amortizacion Acumulada Muebles y Articulos Gastronomicos M.,True
+12411,Instalaciones,True
+12412,Amortizacion Acumulada Instalaciones,True
+12413,Equipos Electronicos y de Computación,True
+12414,Amortizacion Acumulada Equipos de computación,True
+12415,Herramientas Varias,True
+12416,Amortizacion Acumulada Herramientas Varias,True
+12417,Depreciación Acumulada,True
+12418,Muebles y Art Gastronomicos Revaluo,True
+12419,Amortizacion Acumulada Muebles y Art Gastronom Revaluo,True
+12420,Instalaciones Revaluo,True
+12421,Equipo de Pc y Electronicos Revaluo,True
+12422,Amortizacion Acumulada Eq de PC y Electron Revaluo,True
+12423,Amortizacion Acumulada Instalaciones Revaluo,True
+12424,Obra sobre Inmueble Ajeno,True
+12425,Amortizacion Acumulada Obra sobre Inm Ajeno,True
+21101,Proveedores,True
+21102,Acreedores Hipotecarios a pagar,True
+21103,Alquileres a pagar,True
+21104,Cheques Emitidos Pendientes de Cobro,True
+21105,Embargo A Pagar,True
+21201,Acreedores Bancarios,True
+21202,Tarjeta Visa Galicia a Pagar,True
+21301,Contribuciones S.S NO SIPA a Pagar,True
+21302,Contribuciones Seg. Social a pagar,True
+21303,Aportes Seg. Social a pagar,True
+21304,Aportes Obra Social a Pagar,True
+21305,Contribuciones Obra Social a Pagar,True
+21306,ART a pagar,True
+21307,Aporte sindicato a pagar,True
+21308,Contribuciones sindicato a pagar,True
+21309,Sueldos y Jornales a Pagar,True
+21310,S.A.C. a Pagar,True
+21311,Seguro de Vida Colectivo a pagar,True
+21312,Sueldos No Remunerativos a pagar,True
+21313,Contribucion Sindicato a pagar,True
+21401,IVA Débito Fiscal,True
+21403,Impuesto a las Ganancias a Pagar,True
+21404,Impuesto a los Ingresos Brutos a Pagar,True
+21405,IVA a pagar,True
+21406,Ganancia Minima Presunta a pagar,True
+21407,Tasa de Seguridad e Higiene a pagar,True
+21408,BP Acciones y Participaciones a pagar,True
+21409,Impuestos Municipales a Pagar,True
+21410,Intereses Negativos a Devengar,True
+21411,IVA Débito Fiscal Tarjetas,True
+21412,SICORE IVA a pagar,True
+21413,SICORE Ganancias a pagar,True
+21501,Dividendos en Efectivo a Pagar,True
+21502,Honorarios Director a pagar,True
+21503,Honorarios Profesionales a pagar,True
+21504,Aportes Accionistas,True
+21601,Anticipo de Clientes,True
+21602,Seguro De Sepelio a pagar,True
+21603,Fondo Convenio a pagar,True
+21604,Contribución Extraordinaria a Pagar,True
+21605,Cuota Sindical a pagar,True
+21702,Cont. Especial a pagar,True
+21703,Prestamos Bancarios,True
+21704,Prestamos Financieros de terceros,True
+21705,Cheques Emitidos Pendientes de Debito,True
+21706,Documentos a Pagar,True
+22200,Planes de Facilidades de Pago a pagar,True
+22201,Planes de Facilidades ARBA a pagar,True
+22202,Planes de Facilidades MUNICIP a pagar,True
+22203,Planes de Facilidades Obra Social UTHGRA a pagar,True
+22204,Planes de Facilidades Sindicato UTHGRA a pagar,True
+31100,Capital Social,True
+31200,Aportes Irrevocables,True
+31201,Ajustes al Capital,True
+32100,Primas de Emisión,True
+32200,Descuentos de Emisión,True
+33100,Reserva Legal,True
+33201,Reserva Estatutaria,True
+33202,Reserva Facultativa,True
+34100,Resultados No Asignados,True
+34200,Ajustes Resultados de Ejercicios Anteriores,True
+34300,Resultado del Ejercicio,True
+34400,Saldo Remedicion RT 48,True
+41100,Ventas de Servicios de Exp de Bebidas,True
+41150,Servicio de Alquileres de Espacios y Publicidad,True
+41200,Ventas de Servicios de Mesas y Entradas,True
+41250,Ingresos por Ventas de Entradas,True
+41300,Servicios de Publicidad,True
+41302,Ventas Otros,True
+41350,Servicio de alquiler de sombrillas,True
+41400,Descuentos Obtenidos,True
+41450,Servicio de estacionamiento,True
+41500,Intereses Cobrados,True
+41600,Ganancia por Tenencia,True
+41700,Otros Ingresos,True
+41801,Resultado por Tenencia,True
+41802,Comisiones Ganadas,True
+41803,Venta de Bienes de Uso,True
+42100,Costo de los Servicios Prestados,True
+42101,Gastos de Obra y Remodelacion,True
+42102,Gastos de Mantenimiento,True
+42103,Gastos de Mantenimiento y Reparación,True
+42104,Tasa de seguridad e higiene Habilitación,True
+42201,Sueldos y Jornales,True
+42202,S.A.C.,True
+42203,Cargas Sociales,True
+42204,Gastos Generales,True
+42205,Honorarios,True
+42206,ART,True
+42207,Contribucion Sindicato,True
+42208,Seguro de Vida Colectivo,True
+42401,Publicidad y Propaganda,True
+42402,Gastos Vasos y Vajilla,True
+42403,Fletes y Acarreos,True
+42404,Gastos se Seguridad Privada,True
+42405,Impuestos sobre los Ingresos Brutos,True
+42406,Gastos Hielo,True
+42407,Amortizaciones,True
+42408,Tasa de Seguridad e Higiene,True
+42409,Impuestos Municipales Varios,True
+42410,Impuesto a las Ganancias,True
+42411,Gastos Varios del Personal,True
+42412,Gastos Varios,True
+42413,Gastos de Librería y Papeleria,True
+42414,Gastos de Energía Eléctrica,True
+42416,Gastos de Mant. Equipos de Comp,True
+42417,Gastos Servicio Privado de Salud,True
+42418,Gastos Art. de Limpieza,True
+42419,Gastos Art. Descartables,True
+42420,Gastos de Movilidad Rodados,True
+42421,Seguros Pagados,True
+42422,Alquileres,True
+42423,Gastos de Telefonia e Internet,True
+42424,Gastos de Regalías y Derechos Ogham,True
+42425,Gastos Administrativos de Inmobiliaria,True
+42426,Gastos de Comercialización,True
+42427,Comsiones de Tarjetas,True
+42428,Fondo de Promocion Turistica,True
+42429,Gastos Servicios Eventos,True
+42430,Gastos Recolección de residuos,True
+42431,Gastos tasas e impuestos municipales,True
+42432,Honorarios Profesionales,True
+42433,Gastos Marketing y Merch,True
+42434,MGP - Guardavidas,True
+42435,MGP - Fondo Unif Seg en Playas,True
+42436,Alquiler de equipos electronicos,True
+42501,Gastos y Comisiones Bancarias,True
+42502,Intereses Resarcitorios,True
+42503,SADAIC,True
+42504,Intereses Punitorios,True
+42505,Intereses Negativos,True
+42506,Impuesto a los Debitos,True
+42507,Impuesto a los Creditos,True
+42508,Intereses Bancarios,True
+42509,Gastos y Comisiones Tarjetas de Credito,True
+42600,Otros Gastos,True
+42601,Resultado por la baja de bienes,True
+42602,Ajuste por Redondeos,True
+42603,Multas Varias,True
+42700,RECPAM,True

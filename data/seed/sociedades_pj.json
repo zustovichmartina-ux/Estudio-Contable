@@ -1,0 +1,484 @@
+[
+  {
+    "nombre": "4 GOMAS SA",
+    "cuit": "30708982497",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "ACRES DE DIAMANTES SA",
+    "cuit": "30654505876",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "ACRES DE DIAMANTES SA",
+    "cuit": "30711970122",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "ACTITUD ARGENTINA SA",
+    "cuit": "30710787588",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "AMEK GROUP SA",
+    "cuit": "99000000001",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "Aurora de las Sierras S.R.L",
+    "cuit": "30718797396",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "BAHIA CHICA DEL SUR SRL",
+    "cuit": "30716669625",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 6,
+    "plan_cuentas": "data/planes_cuentas/plan_30716669625.xlsx"
+  },
+  {
+    "nombre": "BAZAN SEGURIDAD SRL",
+    "cuit": "30712463658",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "BONJOUR CROISSANT SA",
+    "cuit": "30717234797",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "BOOST YOUR SALES SA",
+    "cuit": "30717237109",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "BORNEO CERVEZA MARPLATENSE SA",
+    "cuit": "30716114674",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "CAPME SA",
+    "cuit": "30709928054",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "CELL FACTORY SRL",
+    "cuit": "30714781215",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "CENTRO DE ESTUDIOS OCULARES Y DE LA VISION COLON SRL",
+    "cuit": "30716294214",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "CENTRO DE ESTUDIOS Y PREVENCION VISUAL S.R.L.",
+    "cuit": "99000000016",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "CENTRO MEDICO SAN EDUARDO CHAPADMALAL SA",
+    "cuit": "30717148262",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "CENTRO PROFESIONAL OFTALMOLOGICO SRL",
+    "cuit": "30716293862",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "COMERCIAL PHONE SA",
+    "cuit": "30710686544",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "CONSORCIO VILLA LAMADRID",
+    "cuit": "99000000004",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "COTICO SRL",
+    "cuit": "30716132893",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "CROIS CAFE SRL",
+    "cuit": "30715911147",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "CROSSIFAN SA",
+    "cuit": "30716592398",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "DIAGNOSTICO POR IMAGENES FERNANDEZ Y ASOCIADOS SRL",
+    "cuit": "30716304805",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "DOGS COFFEES S.R.L.",
+    "cuit": "30718639537",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 5,
+    "plan_cuentas": "data/planes_cuentas/plan_30718639537.xlsx"
+  },
+  {
+    "nombre": "DOS PARA UNO SRL",
+    "cuit": "30715562231",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "FASAP COMERCIALIZADORA SA",
+    "cuit": "99000000005",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "FERINA SRL",
+    "cuit": "30715939807",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "FINANTUR SRL",
+    "cuit": "30712476806",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "FOLC  COFFEE PLAYA GRANDE SA",
+    "cuit": "30718340981",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "FUNCHIN BALL SRL",
+    "cuit": "30714972134",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "GASTROENTEROLOGIA Y ENDOSCOPIA DIGESTIVA MDP SA",
+    "cuit": "99000000015",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "GASTRONOMIA FARO NORTE MDP S.R.L.",
+    "cuit": "30716462974",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "GDG INGENIERIA SRL",
+    "cuit": "30709240141",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "GIVONETTI TURINA ASESORES LEGALES SRL",
+    "cuit": "30716512645",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 5,
+    "plan_cuentas": "data/planes_cuentas/plan_30716512645.xlsx"
+  },
+  {
+    "nombre": "GLOBAL RECIFE SA",
+    "cuit": "30716080508",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "GROWTH MARKETING SA",
+    "cuit": "99000000007",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "GRUPO MERIDIEM SRL",
+    "cuit": "30714058386",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 4,
+    "plan_cuentas": "data/planes_cuentas/plan_30714058386.xlsx"
+  },
+  {
+    "nombre": "Gastroenterologia Y Endoscopia Digestiva Mar del PLata",
+    "cuit": "30717847810",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "HERNAN TRUJILLO CONTADORES PUBLICOS SA",
+    "cuit": "30717994554",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "HILTRAMA SRL",
+    "cuit": "30717887529",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "INVESTIGACIONES ONCOLOGICAS C. COLON S.A.",
+    "cuit": "30709392804",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "ISCHIA SA",
+    "cuit": "30711005842",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "KABEDOS SRL",
+    "cuit": "33707553699",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "LIGORE HNOS SRL",
+    "cuit": "30712436219",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "LOQUAR  SUELDOS SRL",
+    "cuit": "30711296189",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "LOQUAR IMPUESTOS Y CONTA SRL",
+    "cuit": "99000000008",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "LORDZAID SRL",
+    "cuit": "30715971344",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "LUPULO SA",
+    "cuit": "30714329401",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "M. FARIAS INDUSTRIA Y SERVICIOS SA",
+    "cuit": "30718183363",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12,
+    "plan_cuentas": "data/planes_cuentas/plan_30718183363.xlsx"
+  },
+  {
+    "nombre": "MAGIC CARPET S.A.",
+    "cuit": "30716593769",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "MAR PICADO SA",
+    "cuit": "30623413019",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "MARCOM STRATEGIES SA",
+    "cuit": "30718182413",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "MARGUICH SA",
+    "cuit": "30715166980",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "MAURANDI CRISTIAN H Y MIGLIO MARIA DE LOS ANGELES SOCIEDAD LEY 19550 CAPITULO I SECCION IV",
+    "cuit": "99000000009",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "MDP FUNCIONAL TRAINING SRL",
+    "cuit": "30716235315",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "MES QUE MAI SA",
+    "cuit": "30676810591",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "MOTIVARE SA",
+    "cuit": "30710808801",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "NETTI SORTINO INGENIERIA SA",
+    "cuit": "30717077861",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "NOSTRORUM SA",
+    "cuit": "30717294420",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "OFTALMOLOGIA RELE MAR DEL PLATA S.R.L.",
+    "cuit": "30718022742",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 3,
+    "plan_cuentas": "data/planes_cuentas/plan_30718022742.xlsx"
+  },
+  {
+    "nombre": "OGHAMCOR SA",
+    "cuit": "30715053647",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "PARALLEL S.A.",
+    "cuit": "30579215255",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "PEPA Y LIMON SRL",
+    "cuit": "30715324454",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "PIMIPAC SA",
+    "cuit": "30717762017",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "PINTA BORNEO 2806 SA",
+    "cuit": "30716563142",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "PINTA VARELA SA",
+    "cuit": "30715329057",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "PINTOS HOME SA",
+    "cuit": "30718261615",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "POLICEL SRL",
+    "cuit": "30714617164",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "PRO NAVAL HNOS SA",
+    "cuit": "30716287722",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "RECARGA VIRTUAL COMERCIAL SA",
+    "cuit": "30711480265",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "RIERA OFTALMO SA",
+    "cuit": "30717891062",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "SUNNY BEACH SA",
+    "cuit": "30716666375",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 4,
+    "plan_cuentas": "data/planes_cuentas/plan_30716666375.xlsx"
+  },
+  {
+    "nombre": "THE MASTER DRIVER S.A.",
+    "cuit": "30717699072",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "THE SURFING MALL SA",
+    "cuit": "30716716313",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 4,
+    "plan_cuentas": "data/planes_cuentas/plan_30716716313.xlsx"
+  },
+  {
+    "nombre": "THINK AUDIO SA",
+    "cuit": "30715656929",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "TIERRAS BAJAS SA",
+    "cuit": "30712476067",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "VARESE BROKERS SRL",
+    "cuit": "30715549359",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "VITALIS  NATIVA SRL",
+    "cuit": "30716794829",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  },
+  {
+    "nombre": "ZAID CORP SA",
+    "cuit": "30717250989",
+    "tipo_persona": "Persona Jurídica",
+    "mes_cierre_balance": 12
+  }
+]

@@ -1,0 +1,283 @@
+codigo,descripcion,imputable
+11101,Caja en $,False
+11102,Caja u$s,False
+11104,Banco Santander cta cte,False
+11105,Banco Provincia,False
+11106,Banco Nacion Cta Cte,False
+11107,Valores a Depositar,False
+11108,Banco Provincia CC 50582/6,False
+11109,Banco Galicia cta cte,False
+11110,Recaudaciones a Depositar,False
+11111,Banco BBVA 094-344934/2 cta cte,False
+11112,Banco BBVA 094-344935/9 cta cte,False
+11113,Impuesto a las Ganancias saldo a favor,False
+11201,Moneda Extranjera,False
+11202,Plazo Fijo en pesos,False
+11203,Plazo Fijo en Dolares,False
+11204,Fondos Comunes de Inversion,False
+11301,Deudores por Ventas,False
+11302,Deudores por Tarjeta,False
+11303,ANTICIPO DE CLIENTES,False
+11304,Documentos a Cobrar u$s,False
+11305,Deudores Morosos,False
+11306,Deudores en Gestión Judicial,False
+11307,Cheques Pendientes de Depositar,False
+11308,Deudores del Exterior,False
+11401,Anticipos Impuesto a las Ganancias,False
+11402,IVA Crédito Fiscal,False
+11403,IVA Percepción 3337,False
+11404,Percepción Ingresos Brutos PBA,False
+11405,Adelanto de Sueldos,False
+11406,Cta Particular LEVINGSTON CARLOS,False
+11407,Cta Particular REBORA JORGELINA,False
+11408,Cta Particular Bazan Carlos (p),False
+11409,Saldo a favor DDJJ Ganancias,False
+11410,Retenciones IVA,False
+11411,Saldo Tecnico IVA a favor,False
+11412,Saldo Libre Disponibildad IVA,False
+11413,Saldo a Favor Imp Ing. Brutos,False
+11414,Retenciones Contribuc. SUSS,False
+11415,Retenciones Contrib. O Social,False
+11416,Retenciones Imp. a las Ganancias,False
+11417,Deudores Creditos Cedidos,False
+11418,Retenciones Imp. sobre los Ing Brutos,False
+11419,Reten. Bancarias Imp. sobre los Ing Brutos,False
+11420,Imp. Crédito y Debito,False
+11421,Reten. Bancarias Sircreb Ing Brutos,False
+11422,IVA Crédito Fiscal Bancos,False
+11423,Ret IVA Tarjetas,False
+11424,Ret IB tarjetas,False
+11425,Ret Ganancias Tarjetas,False
+11426,IVA CF Tarjetas,False
+11427,Percepción IB Tarjetas,False
+11428,Anticipo Ganacias RG 3450,False
+11429,Saldo Libre Disponibilidad AFIP,False
+11430,IVA CF Tarjetas 10.5%,False
+11431,IVA Crédito Fiscal 27%,False
+11432,IVA Crédito Fiscal 10.5%,False
+11433,IVA 10.5% Crédito Fiscal Bancos,False
+11434,Acuerdo Ministerio,False
+11435,Iva Leasing 21%,False
+11436,Percepción Iva Leasing,False
+11437,Iva Prestamo 10.5%,False
+11438,Percep Iva Prestamo,False
+11439,Percep IIBB Prestamo,False
+11440,IVA 21% tarjeta corporativa,False
+11441,IVA 10.5% tarjeta corporativa,False
+11442,Percep IIBB tarjeta corporativa,False
+11443,Percep IIBB Bancos,False
+11444,Percepcion Ganancias,False
+11445,Anticipo a Proveedores,False
+11446,Percep Iva Tarjetas,False
+11447,Crédito Bono 841/22,False
+11448,Bono gobierno 438/2023,False
+11501,Productos Terminados,False
+11502,Productos en Proceso,False
+11503,Insumos Médicos,False
+11505,bs de cambio,False
+11506,Mercadería de Reventa,False
+11601,Alquileres Pagados por Adelantado,False
+11602,Seguros Pagados por Adelantado,False
+12201,Seguros a cobrar,False
+12301,Socios Art. 33 Ley 19550,False
+12401,Terrenos,False
+12402,Inmuebles,False
+12403,Amortizacion Acumulada Inmuebles,False
+12404,Rodados,False
+12405,Amortizacion Acumulada Rodados,False
+12406,Muebles y Utiles,False
+12407,Amortizacion Acumulada Muebles y Utiles,False
+12408,Bienes de uso,False
+12409,Maquinarias y Herramientas,False
+12410,Amortizacion Acumulada Maquinarias y Herramientas,False
+12411,Instalaciones,False
+12412,Amortizacion Acumulada Instalaciones,False
+12413,Equipos de computación y Telefonia,False
+12414,Amortizacion Acumulada Equipos de computación,False
+12415,Herramientas Varias,False
+12416,Amortizacion Acumulada Herramientas Varias,False
+12417,Depreciación Acumulada,False
+12418,Rodados en Leasing,False
+12419,Amortizacion Acumulada Rodados Leasing,False
+12420,Obra en Construccion,False
+12421,Amortizacion Acumulada Rodados - Revaluo RT 48,False
+12422,Muebles y Utiles- Revaluo RT 48,False
+12423,Amortizacion Acumulada Muebles y Utiles - Revaluo RT 48,False
+12424,Maquinarias y Herramientas - Revaluo RT 48,False
+12425,Amortizacion Acumulada Maquinarias y Herramientas- Revaluo,False
+12426,Equipos de computación y Telefonia - Revaluo,False
+12427,Amortizacion Acumulada Equipos de computación- Revaluo,False
+12428,Rodados en Leasing - Revaluo,False
+12429,Amortizacion Acumulada Rodados Leasing - Revaluo,False
+12501,Llave de Negocio,False
+12502,Gastos Pre-operativos,False
+12503,Gastos de Organización,False
+12504,Marcas,False
+12505,Cannon Leasing,False
+12506,Gastos de Investigación y Desarrollo,False
+13001,Bienes en curso,False
+13201,Compra de Bienes de uso,False
+21101,Proveedores,False
+21102,ANTICIPO DE CLIENTES,False
+21103,DIFERENCIAS DE SUELDOS A AJUSTAR,False
+21104,Cheques Propios Rechazados,False
+21105,Proveedores del Exterior,False
+21106,Facturas a Recibir,False
+21107,Leasing Rodados Bco Patagonia a pagar,False
+21201,Acreedores Bienes de Uso,False
+21202,Hipotecas a Pagar,False
+21203,Prestamos Recibidos,False
+21302,Contribuciones Seg. Social a pagar,False
+21303,Aportes Seg. Social a pagar,False
+21304,Aportes Obra Social a Pagar,False
+21305,Contribuciones Obra Social a Pagar,False
+21306,ART a pagar,False
+21307,Sindicato a pagar,False
+21308,Contribucion Sindical a pagar,False
+21309,Sueldos y Jornales a Pagar,False
+21310,S.A.C. a Pagar,False
+21311,Embargo de Sueldos a Depositar,False
+21312,Sueldos No Remunerativos a pagar,False
+21313,S.A.C. a Pagar,False
+21314,Ap. Extraordinario Obra Social s/Acuerdo a pagar,False
+21315,Seguro de Vida Colectivo a Pagar,False
+21316,Fondo de Turismo a pagar,False
+21317,INACAP a pagar,False
+21318,Embargos a pagar,False
+21401,IVA Débito Fiscal,False
+21402,Iva Ventas 10.5 %,False
+21403,Impuesto a las Ganancias a Pagar,False
+21404,Impuesto a los Ingresos Brutos a Pagar,False
+21405,IVA a pagar,False
+21406,Ganancia Minima Presunta a pagar,False
+21407,Tasa de Seguridad e Higiene a pagar,False
+21408,BP Acciones y Participaciones a pagar,False
+21501,Dividendos en Efectivo a Pagar,False
+21502,Honorarios Director a pagar,False
+21503,Honorarios Profesionales a pagar,False
+21601,Anticipo de Clientes,False
+21602,Tarjeta Corporativa a pagar,False
+21603,Tarjeta Visa a pagar,False
+21604,Tarjeta Nativa a pagar,False
+21701,Honorarios a Directores,False
+21702,Adelantos en Cta Cte,False
+21703,Prestamos Bancarios,False
+21704,Prestamos Financieros de terceros,False
+21705,Cheques Propios de Pago Dif. a pagar,False
+21706,Documentos a Pagar,False
+21801,Pago pendiente de presentación,False
+22200,Plan Mis Facilidades a pagar,False
+22201,Intereses negativos a devengar,False
+22202,Intereses negativos leasing a devengar,False
+22203,Intereses negativos prestamo a devengar,False
+22204,Plan ARBA a pagar,False
+22205,Intereses negativos a devengar Q511718,False
+31100,Capital Social,False
+31101,Revaluo RT 48,False
+31200,Aportes Irrevocables,False
+31201,Ajustes al Capital,False
+32100,Primas de Emisión,False
+32200,Descuentos de Emisión,False
+33100,Reserva Legal,False
+33201,Reserva Estatutaria,False
+33202,Reserva Voluntaria,False
+34100,Resultados No Asignados,False
+34200,Ajustes Resultados de Ejercicios Anteriores,False
+34300,Resultado del Ejercicio,False
+41100,Ventas de Servicios,False
+41101,Ventas de Servicios Exentos,False
+41200,Venta de Servicios al 10.5%,False
+41300,Ventas de Servicios Varios,False
+41301,Venta de Cereales,False
+41302,Ventas Otros,False
+41303,Diferencia Alquileres Cobrados,False
+41400,Descuentos Obtenidos,False
+41500,Intereses Ganados,False
+41600,Ganancia por Tenencia,False
+41700,Otros Ingresos,False
+41800,Resultado por Tenencia Acciones,False
+41801,Resultado por Tenencia,False
+41802,Comisiones Ganadas,False
+41803,Venta de Bienes de Uso,False
+41804,Comisiones Ganadas,False
+41806,Venta de Bienes de Uso,False
+41807,Diferencia de Cambio (manual),False
+42100,Insumos Consumidos,False
+42101,Servicios de Fab. Prestados por 3ros,False
+42201,Sueldos y Jornales,False
+42202,S.A.C.,False
+42203,Cargas Sociales,False
+42204,Gastos para Prestación de Servicios,False
+42205,Honorarios,False
+42206,ART,False
+42301,Insumos para Cirugías,False
+42401,S.V.O,False
+42402,Comisiones Pagadas sobre Ventas,False
+42403,Fletes y Acarreos,False
+42404,Deudores Incobrables,False
+42405,Impuestos sobre los Ingresos Brutos,False
+42406,Impuesto a las Ganancias,False
+42407,Amortizaciones,False
+42408,Tasa de Seguridad e Higiene,False
+42409,Amortizacion Muebles y Utiles,False
+42410,Amortizacion Maquinarias,False
+42411,Gastos Tarjeta Corporativa,False
+42412,Gastos Varios,False
+42413,Gastos de Librería y Papeleria,False
+42414,Gastos de Energía Eléctrica,False
+42415,Publicidad y Propaganda,False
+42416,Gastos de Mant. Equipos de Comp,False
+42417,Sueldos y Jornales Producción,False
+42418,S.A.C. Producción,False
+42419,Contribuciones y Aportes Producción,False
+42420,Gastos de Movilidad Rodados,False
+42421,Seguros Pagados,False
+42422,Alquileres Pagados,False
+42423,Gastos de Teléfonia e Internet,False
+42424,Gastos Servicios de Internet,False
+42425,Servicios de Programacion de 3ros,False
+42426,Gastos del personal,False
+42427,Gastos de Gas,False
+42428,Gastos de Art. de Limpieza,False
+42429,Viaticos y Movilidad,False
+42430,Gastos de Consultorio,False
+42431,Amortizacion de Bienes,False
+42432,Amortizacion Extraordinaria de Bienes,False
+42433,Amortizacion Instalaciones,False
+42434,Amortizacion Equipos de computación,False
+42435,Amortizacion Bienes de Uso,False
+42436,IMPTO DEB Y CRED PUEYRREDON,False
+42437,Gastos de Remodelación,False
+42438,Canon Rodados,False
+42439,Gastos en software,False
+42442,Gastos de Mantenimiento,False
+42443,Gastos de Equipos de Comp,False
+42444,Gastos Previsionales,False
+42445,Gastos de obra social,False
+42446,Ajuste Cuota por Valuacion Bien,False
+42447,Cargos Administrativos Autoahorro,False
+42501,Gastos Bancarios,False
+42502,Intereses Resarcitorios,False
+42503,Credito Fiscal No Computable,False
+42504,Intereses Punitorios,False
+42506,Impuesto a los Debitos,False
+42507,Impuesto a los Creditos,False
+42508,Intereses Bancarios,False
+42509,Gastos Comisiones Tarjetas,False
+42510,Intereses Negativos Leasing,False
+42511,Intereses Financieros Plan de Pagos,False
+42512,Intereses Negativos,False
+42513,Intereses Negativos Mis Facilidades,False
+42514,Impuesto a los Sellos,False
+42515,Multas,False
+42600,Otros Gastos,False
+42601,Resultado por la baja de bienes,False
+42700,Resultado por Exposición a la Inflación,False
+42800,Gastos de Sellados,False
+42900,Impuesto Inmobiliario,False
+42901,Fondo de Promocion Turistico,False
+42902,Gastos Administrativos,False
+42903,Gastos Leasing,False
+42904,Patentes,False
+42905,Gastos Prestamo,False
+43000,Ajuste por redondeo,False
