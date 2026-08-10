@@ -12193,9 +12193,10 @@ def _herramienta_desglose_fct_mercaderia_servicios() -> None:
     st.markdown("#### Desglose FCT — Mercadería / Servicios")
     st.caption(
         "Para sociedades que venden **mercadería y servicios en la misma factura**. "
-        "Subí los PDF de las FCT y una lista de qué conceptos son mercadería y cuáles servicios. "
+        "Subí los PDF de las FCT (ventas) y las listas de conceptos. "
         "El Excel sale con: Detalle de Items Vendidos | Fecha | Comprobante | "
-        "Total Importe | Total IVA | Total Bruto."
+        "Total Importe | Total IVA | Total Bruto. "
+        "El IVA es el de la factura de venta (débito fiscal); no incluye percepciones."
     )
 
     c1, c2 = st.columns(2)

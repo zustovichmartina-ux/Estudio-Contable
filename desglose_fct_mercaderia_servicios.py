@@ -122,41 +122,86 @@ def extraer_comprobante(texto: str, tipo: str) -> str:
 
 
 def totales_documento(texto: str) -> tuple[float, float, float]:
-    """Retorna (neto, iva, bruto) a nivel documento."""
+    """
+    Retorna (neto, iva, bruto) a nivel documento de VENTA.
+    IVA = débito fiscal (IVA 21%/10.5%), NUNCA percepción IVA / IIBB.
+    """
     neto = iva = bruto = 0.0
 
-    def _buscar(*labels: str) -> float:
+    def _buscar(labels: tuple[str, ...], *, excluir: tuple[str, ...] = ()) -> float:
         for lab in labels:
-            m = re.search(
+            for m in re.finditer(
                 lab + r"\s*:?\s*\$?\s*(" + RE_MONEY.pattern + r")",
                 texto,
                 re.I,
-            )
-            if m:
+            ):
+                # Contexto de la línea (evitar Percepción IVA, IIBB, etc.)
+                start = max(0, m.start() - 40)
+                end = min(len(texto), m.end() + 10)
+                ctx = _norm(texto[start:end])
+                if any(ex in ctx for ex in excluir):
+                    continue
                 return parse_ar_money(m.group(1))
         return 0.0
 
+    excl_tributos = (
+        "PERCEP", "PERCEPCION", "RETENC", "SIRCREB", "IIBB", "ING BRUTOS",
+        "INGRESOS BRUTOS", "OTROS TRIBUTOS", "MUNICIPAL",
+    )
+
     neto = _buscar(
-        r"Importe\s+Neto\s+Gravado",
-        r"Neto\s+Gravado",
-        r"Subtotal",
+        (
+            r"Importe\s+Neto\s+Gravado",
+            r"Neto\s+Gravado",
+            r"Subtotal(?!\s+IVA)",
+        ),
+        excluir=excl_tributos,
     )
+    # Solo IVA discriminado de venta (débito fiscal), no percepción
     iva = _buscar(
-        r"IVA\s*21\s*%",
-        r"Importe\s+IVA",
-        r"IVA",
+        (
+            r"IVA\s*21\s*%",
+            r"IVA\s*10[.,]?5\s*%",
+            r"IVA\s*27\s*%",
+            r"Importe\s+IVA\s*21",
+            r"D[eé]bito\s+Fiscal\s+IVA",
+            r"IVA\s+D[eé]bito\s+Fiscal",
+        ),
+        excluir=excl_tributos,
     )
+    # Si no hubo match estricto, buscar "IVA" solo si la línea NO dice percepción
+    if iva <= 0:
+        for m in re.finditer(
+            r"(?m)^(?!.*PERCEP)(?!.*RETENC).{0,40}\bIVA\b(?!\s*PERCEP).{0,20}"
+            r"\$?\s*(" + RE_MONEY.pattern + r")",
+            texto,
+            re.I,
+        ):
+            ctx = _norm(m.group(0))
+            if any(ex in ctx for ex in excl_tributos):
+                continue
+            iva = parse_ar_money(m.group(1))
+            if iva > 0:
+                break
+
     bruto = _buscar(
-        r"Importe\s+Total",
-        r"Total\s+a\s+Pagar",
-        r"Total",
+        (
+            r"Importe\s+Total",
+            r"Total\s+a\s+Pagar",
+        ),
+        excluir=excl_tributos,
     )
     if bruto <= 0 and neto > 0:
         bruto = round(neto + iva, 2)
     if neto <= 0 and bruto > 0 and iva > 0:
         neto = round(bruto - iva, 2)
-    if iva <= 0 and neto > 0 and bruto > neto:
-        iva = round(bruto - neto, 2)
+    if iva <= 0 and neto > 0 and bruto > neto + 0.009:
+        # solo si la diferencia parece IVA (≈21% o 10.5%)
+        dif = round(bruto - neto, 2)
+        if neto > 0 and abs(dif / neto - 0.21) < 0.03:
+            iva = dif
+        elif neto > 0 and abs(dif / neto - 0.105) < 0.03:
+            iva = dif
     return neto, iva, bruto
 
 
@@ -169,19 +214,32 @@ def _parece_linea_item(concepto: str) -> bool:
         "CODIGO PRODUCTO", "PRODUCTO SERVICIO", "CANTIDAD", "PRECIO UNIT",
         "FECHA DE", "CUIT", "RAZON SOCIAL", "CONDICION FRENTE", "PERIODO FACTURADO",
         "OTROS TRIBUTOS", "BONIF", "COMPROBANTE AUTORIZADO",
+        # Ventas: nunca son ítems vendidos
+        "PERCEP", "PERCEPCION", "RETENCION", "RETENCIONES", "SIRCREB",
+        "ING BRUTOS", "INGRESOS BRUTOS", "IIBB", "IMPUESTO", "TRIBUTO",
+        "DEBITO FISCAL", "CREDITO FISCAL",
     )
     return not any(b in c for b in bloqueados)
 
 
 def extraer_items_lineas(texto: str) -> list[dict]:
     """
-    Extrae ítems con subtotal de línea.
-    Heurística: líneas con descripción + monto al final (tabla AFIP).
+    Extrae ítems con subtotal de línea (productos/servicios vendidos).
+    Ignora pie de totales, IVA, percepciones y otros tributos.
     """
     items: list[dict] = []
-    # Cortar pie (CAE / totales globales) para no mezclar
     cuerpo = texto
-    for corte in ("CAE N", "C.A.E", "Importe Neto Gravado", "Importe Total", "Comprobante Autorizado"):
+    for corte in (
+        "CAE N",
+        "C.A.E",
+        "Importe Neto Gravado",
+        "Importe Total",
+        "Comprobante Autorizado",
+        "Otros Tributos",
+        "Percepci",
+        "IVA 21",
+        "IVA 10",
+    ):
         idx = re.search(corte, cuerpo, re.I)
         if idx and idx.start() > 200:
             cuerpo = cuerpo[: idx.start()]
@@ -191,30 +249,32 @@ def extraer_items_lineas(texto: str) -> list[dict]:
         line = raw.strip()
         if not line or len(line) < 5:
             continue
+        # Descartar líneas de tributos aunque tengan monto
+        if re.search(
+            r"percep|retenc|sircreb|iibb|ing\.?\s*brutos|otros\s+tributos|\biva\b",
+            line,
+            re.I,
+        ):
+            continue
         montos = RE_MONEY.findall(line)
         if not montos:
             continue
-        # Último monto = subtotal de la línea
         subtotal = parse_ar_money(montos[-1])
         if subtotal <= 0:
             continue
-        # Quitar montos del final para dejar el concepto
         concepto = line
         for mon in reversed(montos[-3:]):
             pos = concepto.rfind(mon)
             if pos >= 0:
                 concepto = concepto[:pos]
         concepto = re.sub(r"\s+", " ", concepto).strip(" -|\t")
-        # Sacar código numérico inicial típico (002, 001, etc.)
         concepto = re.sub(r"^\d{1,6}\s+", "", concepto).strip()
         if not _parece_linea_item(concepto):
             continue
-        # Evitar líneas que son solo un monto
         if len(_norm(concepto)) < 4:
             continue
         items.append({"concepto": concepto, "subtotal": subtotal})
 
-    # Dedup consecutivos iguales
     out: list[dict] = []
     for it in items:
         if out and out[-1]["concepto"] == it["concepto"] and abs(out[-1]["subtotal"] - it["subtotal"]) < 0.02:
