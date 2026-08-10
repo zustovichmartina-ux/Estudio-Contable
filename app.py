@@ -12212,20 +12212,21 @@ def _herramienta_desglose_fct_mercaderia_servicios() -> None:
             key="chk_desglose_fct_ocr",
         )
     with c2:
-        lista = st.file_uploader(
-            "Lista mercadería / servicios (Excel o TXT)",
+        lista_merc = st.file_uploader(
+            "Lista MERCADERÍA (Excel / CSV / TXT)",
             type=["xlsx", "xls", "csv", "txt"],
             accept_multiple_files=False,
-            key="uploader_desglose_fct_lista",
-            help=(
-                "Excel con columnas Mercadería y Servicios, "
-                "o Concepto+Tipo, o TXT con líneas 'M: …' / 'S: …'."
-            ),
+            key="uploader_desglose_fct_mercaderia",
+            help="Un concepto por fila (primera columna). Ej: Servicios.xlsx pero de mercadería.",
         )
-        st.markdown(
-            "Plantilla rápida TXT:\n"
-            "```\nM: Producto X\nM: Artículo Y\nS: Abono mensual\nS: Honorarios\n```"
+        lista_serv = st.file_uploader(
+            "Lista SERVICIOS (Excel / CSV / TXT)",
+            type=["xlsx", "xls", "csv", "txt"],
+            accept_multiple_files=False,
+            key="uploader_desglose_fct_servicios",
+            help="Un concepto por fila (primera columna).",
         )
+        st.caption("Subí los dos archivos: uno de mercadería y uno de servicios.")
 
     if st.button(
         "Procesar desglose",
@@ -12236,7 +12237,10 @@ def _herramienta_desglose_fct_mercaderia_servicios() -> None:
         with st.spinner("Leyendo facturas y clasificando ítems…"):
             try:
                 detalle, merc, serv, sin_c, errores = procesar_lote(
-                    fcts, lista, usar_ocr=usar_ocr
+                    fcts,
+                    lista_mercaderia=lista_merc,
+                    lista_servicios=lista_serv,
+                    usar_ocr=usar_ocr,
                 )
                 xlsx = exportar_excel_bytes(
                     detalle,

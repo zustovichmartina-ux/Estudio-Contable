@@ -223,13 +223,84 @@ def extraer_items_lineas(texto: str) -> list[dict]:
     return out
 
 
-def cargar_lista_clasificacion(fuente: Any) -> tuple[list[str], list[str]]:
+def _leer_conceptos_de_archivo(fuente: Any) -> list[str]:
+    """Lee una lista de conceptos desde Excel/CSV/TXT (primera columna útil)."""
+    if fuente is None:
+        return []
+
+    nombre = str(getattr(fuente, "name", "") or "").lower()
+    data = fuente.read() if hasattr(fuente, "read") else fuente
+    if hasattr(fuente, "seek"):
+        try:
+            fuente.seek(0)
+        except Exception:
+            pass
+
+    if isinstance(data, str):
+        data = data.encode("utf-8")
+    if not isinstance(data, (bytes, bytearray)):
+        return []
+
+    # TXT: una línea = un concepto (ignora prefijos M:/S: si vienen)
+    if nombre.endswith(".txt") or (not nombre.endswith((".xlsx", ".xls", ".csv")) and b"\x00" not in data[:20]):
+        text = data.decode("utf-8", errors="replace")
+        out: list[str] = []
+        for line in text.splitlines():
+            s = line.strip()
+            if not s or s.startswith("#"):
+                continue
+            s = re.sub(r"^(m:|s:|mercader[ií]a|servicios?)\s*:?\s*", "", s, flags=re.I).strip()
+            if s:
+                out.append(s)
+        return out
+
+    bio = io.BytesIO(bytes(data))
+    if nombre.endswith(".csv"):
+        df = pd.read_csv(bio)
+    else:
+        df = pd.read_excel(bio)
+
+    cols = {_norm(c): c for c in df.columns}
+    # Preferir columna con nombre explícito; si no, la primera
+    prefer = next(
+        (
+            cols[k]
+            for k in cols
+            if k in {"CONCEPTO", "ITEM", "DETALLE", "PRODUCTO", "NOMBRE", "SERVICIO", "SERVICIOS", "MERCADERIA", "MERCADERIA"}
+            or "CONCEPTO" in k
+            or "PRODUCTO" in k
+            or "SERVIC" in k
+            or "MERC" in k
+            or "DETALLE" in k
+        ),
+        None,
+    )
+    col = prefer or df.columns[0]
+    return [str(x).strip() for x in df[col].dropna().tolist() if str(x).strip() and str(x).strip().lower() != "nan"]
+
+
+def cargar_lista_clasificacion(
+    fuente: Any = None,
+    *,
+    fuente_mercaderia: Any = None,
+    fuente_servicios: Any = None,
+) -> tuple[list[str], list[str]]:
     """
-    Excel/CSV/TXT con columnas Mercadería|Servicios, o una columna Tipo + Concepto.
-    También acepta texto plano: líneas 'M: xxx' / 'S: xxx'.
+    Dos archivos separados (recomendado) o uno combinado (legacy).
+
+    - fuente_mercaderia / fuente_servicios: Excel/CSV/TXT con conceptos
+    - fuente: Excel con columnas Mercadería|Servicios, Concepto+Tipo, o TXT M:/S:
     """
     merc: list[str] = []
     serv: list[str] = []
+
+    if fuente_mercaderia is not None:
+        merc = _leer_conceptos_de_archivo(fuente_mercaderia)
+    if fuente_servicios is not None:
+        serv = _leer_conceptos_de_archivo(fuente_servicios)
+
+    if merc or serv:
+        return merc, serv
 
     if fuente is None:
         return merc, serv
@@ -247,7 +318,7 @@ def cargar_lista_clasificacion(fuente: Any) -> tuple[list[str], list[str]]:
 
     bio = io.BytesIO(data if isinstance(data, (bytes, bytearray)) else bytes(data))
 
-    # TXT
+    # TXT combinado
     if nombre.endswith(".txt") or (not nombre.endswith((".xlsx", ".xls", ".csv")) and b"\x00" not in data[:20]):
         try:
             text = data.decode("utf-8", errors="replace") if isinstance(data, (bytes, bytearray)) else str(data)
@@ -262,19 +333,16 @@ def cargar_lista_clasificacion(fuente: Any) -> tuple[list[str], list[str]]:
                 merc.append(re.sub(r"^(m:|mercader[ií]a)\s*:?\s*", "", s, flags=re.I).strip())
             elif low.startswith(("s:", "serv", "servicio")):
                 serv.append(re.sub(r"^(s:|servicios?)\s*:?\s*", "", s, flags=re.I).strip())
-            else:
-                # sin prefijo → se intenta después por fuzzy contra ambas listas vacías: ir a servicios por defecto no
-                pass
         return [x for x in merc if x], [x for x in serv if x]
 
-    # Excel / CSV
+    # Excel / CSV combinado
     bio.seek(0)
     if nombre.endswith(".csv"):
         df = pd.read_csv(bio)
     else:
         df = pd.read_excel(bio)
 
-    cols = { _norm(c): c for c in df.columns }
+    cols = {_norm(c): c for c in df.columns}
     col_m = next((cols[k] for k in cols if "MERC" in k), None)
     col_s = next((cols[k] for k in cols if "SERV" in k), None)
     col_tipo = next((cols[k] for k in cols if k in {"TIPO", "CLASE", "RUBRO"}), None)
@@ -296,7 +364,6 @@ def cargar_lista_clasificacion(fuente: Any) -> tuple[list[str], list[str]]:
             elif "SERV" in tip:
                 serv.append(conc)
     else:
-        # Primera columna conceptos, segunda tipo
         if len(df.columns) >= 2:
             c0, c1 = df.columns[0], df.columns[1]
             for _, row in df.iterrows():
@@ -435,9 +502,15 @@ def procesar_lote(
     archivos: Iterable[Any],
     lista_clasificacion: Any = None,
     *,
+    lista_mercaderia: Any = None,
+    lista_servicios: Any = None,
     usar_ocr: bool = True,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, list[dict]]:
-    merc, serv = cargar_lista_clasificacion(lista_clasificacion)
+    merc, serv = cargar_lista_clasificacion(
+        lista_clasificacion,
+        fuente_mercaderia=lista_mercaderia,
+        fuente_servicios=lista_servicios,
+    )
     todas: list[dict] = []
     metas: list[dict] = []
     errores: list[dict] = []
