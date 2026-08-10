@@ -10795,6 +10795,19 @@ def _seccion_conciliacion_bancaria_balance() -> None:
             banco_elegido, sociedad_id, cuit_activo, nombre_activo, plan_vinculado,
         )
 
+        # Motor de conciliación (extracto PDF → reglas → match proveedores/VEPs)
+        try:
+            from ui_motor_conciliacion import render_motor_conciliacion
+
+            render_motor_conciliacion(
+                sociedad_id=int(sociedad_id),
+                banco_elegido=str(banco_elegido or ""),
+                cuit_activo=cuit_activo,
+                nombre_activo=nombre_activo,
+            )
+        except Exception as exc:
+            st.error(f"Motor de conciliación no disponible: {exc}")
+
 
 def _seccion_devengamientos_iibb(
     sociedad_id: int,

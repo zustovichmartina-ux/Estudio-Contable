@@ -209,10 +209,12 @@ def inicializar_bd() -> None:
 
         auth_oficina.inicializar_tabla_usuarios_oficina(conn)
         _inicializar_tablas_sueldos(conn)
+        _inicializar_tablas_conciliacion(conn)
         conn.commit()
     auth_oficina.sembrar_usuarios_oficina_default()
     _sembrar_convenios_sueldos_default()
     _reset_cct_comercio_masivo_si_corresponde()
+    sembrar_reglas_conciliacion_default()
 
 
 def _reglas_cct_basicas() -> dict:
@@ -1223,3 +1225,358 @@ def resumen_sueldos_empresas(periodo: str) -> list[dict]:
                 }
             )
     return out
+
+
+# ---------------------------------------------------------------------------
+# Motor de conciliacion bancaria
+# ---------------------------------------------------------------------------
+
+def _inicializar_tablas_conciliacion(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS clasificacion_reglas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patron TEXT NOT NULL,
+            categoria TEXT NOT NULL,
+            tipo TEXT NOT NULL,
+            orden INTEGER NOT NULL DEFAULT 0,
+            activo INTEGER NOT NULL DEFAULT 1,
+            creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS bank_transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cliente_id INTEGER NOT NULL,
+            banco TEXT NOT NULL DEFAULT '',
+            periodo TEXT,
+            fecha TEXT,
+            descripcion TEXT NOT NULL DEFAULT '',
+            credito TEXT NOT NULL DEFAULT '0.00',
+            debito TEXT NOT NULL DEFAULT '0.00',
+            saldo TEXT NOT NULL DEFAULT '0.00',
+            categoria TEXT NOT NULL DEFAULT '',
+            tipo TEXT NOT NULL DEFAULT '',
+            estado TEXT NOT NULL DEFAULT 'PENDIENTE',
+            match_detalle TEXT,
+            match_ref_id TEXT,
+            creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS proveedores_pendientes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cliente_id INTEGER NOT NULL,
+            fecha TEXT,
+            tipo_comp TEXT NOT NULL DEFAULT '',
+            num_comp TEXT NOT NULL DEFAULT '',
+            razon_social TEXT NOT NULL DEFAULT '',
+            importe TEXT NOT NULL DEFAULT '0.00',
+            usado INTEGER NOT NULL DEFAULT 0,
+            creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS veps_afip (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cliente_id INTEGER NOT NULL,
+            numero_vep TEXT NOT NULL DEFAULT '',
+            fecha TEXT,
+            importe TEXT NOT NULL DEFAULT '0.00',
+            impuesto TEXT NOT NULL DEFAULT '',
+            periodo_fiscal TEXT NOT NULL DEFAULT '',
+            creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS conciliacion_auditoria (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cliente_id INTEGER,
+            movimiento_id INTEGER,
+            usuario TEXT NOT NULL DEFAULT '',
+            accion TEXT NOT NULL DEFAULT '',
+            categoria_anterior TEXT,
+            categoria_nueva TEXT,
+            detalle TEXT,
+            creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+
+
+def sembrar_reglas_conciliacion_default() -> None:
+    """Inserta el diccionario del prompt solo si la tabla esta vacia."""
+    from motor_conciliacion import REGLAS_SEED
+
+    with obtener_conexion() as conn:
+        n = conn.execute("SELECT COUNT(*) AS n FROM clasificacion_reglas").fetchone()["n"]
+        if n and int(n) > 0:
+            return
+        for i, (patron, categoria, tipo) in enumerate(REGLAS_SEED):
+            conn.execute(
+                """
+                INSERT INTO clasificacion_reglas (patron, categoria, tipo, orden, activo)
+                VALUES (?, ?, ?, ?, 1)
+                """,
+                (patron, categoria, tipo, i),
+            )
+        conn.commit()
+
+
+def listar_reglas_clasificacion(solo_activas: bool = False) -> list[dict]:
+    q = "SELECT * FROM clasificacion_reglas"
+    if solo_activas:
+        q += " WHERE activo = 1"
+    q += " ORDER BY orden ASC, id ASC"
+    with obtener_conexion() as conn:
+        return [dict(r) for r in conn.execute(q).fetchall()]
+
+
+def agregar_regla_clasificacion(patron: str, categoria: str, tipo: str, orden: int | None = None) -> int:
+    with obtener_conexion() as conn:
+        if orden is None:
+            row = conn.execute("SELECT COALESCE(MAX(orden), -1) + 1 AS o FROM clasificacion_reglas").fetchone()
+            orden = int(row["o"])
+        cur = conn.execute(
+            """
+            INSERT INTO clasificacion_reglas (patron, categoria, tipo, orden, activo)
+            VALUES (?, ?, ?, ?, 1)
+            """,
+            (patron.strip(), categoria.strip(), tipo.strip(), int(orden)),
+        )
+        conn.commit()
+        return int(cur.lastrowid)
+
+
+def actualizar_regla_clasificacion(regla_id: int, **campos) -> None:
+    allowed = {"patron", "categoria", "tipo", "orden", "activo"}
+    parts = []
+    vals = []
+    for k, v in campos.items():
+        if k in allowed:
+            parts.append(f"{k} = ?")
+            vals.append(v)
+    if not parts:
+        return
+    vals.append(regla_id)
+    with obtener_conexion() as conn:
+        conn.execute(f"UPDATE clasificacion_reglas SET {', '.join(parts)} WHERE id = ?", vals)
+        conn.commit()
+
+
+def borrar_movimientos_periodo(cliente_id: int, periodo: str | None = None, banco: str | None = None) -> None:
+    with obtener_conexion() as conn:
+        q = "DELETE FROM bank_transactions WHERE cliente_id = ?"
+        args: list = [cliente_id]
+        if periodo:
+            q += " AND periodo = ?"
+            args.append(periodo)
+        if banco:
+            q += " AND banco = ?"
+            args.append(banco)
+        conn.execute(q, args)
+        conn.commit()
+
+
+def insertar_movimientos_banco(filas: list[dict]) -> int:
+    if not filas:
+        return 0
+    with obtener_conexion() as conn:
+        for f in filas:
+            periodo = f.get("periodo")
+            if hasattr(periodo, "isoformat"):
+                periodo = periodo.isoformat()
+            fecha = f.get("fecha")
+            if hasattr(fecha, "isoformat"):
+                fecha = fecha.isoformat()
+            conn.execute(
+                """
+                INSERT INTO bank_transactions (
+                    cliente_id, banco, periodo, fecha, descripcion,
+                    credito, debito, saldo, categoria, tipo, estado,
+                    match_detalle, match_ref_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    int(f["cliente_id"]),
+                    str(f.get("banco") or ""),
+                    periodo,
+                    fecha,
+                    str(f.get("descripcion") or ""),
+                    str(f.get("credito") or "0.00"),
+                    str(f.get("debito") or "0.00"),
+                    str(f.get("saldo") or "0.00"),
+                    str(f.get("categoria") or ""),
+                    str(f.get("tipo") or ""),
+                    str(f.get("estado") or "PENDIENTE"),
+                    f.get("match_detalle"),
+                    f.get("match_ref_id"),
+                ),
+            )
+        conn.commit()
+        return len(filas)
+
+
+def listar_movimientos_banco(
+    cliente_id: int,
+    periodo: str | None = None,
+    banco: str | None = None,
+    estado: str | None = None,
+) -> list[dict]:
+    q = "SELECT * FROM bank_transactions WHERE cliente_id = ?"
+    args: list = [cliente_id]
+    if periodo:
+        q += " AND periodo = ?"
+        args.append(periodo)
+    if banco:
+        q += " AND banco = ?"
+        args.append(banco)
+    if estado:
+        q += " AND estado = ?"
+        args.append(estado)
+    q += " ORDER BY fecha ASC, id ASC"
+    with obtener_conexion() as conn:
+        return [dict(r) for r in conn.execute(q, args).fetchall()]
+
+
+def actualizar_movimiento_banco(mov_id: int, **campos) -> None:
+    allowed = {"categoria", "tipo", "estado", "match_detalle", "match_ref_id"}
+    parts, vals = [], []
+    for k, v in campos.items():
+        if k in allowed:
+            parts.append(f"{k} = ?")
+            vals.append(v)
+    if not parts:
+        return
+    vals.append(mov_id)
+    with obtener_conexion() as conn:
+        conn.execute(f"UPDATE bank_transactions SET {', '.join(parts)} WHERE id = ?", vals)
+        conn.commit()
+
+
+def registrar_auditoria_conciliacion(
+    *,
+    cliente_id: int | None,
+    movimiento_id: int | None,
+    usuario: str,
+    accion: str,
+    categoria_anterior: str | None = None,
+    categoria_nueva: str | None = None,
+    detalle: str | None = None,
+) -> None:
+    with obtener_conexion() as conn:
+        conn.execute(
+            """
+            INSERT INTO conciliacion_auditoria (
+                cliente_id, movimiento_id, usuario, accion,
+                categoria_anterior, categoria_nueva, detalle
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                cliente_id,
+                movimiento_id,
+                usuario or "",
+                accion,
+                categoria_anterior,
+                categoria_nueva,
+                detalle,
+            ),
+        )
+        conn.commit()
+
+
+def reemplazar_proveedores_pendientes(cliente_id: int, filas: list[dict]) -> int:
+    with obtener_conexion() as conn:
+        conn.execute("DELETE FROM proveedores_pendientes WHERE cliente_id = ?", (cliente_id,))
+        for f in filas:
+            fecha = f.get("fecha")
+            if hasattr(fecha, "isoformat"):
+                fecha = fecha.isoformat()
+            conn.execute(
+                """
+                INSERT INTO proveedores_pendientes (
+                    cliente_id, fecha, tipo_comp, num_comp, razon_social, importe, usado
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    cliente_id,
+                    fecha,
+                    str(f.get("tipo_comp") or f.get("tipo") or ""),
+                    str(f.get("num_comp") or f.get("comprobante") or ""),
+                    str(f.get("razon_social") or f.get("proveedor") or ""),
+                    str(f.get("importe") or "0.00"),
+                    1 if f.get("usado") else 0,
+                ),
+            )
+        conn.commit()
+        return len(filas)
+
+
+def listar_proveedores_pendientes(cliente_id: int, solo_libres: bool = True) -> list[dict]:
+    q = "SELECT * FROM proveedores_pendientes WHERE cliente_id = ?"
+    args: list = [cliente_id]
+    if solo_libres:
+        q += " AND usado = 0"
+    q += " ORDER BY fecha ASC, id ASC"
+    with obtener_conexion() as conn:
+        rows = [dict(r) for r in conn.execute(q, args).fetchall()]
+    for r in rows:
+        r["usado"] = bool(r.get("usado"))
+    return rows
+
+
+def marcar_proveedor_usado(factura_id: int, usado: bool = True) -> None:
+    with obtener_conexion() as conn:
+        conn.execute(
+            "UPDATE proveedores_pendientes SET usado = ? WHERE id = ?",
+            (1 if usado else 0, factura_id),
+        )
+        conn.commit()
+
+
+def reemplazar_veps_afip(cliente_id: int, filas: list[dict]) -> int:
+    with obtener_conexion() as conn:
+        conn.execute("DELETE FROM veps_afip WHERE cliente_id = ?", (cliente_id,))
+        for f in filas:
+            fecha = f.get("fecha")
+            if hasattr(fecha, "isoformat"):
+                fecha = fecha.isoformat()
+            conn.execute(
+                """
+                INSERT INTO veps_afip (
+                    cliente_id, numero_vep, fecha, importe, impuesto, periodo_fiscal
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    cliente_id,
+                    str(f.get("numero_vep") or ""),
+                    fecha,
+                    str(f.get("importe") or "0.00"),
+                    str(f.get("impuesto") or ""),
+                    str(f.get("periodo_fiscal") or ""),
+                ),
+            )
+        conn.commit()
+        return len(filas)
+
+
+def listar_veps_afip(cliente_id: int) -> list[dict]:
+    with obtener_conexion() as conn:
+        return [
+            dict(r)
+            for r in conn.execute(
+                "SELECT * FROM veps_afip WHERE cliente_id = ? ORDER BY fecha ASC, id ASC",
+                (cliente_id,),
+            ).fetchall()
+        ]
