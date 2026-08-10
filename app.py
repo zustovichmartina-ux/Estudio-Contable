@@ -12186,6 +12186,118 @@ def _herramienta_caja_usd() -> None:
         )
 
 
+def _herramienta_desglose_fct_mercaderia_servicios() -> None:
+    """PDF de FCT de venta + lista mercadería/servicios → Excel de ítems."""
+    from desglose_fct_mercaderia_servicios import exportar_excel_bytes, procesar_lote
+
+    st.markdown("#### Desglose FCT — Mercadería / Servicios")
+    st.caption(
+        "Para sociedades que venden **mercadería y servicios en la misma factura**. "
+        "Subí los PDF de las FCT y una lista de qué conceptos son mercadería y cuáles servicios. "
+        "El Excel sale con: Detalle de Items Vendidos | Fecha | Comprobante | "
+        "Total Importe | Total IVA | Total Bruto."
+    )
+
+    c1, c2 = st.columns(2)
+    with c1:
+        fcts = st.file_uploader(
+            "Facturas de venta (PDF)",
+            type=["pdf"],
+            accept_multiple_files=True,
+            key="uploader_desglose_fct_pdfs",
+        )
+        usar_ocr = st.checkbox(
+            "OCR si el PDF es escaneado",
+            value=True,
+            key="chk_desglose_fct_ocr",
+        )
+    with c2:
+        lista = st.file_uploader(
+            "Lista mercadería / servicios (Excel o TXT)",
+            type=["xlsx", "xls", "csv", "txt"],
+            accept_multiple_files=False,
+            key="uploader_desglose_fct_lista",
+            help=(
+                "Excel con columnas Mercadería y Servicios, "
+                "o Concepto+Tipo, o TXT con líneas 'M: …' / 'S: …'."
+            ),
+        )
+        st.markdown(
+            "Plantilla rápida TXT:\n"
+            "```\nM: Producto X\nM: Artículo Y\nS: Abono mensual\nS: Honorarios\n```"
+        )
+
+    if st.button(
+        "Procesar desglose",
+        type="primary",
+        key="btn_desglose_fct",
+        disabled=not bool(fcts),
+    ):
+        with st.spinner("Leyendo facturas y clasificando ítems…"):
+            try:
+                detalle, merc, serv, sin_c, errores = procesar_lote(
+                    fcts, lista, usar_ocr=usar_ocr
+                )
+                xlsx = exportar_excel_bytes(
+                    detalle,
+                    merc,
+                    serv,
+                    sin_c,
+                    titulo="Desglose FCT — Mercadería y Servicios",
+                    subtitulo=str(st.session_state.get("nombre_activo") or ""),
+                )
+            except Exception as exc:
+                st.error(f"No se pudo procesar: {exc}")
+                return
+        st.session_state["desglose_fct_detalle"] = detalle
+        st.session_state["desglose_fct_merc"] = merc
+        st.session_state["desglose_fct_serv"] = serv
+        st.session_state["desglose_fct_sin"] = sin_c
+        st.session_state["desglose_fct_err"] = errores
+        st.session_state["desglose_fct_xlsx"] = xlsx
+        st.success(f"Listo: {len(detalle)} ítems.")
+        st.rerun()
+
+    errores = st.session_state.get("desglose_fct_err") or []
+    if errores:
+        with st.expander(f"Advertencias ({len(errores)})", expanded=False):
+            st.dataframe(pd.DataFrame(errores), use_container_width=True, hide_index=True)
+
+    xlsx = st.session_state.get("desglose_fct_xlsx")
+    detalle = st.session_state.get("desglose_fct_detalle")
+    if detalle is None or xlsx is None:
+        return
+
+    merc = st.session_state.get("desglose_fct_merc")
+    serv = st.session_state.get("desglose_fct_serv")
+    sin_c = st.session_state.get("desglose_fct_sin")
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Ítems", len(detalle))
+    k2.metric("Mercadería", 0 if merc is None else len(merc))
+    k3.metric("Servicios", 0 if serv is None else len(serv))
+    k4.metric("Sin clasificar", 0 if sin_c is None else len(sin_c))
+
+    tabs = st.tabs(["Lista", "Mercadería", "Servicios", "Sin clasificar"])
+    with tabs[0]:
+        st.dataframe(detalle, use_container_width=True, hide_index=True)
+    with tabs[1]:
+        st.dataframe(merc if merc is not None else pd.DataFrame(), use_container_width=True, hide_index=True)
+    with tabs[2]:
+        st.dataframe(serv if serv is not None else pd.DataFrame(), use_container_width=True, hide_index=True)
+    with tabs[3]:
+        st.dataframe(sin_c if sin_c is not None else pd.DataFrame(), use_container_width=True, hide_index=True)
+
+    st.download_button(
+        "Descargar Excel",
+        data=xlsx,
+        file_name=f"Desglose_FCT_Mercaderia_Servicios_{date.today().strftime('%Y%m%d')}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        type="primary",
+        key="dl_desglose_fct",
+        use_container_width=True,
+    )
+
+
 def _herramienta_cruce_facturas_arca() -> None:
     """Cruza facturas PDF/fotos vs Mis Comprobantes ARCA (portal IVA)."""
     st.markdown("#### Cruce Facturas vs ARCA")
@@ -12318,9 +12430,10 @@ def _seccion_herramientas() -> None:
             "Convertidor de Liquidaciones de Tarjeta",
             "Match débitos - proveedores",
             "Cruce Facturas vs ARCA",
+            "Desglose FCT Mercadería / Servicios",
         ],
         index=0,
-        key="herramientas_selectbox_v9",
+        key="herramientas_selectbox_v10",
     )
     st.divider()
 
@@ -12340,6 +12453,8 @@ def _seccion_herramientas() -> None:
         _herramienta_match_debitos_proveedores()
     elif herramienta_activa == "Cruce Facturas vs ARCA":
         _herramienta_cruce_facturas_arca()
+    elif herramienta_activa == "Desglose FCT Mercadería / Servicios":
+        _herramienta_desglose_fct_mercaderia_servicios()
 
 def _seccion_recategorizacion_monotributo() -> None:
     """Análisis de períodos devengados en facturas electrónicas AFIP (PDF / ZIP)."""
