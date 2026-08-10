@@ -12187,16 +12187,27 @@ def _herramienta_caja_usd() -> None:
 
 
 def _herramienta_desglose_fct_mercaderia_servicios() -> None:
-    """PDF de FCT de venta + lista mercadería/servicios → Excel de ítems."""
-    from desglose_fct_mercaderia_servicios import exportar_excel_bytes, procesar_lote
+    """PDF de FCT de venta → una fila por línea de detalle (+ clasif. opcional)."""
+    import importlib
 
-    st.markdown("#### Desglose FCT — Mercadería / Servicios")
-    st.caption(
-        "Para sociedades que venden **mercadería y servicios en la misma factura**. "
-        "Subí los PDF de las FCT (ventas) y las listas de conceptos. "
-        "El Excel sale con: Detalle de Items Vendidos | Fecha | Comprobante | "
-        "Total Importe | Total IVA | Total Bruto. "
-        "El IVA es el de la factura de venta (débito fiscal); no incluye percepciones."
+    import extraccion_detalle_facturas as _edf
+
+    importlib.reload(_edf)
+    exportar_excel_bytes = _edf.exportar_excel_bytes
+    procesar_carpeta_o_uploads = _edf.procesar_carpeta_o_uploads
+
+    # Invalidar resultado cacheado de versiones viejas (todo marcado Factura A)
+    if st.session_state.get("desglose_fct_engine_ver") != "segregacion_v2":
+        st.session_state.pop("desglose_fct_resultado", None)
+        st.session_state.pop("desglose_fct_xlsx", None)
+        st.session_state["desglose_fct_engine_ver"] = "segregacion_v2"
+
+    st.markdown("#### Desglose FCT — Detalle de ítems")
+    st.info(
+        "Una fila por **línea de detalle**. "
+        "El tipo (A / B / NC) se lee del **nombre del PDF** "
+        "(`FACTURA_A-…`, `FACTURA_B-…`, `NOTA_DE_CREDITO_B-…`) y del texto. "
+        "Por defecto procesa **todas** las subidas."
     )
 
     c1, c2 = st.columns(2)
@@ -12206,28 +12217,39 @@ def _herramienta_desglose_fct_mercaderia_servicios() -> None:
             type=["pdf"],
             accept_multiple_files=True,
             key="uploader_desglose_fct_pdfs",
+            help="Podés subir muchas a la vez. Cada concepto genera su propia fila.",
         )
-        usar_ocr = st.checkbox(
-            "OCR si el PDF es escaneado",
-            value=True,
-            key="chk_desglose_fct_ocr",
+        modo_lote = st.radio(
+            "Alcance del lote",
+            ["Todos", "Piloto (50 mixtas A/B)"],
+            horizontal=True,
+            key="desglose_fct_modo_lote_v2",
+            help=(
+                "Por defecto procesa todas. "
+                "Piloto toma ~50 mezclando Factura A y B (no solo las primeras A por nombre)."
+            ),
         )
     with c2:
         lista_merc = st.file_uploader(
-            "Lista MERCADERÍA (Excel / CSV / TXT)",
-            type=["xlsx", "xls", "csv", "txt"],
+            "Lista MERCADERÍA (para clasificar)",
+            type=["xlsx", "xls", "csv", "txt", "pdf"],
             accept_multiple_files=False,
             key="uploader_desglose_fct_mercaderia",
-            help="Un concepto por fila (primera columna). Ej: Servicios.xlsx pero de mercadería.",
+            help="Un concepto por fila. Ej.: Mercaderias.pdf",
         )
         lista_serv = st.file_uploader(
-            "Lista SERVICIOS (Excel / CSV / TXT)",
-            type=["xlsx", "xls", "csv", "txt"],
+            "Lista SERVICIOS (para clasificar)",
+            type=["xlsx", "xls", "csv", "txt", "pdf"],
             accept_multiple_files=False,
             key="uploader_desglose_fct_servicios",
-            help="Un concepto por fila (primera columna).",
+            help="Un concepto por fila. Ej.: Servicios.pdf",
         )
-        st.caption("Subí los dos archivos: uno de mercadería y uno de servicios.")
+
+    if fcts and not (lista_merc and lista_serv):
+        st.warning(
+            "Sin listas mercadería/servicios, las filas salen como **PENDIENTE**. "
+            "Subí las dos listas para clasificar."
+        )
 
     if st.button(
         "Procesar desglose",
@@ -12235,72 +12257,115 @@ def _herramienta_desglose_fct_mercaderia_servicios() -> None:
         key="btn_desglose_fct",
         disabled=not bool(fcts),
     ):
-        with st.spinner("Leyendo facturas y clasificando ítems…"):
+        with st.spinner("Leyendo facturas (una fila por concepto)…"):
             try:
-                detalle, merc, serv, sin_c, errores = procesar_lote(
-                    fcts,
-                    lista_mercaderia=lista_merc,
-                    lista_servicios=lista_serv,
-                    usar_ocr=usar_ocr,
+                fcts_limpios = []
+                auto_merc = lista_merc
+                auto_serv = lista_serv
+                for f in fcts or []:
+                    nom = str(getattr(f, "name", "") or "").upper()
+                    if nom in {"MERCADERIAS.PDF", "MERCADERÍAS.PDF"} and auto_merc is None:
+                        auto_merc = f
+                        continue
+                    if nom == "SERVICIOS.PDF" and auto_serv is None:
+                        auto_serv = f
+                        continue
+                    fcts_limpios.append(f)
+                limite = 50 if "Piloto" in str(modo_lote) else None
+                resultado = procesar_carpeta_o_uploads(
+                    fcts_limpios,
+                    lista_mercaderia=auto_merc,
+                    lista_servicios=auto_serv,
+                    limite=limite,
                 )
                 xlsx = exportar_excel_bytes(
-                    detalle,
-                    merc,
-                    serv,
-                    sin_c,
-                    titulo="Desglose FCT — Mercadería y Servicios",
+                    resultado,
+                    titulo="Detalle de ítems — Facturas de venta",
                     subtitulo=str(st.session_state.get("nombre_activo") or ""),
                 )
             except Exception as exc:
                 st.error(f"No se pudo procesar: {exc}")
                 return
-        st.session_state["desglose_fct_detalle"] = detalle
-        st.session_state["desglose_fct_merc"] = merc
-        st.session_state["desglose_fct_serv"] = serv
-        st.session_state["desglose_fct_sin"] = sin_c
-        st.session_state["desglose_fct_err"] = errores
+        st.session_state["desglose_fct_resultado"] = resultado
         st.session_state["desglose_fct_xlsx"] = xlsx
-        st.success(f"Listo: {len(detalle)} ítems.")
+        r = resultado.get("resumen") or {}
+        tipos = r.get("tipos") or {}
+        tipos_txt = " · ".join(f"{k}: {v}" for k, v in tipos.items()) or "sin tipos"
+        st.success(
+            f"Listo: {r.get('filas_detalle', 0)} filas · "
+            f"{r.get('pdfs_ok', 0)}/{r.get('pdfs_encontrados', 0)} PDF OK · "
+            f"Tipos → {tipos_txt}"
+        )
         st.rerun()
 
-    errores = st.session_state.get("desglose_fct_err") or []
-    if errores:
-        with st.expander(f"Advertencias ({len(errores)})", expanded=False):
-            st.dataframe(pd.DataFrame(errores), use_container_width=True, hide_index=True)
-
+    resultado = st.session_state.get("desglose_fct_resultado")
     xlsx = st.session_state.get("desglose_fct_xlsx")
-    detalle = st.session_state.get("desglose_fct_detalle")
-    if detalle is None or xlsx is None:
+    if resultado is None or xlsx is None:
         return
 
-    merc = st.session_state.get("desglose_fct_merc")
-    serv = st.session_state.get("desglose_fct_serv")
-    sin_c = st.session_state.get("desglose_fct_sin")
-    k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Ítems", len(detalle))
-    k2.metric("Mercadería", 0 if merc is None else len(merc))
-    k3.metric("Servicios", 0 if serv is None else len(serv))
-    k4.metric("Sin clasificar", 0 if sin_c is None else len(sin_c))
+    detalle = resultado.get("detalle")
+    if detalle is None:
+        detalle = pd.DataFrame()
+    r = resultado.get("resumen") or {}
+    fallidos = resultado.get("fallidos") or []
+    ocr_list = resultado.get("requiere_ocr") or []
+    pruebas = resultado.get("pruebas_tecnicas") or []
 
-    tabs = st.tabs(["Lista", "Mercadería", "Servicios", "Sin clasificar"])
-    with tabs[0]:
+    k1, k2, k3, k4, k5 = st.columns(5)
+    k1.metric("PDFs OK", f"{r.get('pdfs_ok', 0)}/{r.get('pdfs_encontrados', 0)}")
+    k2.metric("Filas", r.get("filas_detalle", 0))
+    k3.metric("Revisar", r.get("facturas_revisar", 0))
+    k4.metric("Alíq. estimada", r.get("alicuota_estimada", 0))
+    k5.metric("PENDIENTE", r.get("clasif_pendiente", 0))
+
+    tipos = r.get("tipos") or {}
+    if tipos:
+        st.caption("Tipos en el detalle: " + " · ".join(f"**{k}** {v}" for k, v in tipos.items()))
+    elif not detalle.empty and "Tipo Comprobante" in detalle.columns:
+        vc = detalle["Tipo Comprobante"].astype(str).value_counts().to_dict()
+        st.caption("Tipos en el detalle: " + " · ".join(f"**{k}** {v}" for k, v in vc.items()))
+
+    if fallidos:
+        with st.expander(f"No leídos ({len(fallidos)})", expanded=False):
+            st.dataframe(pd.DataFrame(fallidos), use_container_width=True, hide_index=True)
+    if ocr_list:
+        with st.expander(f"Requiere OCR / manual ({len(ocr_list)})", expanded=True):
+            st.dataframe(pd.DataFrame(ocr_list), use_container_width=True, hide_index=True)
+            st.info(
+                "Estos PDF no tienen texto seleccionable (escaneados). "
+                "Hay que pasarlos por OCR o cargar el detalle a mano."
+            )
+    if pruebas:
+        with st.expander(f"Pruebas técnicas ({len(pruebas)})", expanded=False):
+            st.dataframe(pd.DataFrame(pruebas), use_container_width=True, hide_index=True)
+
+    if not detalle.empty and "Servicio/Mercadería" in detalle.columns:
+        clase = detalle["Servicio/Mercadería"].astype(str)
+        merc = detalle.loc[clase == "Mercadería"]
+        serv = detalle.loc[clase == "Servicio"]
+        pend = detalle.loc[clase.str.startswith("PENDIENTE")]
+        tabs = st.tabs(["Detalle", "Mercadería", "Servicios", "PENDIENTE"])
+        with tabs[0]:
+            st.dataframe(detalle, use_container_width=True, hide_index=True)
+        with tabs[1]:
+            st.dataframe(merc, use_container_width=True, hide_index=True)
+        with tabs[2]:
+            st.dataframe(serv, use_container_width=True, hide_index=True)
+        with tabs[3]:
+            st.dataframe(pend, use_container_width=True, hide_index=True)
+    else:
         st.dataframe(detalle, use_container_width=True, hide_index=True)
-    with tabs[1]:
-        st.dataframe(merc if merc is not None else pd.DataFrame(), use_container_width=True, hide_index=True)
-    with tabs[2]:
-        st.dataframe(serv if serv is not None else pd.DataFrame(), use_container_width=True, hide_index=True)
-    with tabs[3]:
-        st.dataframe(sin_c if sin_c is not None else pd.DataFrame(), use_container_width=True, hide_index=True)
 
     st.download_button(
         "Descargar Excel",
         data=xlsx,
-        file_name=f"Desglose_FCT_Mercaderia_Servicios_{date.today().strftime('%Y%m%d')}.xlsx",
+        file_name=f"Detalle_Items_FCT_{date.today().strftime('%Y%m%d')}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         type="primary",
         key="dl_desglose_fct",
         use_container_width=True,
     )
+
 
 
 def _herramienta_cruce_facturas_arca() -> None:
@@ -12435,10 +12500,10 @@ def _seccion_herramientas() -> None:
             "Convertidor de Liquidaciones de Tarjeta",
             "Match débitos - proveedores",
             "Cruce Facturas vs ARCA",
-            "Desglose FCT Mercadería / Servicios",
+            "Desglose FCT — Detalle de ítems",
         ],
         index=0,
-        key="herramientas_selectbox_v10",
+        key="herramientas_selectbox_v11",
     )
     st.divider()
 
@@ -12458,7 +12523,7 @@ def _seccion_herramientas() -> None:
         _herramienta_match_debitos_proveedores()
     elif herramienta_activa == "Cruce Facturas vs ARCA":
         _herramienta_cruce_facturas_arca()
-    elif herramienta_activa == "Desglose FCT Mercadería / Servicios":
+    elif herramienta_activa == "Desglose FCT — Detalle de ítems":
         _herramienta_desglose_fct_mercaderia_servicios()
 
 def _seccion_recategorizacion_monotributo() -> None:

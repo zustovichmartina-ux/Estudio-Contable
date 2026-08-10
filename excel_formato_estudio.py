@@ -46,12 +46,31 @@ def _es_fecha_col(nombre: str) -> bool:
 
 def _es_monto_col(nombre: str) -> bool:
     n = str(nombre).lower()
+    # No son montos: alícuota / condición IVA / clasificación
+    if any(
+        x in n
+        for x in (
+            "alicuota",
+            "alícuota",
+            "condicion",
+            "condición",
+            "clasific",
+            "% iva",
+            "%iva",
+        )
+    ):
+        return False
     keys = (
         "débito", "debito", "crédito", "credito", "importe", "monto", "total",
         "saldo", "neto", "haber", "debe", "retencion", "retención", "percepcion",
-        "percepción", "iva", "iibb", "capital", "interes", "interés",
+        "percepción", "iibb", "capital", "interes", "interés",
     )
-    return any(k in n for k in keys)
+    if any(k in n for k in keys):
+        return True
+    # Columna de importe IVA (no alícuota)
+    if n.strip() in {"iva"} or n.endswith(" iva") or n.startswith("iva "):
+        return True
+    return False
 
 
 def _auto_ancho(ws: Worksheet, col_idx: int, series: Iterable[Any], header: str, minimo: int = 10, maximo: int = 42) -> None:
@@ -99,6 +118,7 @@ def _escribir_tabla(
     *,
     col_moneda: Sequence[str] | None = None,
     col_fecha: Sequence[str] | None = None,
+    col_texto: Sequence[str] | None = None,
     zebra: bool = True,
     total_col: str | None = None,
     total_label_col: int | None = None,
@@ -113,6 +133,7 @@ def _escribir_tabla(
 
     monedas = {c.lower() for c in (col_moneda or [])}
     fechas = {c.lower() for c in (col_fecha or [])}
+    textos = {c.lower() for c in (col_texto or [])}
 
     for c, h in enumerate(cols, 1):
         ws.cell(start_row, c, h)
@@ -128,7 +149,10 @@ def _escribir_tabla(
                 cell.value = None
                 continue
             hl = str(h).lower()
-            if hl in fechas or _es_fecha_col(h):
+            if hl in textos:
+                cell.value = str(val)
+                cell.number_format = "@"
+            elif hl in fechas or _es_fecha_col(h):
                 if hasattr(val, "strftime"):
                     cell.value = val
                 else:
@@ -185,6 +209,7 @@ def construir_informe_excel(
     hojas_adicionales: Sequence[tuple[str, pd.DataFrame]] | None = None,
     col_moneda: Sequence[str] | None = None,
     col_fecha: Sequence[str] | None = None,
+    col_texto: Sequence[str] | None = None,
     total_col: str | None = None,
 ) -> Workbook:
     """
@@ -231,6 +256,7 @@ def construir_informe_excel(
             fila,
             col_moneda=col_moneda,
             col_fecha=col_fecha,
+            col_texto=col_texto,
             zebra=False,
         )
         # quitar autofilter de tablas chicas de resumen (queda ruidoso)
@@ -249,6 +275,7 @@ def construir_informe_excel(
             1,
             col_moneda=col_moneda,
             col_fecha=col_fecha,
+            col_texto=col_texto,
             zebra=True,
             total_col=total_col,
         )
@@ -268,6 +295,7 @@ def construir_informe_excel(
             1,
             col_moneda=col_moneda,
             col_fecha=col_fecha,
+            col_texto=col_texto,
             zebra=True,
             total_col=total_col if (not df_extra.empty and total_col in df_extra.columns) else None,
         )
@@ -293,6 +321,7 @@ def exportar_informe_excel(
     hojas_adicionales: Sequence[tuple[str, pd.DataFrame]] | None = None,
     col_moneda: Sequence[str] | None = None,
     col_fecha: Sequence[str] | None = None,
+    col_texto: Sequence[str] | None = None,
     total_col: str | None = None,
 ) -> bytes:
     """Genera bytes .xlsx listos para st.download_button."""
@@ -307,6 +336,7 @@ def exportar_informe_excel(
         hojas_adicionales=hojas_adicionales,
         col_moneda=col_moneda,
         col_fecha=col_fecha,
+        col_texto=col_texto,
         total_col=total_col,
     )
     return informe_a_bytes(wb)
@@ -325,6 +355,7 @@ def guardar_informe_excel(
     hojas_adicionales: Sequence[tuple[str, pd.DataFrame]] | None = None,
     col_moneda: Sequence[str] | None = None,
     col_fecha: Sequence[str] | None = None,
+    col_texto: Sequence[str] | None = None,
     total_col: str | None = None,
 ) -> Path:
     """Guarda el informe en disco (chat / scripts)."""
@@ -341,6 +372,7 @@ def guardar_informe_excel(
         hojas_adicionales=hojas_adicionales,
         col_moneda=col_moneda,
         col_fecha=col_fecha,
+        col_texto=col_texto,
         total_col=total_col,
     )
     wb.save(ruta)

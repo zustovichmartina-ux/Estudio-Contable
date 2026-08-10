@@ -209,22 +209,27 @@ def _aplicar_usuarios_desde_secrets() -> int:
             continue
         existente = obtener_usuario_oficina(user)
         if existente is None:
-            crear_usuario_oficina(
-                user,
-                u["nombre"],
-                pin=u.get("pin") or "",
-                es_admin=bool(u.get("es_admin")),
-            )
-        else:
-            kwargs: dict = {
-                "nombre": u["nombre"],
-                "es_admin": bool(u.get("es_admin")),
-                "activo": True,
-            }
-            # Solo pisa el PIN si Secrets trae uno no vacío
-            if u.get("pin"):
-                kwargs["pin"] = u["pin"]
-            actualizar_usuario_oficina(int(existente["id"]), **kwargs)
+            try:
+                crear_usuario_oficina(
+                    user,
+                    u["nombre"],
+                    pin=u.get("pin") or "",
+                    es_admin=bool(u.get("es_admin")),
+                )
+                aplicados += 1
+                continue
+            except ValueError:
+                existente = obtener_usuario_oficina(user)
+                if existente is None:
+                    continue
+        kwargs: dict = {
+            "nombre": u["nombre"],
+            "es_admin": bool(u.get("es_admin")),
+            "activo": True,
+        }
+        if u.get("pin"):
+            kwargs["pin"] = u["pin"]
+        actualizar_usuario_oficina(int(existente["id"]), **kwargs)
         aplicados += 1
     return aplicados
 
@@ -242,7 +247,11 @@ def sembrar_usuarios_oficina_default() -> None:
         ("auxiliar", "Auxiliar contable", "", False),
     ]
     for usuario, nombre, pin, admin in defaults:
-        crear_usuario_oficina(usuario, nombre, pin=pin, es_admin=admin)
+        try:
+            crear_usuario_oficina(usuario, nombre, pin=pin, es_admin=admin)
+        except ValueError:
+            # Ya existe (carrera con Secrets / otro worker) — no romper el arranque
+            continue
 
 
 def listar_usuarios_oficina(solo_activos: bool = True) -> list[dict]:
@@ -278,18 +287,29 @@ def crear_usuario_oficina(
     pin: str = "",
     es_admin: bool = False,
 ) -> int:
+    import sqlite3
+
     user = re.sub(r"[^a-zA-Z0-9._-]", "", str(usuario or "").strip().lower())
     nom = str(nombre or "").strip()
     if not user or not nom:
         raise ValueError("Usuario y nombre son obligatorios.")
-    with database.obtener_conexion() as conn:
-        cur = conn.execute(
-            "INSERT INTO usuarios_oficina (usuario, nombre, pin_hash, es_admin, activo) "
-            "VALUES (?, ?, ?, ?, 1)",
-            (user, nom, _hash_pin(pin), 1 if es_admin else 0),
+    if obtener_usuario_oficina(user) is not None:
+        raise ValueError(
+            f"El usuario «{user}» ya existe. Elegí otro login o editá el existente."
         )
-        conn.commit()
-        return int(cur.lastrowid)
+    try:
+        with database.obtener_conexion() as conn:
+            cur = conn.execute(
+                "INSERT INTO usuarios_oficina (usuario, nombre, pin_hash, es_admin, activo) "
+                "VALUES (?, ?, ?, ?, 1)",
+                (user, nom, _hash_pin(pin), 1 if es_admin else 0),
+            )
+            conn.commit()
+            return int(cur.lastrowid)
+    except sqlite3.IntegrityError as exc:
+        raise ValueError(
+            f"El usuario «{user}» ya existe. Elegí otro login o editá el existente."
+        ) from exc
 
 
 def actualizar_usuario_oficina(
