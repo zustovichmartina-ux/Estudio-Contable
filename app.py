@@ -12482,6 +12482,87 @@ def _herramienta_cruce_facturas_arca() -> None:
     )
 
 
+def _herramienta_extracto_fci() -> None:
+    """PDF de extracto FCI (cualquier banco) → Fecha | Descripción | Cuotas | Valor CC | Total."""
+    from extraccion_fci import exportar_excel_bytes, procesar_pdfs_fci
+
+    st.markdown("#### Extracto FCI → Excel")
+    st.info(
+        "Subí uno o varios extractos de **fondos comunes** (Galicia FIMA, Santander Superfondo, "
+        "BBVA, Macro, etc.). Detecta el banco y arma **una fila por movimiento**: "
+        "Fecha | Descripción | Cantidad de cuotas (número) | Valor CC (moneda) | Total."
+    )
+    pdfs = st.file_uploader(
+        "Extractos FCI (PDF)",
+        type=["pdf"],
+        accept_multiple_files=True,
+        key="uploader_extracto_fci_pdfs",
+        help="Podés unir varios meses o bancos. Los movimientos duplicados no se repiten.",
+    )
+    if st.button(
+        "Procesar extracto FCI",
+        type="primary",
+        key="btn_extracto_fci",
+        disabled=not bool(pdfs),
+    ):
+        with st.spinner("Leyendo extractos de FCI…"):
+            try:
+                resultado = procesar_pdfs_fci(pdfs)
+                xlsx = exportar_excel_bytes(
+                    resultado,
+                    titulo="Extracto FCI",
+                    subtitulo=str(st.session_state.get("nombre_activo") or ""),
+                )
+            except Exception as exc:
+                st.error(f"No se pudo procesar: {exc}")
+                return
+        st.session_state["fci_resultado"] = resultado
+        st.session_state["fci_xlsx"] = xlsx
+        st.rerun()
+
+    resultado = st.session_state.get("fci_resultado")
+    xlsx = st.session_state.get("fci_xlsx")
+    if resultado is None or xlsx is None:
+        return
+
+    detalle = resultado.get("detalle")
+    if detalle is None:
+        detalle = pd.DataFrame()
+    r = resultado.get("resumen") or {}
+    fallidos = resultado.get("fallidos") or []
+    ocr_list = resultado.get("requiere_ocr") or []
+
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("PDFs OK", r.get("pdfs_ok", 0))
+    k2.metric("Movimientos", r.get("filas", 0))
+    k3.metric("Banco", r.get("bancos") or "—")
+    k4.metric("OCR / error", int(r.get("pdfs_ocr", 0)) + int(r.get("pdfs_fallidos", 0)))
+    if r.get("periodo"):
+        st.caption(f"Período: **{r.get('periodo')}** · Fondo: {r.get('fondos') or '—'}")
+
+    if fallidos:
+        with st.expander(f"No leídos ({len(fallidos)})", expanded=False):
+            st.dataframe(pd.DataFrame(fallidos), use_container_width=True, hide_index=True)
+    if ocr_list:
+        with st.expander(f"Requiere OCR / manual ({len(ocr_list)})", expanded=True):
+            st.dataframe(pd.DataFrame(ocr_list), use_container_width=True, hide_index=True)
+
+    if not detalle.empty:
+        st.dataframe(detalle, use_container_width=True, hide_index=True)
+    else:
+        st.warning("No hubo movimientos para mostrar.")
+
+    st.download_button(
+        "Descargar Excel",
+        data=xlsx,
+        file_name=f"Movimientos_FCI_{date.today().strftime('%Y%m%d')}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        type="primary",
+        key="dl_extracto_fci",
+        use_container_width=True,
+    )
+
+
 def _seccion_herramientas() -> None:
     """Solapa de utilidades de oficina (selectbox → herramienta activa)."""
     st.write(
@@ -12501,9 +12582,10 @@ def _seccion_herramientas() -> None:
             "Match débitos - proveedores",
             "Cruce Facturas vs ARCA",
             "Desglose FCT — Detalle de ítems",
+            "Extracto FCI → Excel",
         ],
         index=0,
-        key="herramientas_selectbox_v11",
+        key="herramientas_selectbox_v12",
     )
     st.divider()
 
@@ -12525,6 +12607,8 @@ def _seccion_herramientas() -> None:
         _herramienta_cruce_facturas_arca()
     elif herramienta_activa == "Desglose FCT — Detalle de ítems":
         _herramienta_desglose_fct_mercaderia_servicios()
+    elif herramienta_activa == "Extracto FCI → Excel":
+        _herramienta_extracto_fci()
 
 def _seccion_recategorizacion_monotributo() -> None:
     """Análisis de períodos devengados en facturas electrónicas AFIP (PDF / ZIP)."""
