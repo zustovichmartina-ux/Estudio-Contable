@@ -195,6 +195,96 @@ def _cuenta_en(texto: str) -> str:
     return m.group(1) if m else ""
 
 
+def extraer_posicion_fci(texto: str) -> dict[str, Any]:
+    """
+    Intenta leer la posición / saldo final del extracto de fondos:
+    cuotas, valor cuota e importe en pesos.
+    """
+    out: dict[str, Any] = {
+        "cuotas": None,
+        "valor_cuota": None,
+        "importe": None,
+        "fuente": "",
+    }
+    if not (texto or "").strip():
+        return out
+
+    patrones = [
+        # Cantidad … Valor (de la) cuota … Importe / Total
+        re.compile(
+            r"(?:Cantidad(?:\s+de)?\s+cuot(?:as|apartes)?|Saldo(?:\s+de)?\s+cuot(?:as|apartes)?|"
+            r"Posici[oó]n(?:\s+al\s+cierre)?|Tenencia)"
+            r"[^\d]{0,80}"
+            r"(?P<cuotas>\d{1,3}(?:\.\d{3})*,\d+|\d+,\d+)"
+            r".{0,120}?"
+            r"(?:Valor\s+(?:de\s+la\s+)?cuota|Valor\s*CC|Cotizaci[oó]n)"
+            r"[^\d]{0,40}"
+            r"\$?\s*(?P<vc>\d{1,3}(?:\.\d{3})*,\d{4,8}|\d+,\d{4,8}|\d+\.\d{4,8})"
+            r"(?:.{0,120}?"
+            r"(?:Importe|Total|Valuaci[oó]n|Monto)"
+            r"[^\d]{0,40}"
+            r"\$?\s*(?P<imp>\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2}))?",
+            re.I | re.S,
+        ),
+        # Valor cuota primero, después cantidad
+        re.compile(
+            r"(?:Valor\s+(?:de\s+la\s+)?cuota|Valor\s*CC)"
+            r"[^\d]{0,40}"
+            r"\$?\s*(?P<vc>\d{1,3}(?:\.\d{3})*,\d{4,8}|\d+,\d{4,8}|\d+\.\d{4,8})"
+            r".{0,120}?"
+            r"(?:Cantidad(?:\s+de)?\s+cuot(?:as|apartes)?|Saldo(?:\s+de)?\s+cuot)"
+            r"[^\d]{0,40}"
+            r"(?P<cuotas>\d{1,3}(?:\.\d{3})*,\d+|\d+,\d+)",
+            re.I | re.S,
+        ),
+    ]
+    for pat in patrones:
+        matches = list(pat.finditer(texto))
+        if not matches:
+            continue
+        m = matches[-1]  # suele estar al cierre
+        cuotas = _num_ar(m.group("cuotas"), _CUOTA)
+        vc = _num_ar(m.group("vc"), _VALOR_CC)
+        imp = None
+        if "imp" in m.groupdict() and m.group("imp"):
+            imp = _num_ar(m.group("imp"), _MONEY)
+        if cuotas > 0 and vc > 0:
+            if imp is None:
+                imp = (cuotas * vc).quantize(_MONEY, rounding=ROUND_HALF_UP)
+            out["cuotas"] = float(cuotas)
+            out["valor_cuota"] = float(vc)
+            out["importe"] = float(imp)
+            out["fuente"] = "posicion_extracto"
+            return out
+
+    # Fallback: último valor cuota con muchos decimales + cantidad cercana
+    m_vc = None
+    for m in re.finditer(
+        r"(?:Valor\s+(?:de\s+la\s+)?cuota|Valor\s*CC|Cotizaci[oó]n)\s*:?\s*\$?\s*"
+        r"(\d{1,3}(?:\.\d{3})*,\d{4,8}|\d+,\d{4,8}|\d+\.\d{4,8})",
+        texto,
+        re.I,
+    ):
+        m_vc = m
+    if m_vc:
+        vc = _num_ar(m_vc.group(1), _VALOR_CC)
+        ventana = texto[max(0, m_vc.start() - 200) : m_vc.end() + 200]
+        m_c = re.search(
+            r"(?:Cantidad|Cuotapartes|Saldo)[^\d]{0,40}(\d{1,3}(?:\.\d{3})*,\d+|\d+,\d+)",
+            ventana,
+            re.I,
+        )
+        if m_c and vc > 0:
+            cuotas = _num_ar(m_c.group(1), _CUOTA)
+            if cuotas > 0:
+                out["cuotas"] = float(cuotas)
+                out["valor_cuota"] = float(vc)
+                out["importe"] = float((cuotas * vc).quantize(_MONEY, rounding=ROUND_HALF_UP))
+                out["fuente"] = "posicion_parcial"
+                return out
+    return out
+
+
 def _asignar_numeros(nums: list[Decimal]) -> tuple[Decimal, Decimal, Decimal] | None:
     """(cuotas, valor_cc, total) a partir de 2 o 3 números de la línea."""
     if len(nums) < 2:
@@ -395,6 +485,7 @@ def parsear_pdf_fci(data: bytes, nombre: str = "extracto.pdf") -> dict[str, Any]
     cuenta = _cuenta_en(texto)
     cortes = _periodos_en(texto)
     periodo = f"{cortes[0][1].split(' al ')[0]} al {cortes[-1][1].split(' al ')[-1]}" if cortes else ""
+    posicion = extraer_posicion_fci(texto)
 
     if not texto.strip():
         return {
@@ -404,6 +495,7 @@ def parsear_pdf_fci(data: bytes, nombre: str = "extracto.pdf") -> dict[str, Any]
             "fondo": fondo,
             "cuenta": cuenta,
             "periodo": periodo,
+            "posicion": posicion,
             "filas": [],
             "error": "PDF sin texto (escaneado) — requiere OCR/manual",
             "archivo": nombre,
@@ -413,7 +505,19 @@ def parsear_pdf_fci(data: bytes, nombre: str = "extracto.pdf") -> dict[str, Any]
     if not filas:
         filas = _parse_tablas(data, banco=banco, fondo=fondo, archivo=nombre)
 
-    if not filas:
+    # Si no hay posición explícita, usar último valor cuota de movimientos como pista
+    if (not posicion.get("valor_cuota")) and filas:
+        ultimo = max(filas, key=lambda r: (r.get("Fecha") or date.min, float(r.get("Valor CC") or 0)))
+        vc = float(ultimo.get("Valor CC") or 0)
+        if vc > 0:
+            posicion = {
+                "cuotas": posicion.get("cuotas"),
+                "valor_cuota": vc,
+                "importe": posicion.get("importe"),
+                "fuente": "ultimo_movimiento",
+            }
+
+    if not filas and not (posicion.get("cuotas") and posicion.get("valor_cuota")):
         return {
             "ok": False,
             "requiere_ocr": False,
@@ -421,6 +525,7 @@ def parsear_pdf_fci(data: bytes, nombre: str = "extracto.pdf") -> dict[str, Any]
             "fondo": fondo,
             "cuenta": cuenta,
             "periodo": periodo,
+            "posicion": posicion,
             "filas": [],
             "error": "No se leyeron movimientos de FCI",
             "archivo": nombre,
@@ -432,6 +537,7 @@ def parsear_pdf_fci(data: bytes, nombre: str = "extracto.pdf") -> dict[str, Any]
         "fondo": fondo,
         "cuenta": cuenta,
         "periodo": periodo,
+        "posicion": posicion,
         "filas": filas,
         "error": None,
         "archivo": nombre,

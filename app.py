@@ -127,15 +127,12 @@ from procesador import (
     PERFILES_BANCO,
 )
 
-from inversiones import (
-    GRUPOS_ESPECIE,
-    aplicar_fifo,
-    exportar_inversiones_excel,
-    extraer_saldo_inicial_ddjj_pdf,
-    leer_saldo_inicial_excel,
-    plantilla_saldo_inicial_excel,
-    procesar_archivos_inversiones,
-    reclasificar_movimientos,
+from liquidaciones_fiserv import procesar_pdfs_fiserv
+from motor_fci_fifo import (
+    cuadro_cobertura_meses,
+    label_mes,
+    mes_saldo_inicial,
+    procesar_ejercicio_fci,
 )
 from caja_usd import (
     armar_caja_usd,
@@ -11718,6 +11715,90 @@ def _herramienta_match_debitos_proveedores() -> None:
     )
 
 
+def _herramienta_liquidaciones_tarjetas_fiserv() -> None:
+    """Resúmenes mensuales Fiserv/First Data → Excel por marca/modalidad."""
+    st.markdown("#### Liquidaciones de tarjetas")
+    st.caption(
+        "Subí los PDF de liquidación mensual Fiserv / First Data del **mismo comercio** "
+        "y **mismo período** (Visa, Mastercard, Cabal, etc. — crédito o débito). "
+        "Se valida total presentado, neto y cantidad de liquidaciones antes de armar el Excel."
+    )
+
+    archivos = st.file_uploader(
+        "PDFs de liquidaciones Fiserv / First Data",
+        type=["pdf"],
+        accept_multiple_files=True,
+        key="liq_fiserv_uploader_v1",
+    )
+    procesar_btn = st.button(
+        "Generar Excel de liquidaciones",
+        type="primary",
+        key="liq_fiserv_btn_v1",
+        disabled=not bool(archivos),
+    )
+
+    if procesar_btn and archivos:
+        tmp_dir = Path(tempfile.mkdtemp(prefix="liq_fiserv_ui_"))
+        rutas: list[Path] = []
+        try:
+            for i, archivo in enumerate(archivos):
+                nombre = str(getattr(archivo, "name", f"liq_{i + 1}.pdf"))
+                destino = tmp_dir / Path(nombre).name
+                destino.write_bytes(archivo.getvalue())
+                rutas.append(destino)
+            with st.spinner(f"Procesando {len(rutas)} PDF(s)…"):
+                res = procesar_pdfs_fiserv(rutas, recalcular=True, log=False)
+            st.session_state["liq_fiserv_resultado"] = res
+        except Exception as exc:
+            st.session_state["liq_fiserv_resultado"] = None
+            st.error(f"No se pudo procesar: {exc}")
+            return
+        finally:
+            try:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+            except Exception:
+                pass
+
+    res = st.session_state.get("liq_fiserv_resultado")
+    if not res:
+        return
+
+    fant = f" ({res.nombre_fantasia})" if res.nombre_fantasia else ""
+    if res.razon_social:
+        st.info(
+            f"**{res.razon_social}{fant}** · CUIT `{res.cuit}` · "
+            f"N° Comercio `{res.nro_comercio}` · Período **{res.periodo}**"
+        )
+
+    for adv in res.advertencias or []:
+        st.warning(adv)
+
+    with st.expander("Validaciones por PDF", expanded=not res.ok):
+        for m in res.mensajes or []:
+            if " OK " in m or m.endswith("OK"):
+                st.success(m)
+            else:
+                st.write(m)
+
+    if not res.ok:
+        st.error(res.error or "Validación fallida. No se generó Excel.")
+        return
+
+    if res.hojas:
+        st.caption("Hojas: " + " · ".join(res.hojas))
+
+    if res.excel_bytes and res.nombre_archivo:
+        st.download_button(
+            "Descargar Excel",
+            data=res.excel_bytes,
+            file_name=res.nombre_archivo,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary",
+            key="liq_fiserv_dl_v1",
+            use_container_width=True,
+        )
+
+
 def _herramienta_liquidaciones_tarjeta() -> None:
     """Convertidor de liquidaciones: flujo simple para evitar crashes de Streamlit."""
     st.caption(
@@ -11830,179 +11911,6 @@ def _herramienta_liquidaciones_tarjeta() -> None:
             key="liq_v3_dl",
             use_container_width=True,
         )
-
-def _herramienta_analizador_inversiones() -> None:
-    """PDF/Excel AlyC → clasificación por especie → FIFO/PEPS + saldo inicial DDJJ."""
-    st.markdown("#### Analizador de inversiones (FIFO)")
-    st.caption(
-        "1) Convertí movimientos de AlyC/broker (PDF o Excel) · "
-        "2) Clasificá por especie (bonos, FCI, dólar/MEP, acciones…) · "
-        "3) Sembrá saldo inicial desde DDJJ o Excel · "
-        "4) Aplicá **FIFO / PEPS** y descargá el Excel de trabajo."
-    )
-
-    c1, c2 = st.columns(2)
-    with c1:
-        archivos_mov = st.file_uploader(
-            "Movimientos del año (PDF / Excel AlyC)",
-            type=["pdf", "xlsx", "xls", "xlsm", "csv"],
-            accept_multiple_files=True,
-            key="inv_uploader_movimientos",
-            help="Preferí Excel del broker si el PDF no es tabular.",
-        )
-    with c2:
-        archivo_ddjj = st.file_uploader(
-            "Saldo inicial — DDJJ / BIENES año anterior (PDF)",
-            type=["pdf"],
-            accept_multiple_files=False,
-            key="inv_uploader_ddjj",
-            help="Preferí el PDF de papeles de trabajo BIENES (F.711) si el comprobante DDJJ no trae tenencias.",
-        )
-        archivo_saldo_xlsx = st.file_uploader(
-            "Saldo inicial — Excel manual (opcional)",
-            type=["xlsx", "xls"],
-            accept_multiple_files=False,
-            key="inv_uploader_saldo_xlsx",
-            help="Si la DDJJ no se lee bien, usá la plantilla.",
-        )
-
-    st.download_button(
-        "Descargar plantilla saldo inicial",
-        data=plantilla_saldo_inicial_excel(),
-        file_name="Plantilla_saldo_inicial_inversiones.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        key="inv_dl_plantilla",
-    )
-
-    if st.button("Procesar inversiones (FIFO)", type="primary", key="inv_btn_procesar"):
-        if not archivos_mov and not archivo_ddjj and not archivo_saldo_xlsx:
-            st.warning("Subí al menos movimientos del año o un saldo inicial.")
-        else:
-            with st.spinner("Leyendo archivos, clasificando especies y aplicando FIFO…"):
-                df_mov = pd.DataFrame()
-                errs: list[dict] = []
-                if archivos_mov:
-                    df_mov, errs = procesar_archivos_inversiones(archivos_mov)
-                    df_mov = reclasificar_movimientos(df_mov)
-
-                df_ini = pd.DataFrame()
-                avisos_ini: list[str] = []
-                if archivo_saldo_xlsx is not None:
-                    df_ini = leer_saldo_inicial_excel(
-                        archivo_saldo_xlsx.getvalue(),
-                        archivo_saldo_xlsx.name,
-                    )
-                    if df_ini.empty:
-                        avisos_ini.append("El Excel de saldo inicial no trajo filas válidas.")
-                elif archivo_ddjj is not None:
-                    df_ini, avisos_ini = extraer_saldo_inicial_ddjj_pdf(
-                        archivo_ddjj.getvalue(),
-                        archivo_ddjj.name,
-                    )
-
-                resultado = aplicar_fifo(df_mov, df_ini if not df_ini.empty else None)
-                xlsx = exportar_inversiones_excel(
-                    df_mov,
-                    resultado,
-                    df_inicial=df_ini if not df_ini.empty else None,
-                    meta={"nota": st.session_state.get("nombre_activo") or ""},
-                )
-                st.session_state.inv_df_mov = df_mov
-                st.session_state.inv_df_ini = df_ini
-                st.session_state.inv_resultado = resultado
-                st.session_state.inv_errores = errs
-                st.session_state.inv_avisos_ini = avisos_ini
-                st.session_state.inv_xlsx = xlsx
-            st.rerun()
-
-    errs = st.session_state.get("inv_errores") or []
-    if errs:
-        with st.expander(f"Advertencias de lectura ({len(errs)})", expanded=True):
-            st.dataframe(pd.DataFrame(errs), use_container_width=True, hide_index=True)
-
-    for msg in st.session_state.get("inv_avisos_ini") or []:
-        st.info(msg)
-
-    df_mov = st.session_state.get("inv_df_mov")
-    df_ini = st.session_state.get("inv_df_ini")
-    resultado = st.session_state.get("inv_resultado")
-    xlsx = st.session_state.get("inv_xlsx")
-
-    if df_mov is None and resultado is None:
-        st.caption(
-            "Grupos de clasificación: " + " · ".join(GRUPOS_ESPECIE)
-        )
-        return
-
-    if df_mov is not None and not df_mov.empty:
-        st.success(f"Movimientos normalizados: **{len(df_mov)}**")
-        # Editor liviano de reclasificación
-        cols_prev = [
-            c for c in (
-                "Fecha", "Especie", "Grupo", "Tipo_Operacion",
-                "Cantidad", "Precio", "Monto_Total", "Moneda", "Descripcion",
-            ) if c in df_mov.columns
-        ]
-        editado = st.data_editor(
-            df_mov[cols_prev + (["Nueva_Clasificacion"] if "Nueva_Clasificacion" in df_mov.columns else [])],
-            use_container_width=True,
-            hide_index=True,
-            num_rows="fixed",
-            key="inv_editor_mov",
-            column_config={
-                "Nueva_Clasificacion": st.column_config.SelectboxColumn(
-                    "Nueva_Clasificacion",
-                    options=[""] + list(GRUPOS_ESPECIE),
-                    required=False,
-                ),
-            } if "Nueva_Clasificacion" in df_mov.columns else None,
-        )
-        if st.button("Reaplicar FIFO con clasificación editada", key="inv_btn_reaplicar"):
-            work = df_mov.copy()
-            if "Nueva_Clasificacion" in editado.columns:
-                work["Nueva_Clasificacion"] = editado["Nueva_Clasificacion"].values
-            if "Grupo" in editado.columns:
-                # Si editaron Grupo directo, respetarlo vía Nueva_Clasificacion
-                for i, g in enumerate(editado["Grupo"].tolist()):
-                    if g in GRUPOS_ESPECIE:
-                        work.at[work.index[i], "Nueva_Clasificacion"] = g
-            work = reclasificar_movimientos(work)
-            res2 = aplicar_fifo(work, df_ini if df_ini is not None and not df_ini.empty else None)
-            st.session_state.inv_df_mov = work
-            st.session_state.inv_resultado = res2
-            st.session_state.inv_xlsx = exportar_inversiones_excel(
-                work, res2, df_inicial=df_ini, meta={"nota": st.session_state.get("nombre_activo") or ""},
-            )
-            st.rerun()
-    elif df_mov is not None:
-        st.warning("No se extrajeron movimientos. Probá con Excel del AlyC.")
-
-    if df_ini is not None and not df_ini.empty:
-        st.markdown("##### Saldo inicial")
-        st.dataframe(df_ini, use_container_width=True, hide_index=True)
-
-    if resultado is not None:
-        saldos = pd.DataFrame(resultado.saldos)
-        if not saldos.empty:
-            st.markdown("##### Saldos al cierre (FIFO)")
-            st.dataframe(saldos, use_container_width=True, hide_index=True)
-        if resultado.avisos:
-            with st.expander(f"Avisos FIFO ({len(resultado.avisos)})", expanded=False):
-                for a in resultado.avisos:
-                    st.write(f"- {a}")
-
-    if xlsx:
-        stamp = datetime.now().strftime("%Y-%m-%d_%H %M")
-        st.download_button(
-            "Descargar Excel — Analizador inversiones FIFO",
-            data=xlsx,
-            file_name=f"{stamp}_Inversiones_FIFO.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            type="primary",
-            key="inv_dl_xlsx",
-            use_container_width=True,
-        )
-
 
 @st.fragment
 def _herramienta_caja_usd() -> None:
@@ -12372,9 +12280,10 @@ def _herramienta_cruce_facturas_arca() -> None:
     """Cruza facturas PDF/fotos vs Mis Comprobantes ARCA (portal IVA)."""
     st.markdown("#### Cruce Facturas vs ARCA")
     st.caption(
-        "Subí las facturas del período (PDF o fotos) y el Excel/CSV de "
-        "**Mis Comprobantes Recibidos** del portal IVA de ARCA. "
-        "El cruce arma Matcheadas / A revisar / Faltantes / Diferencias de importe."
+        "Subí las facturas del período (PDF/fotos o un ZIP) y el Excel/CSV de "
+        "**Mis Comprobantes Recibidos** / **Compras.csv** del portal IVA. "
+        "Por defecto cruza por **PV + número del nombre de archivo** "
+        "(ej. `FC 00005-00054280 - Pagani.pdf`) — mismo criterio que el cruce del estudio."
     )
 
     c1, c2 = st.columns(2)
@@ -12386,19 +12295,29 @@ def _herramienta_cruce_facturas_arca() -> None:
             key="uploader_cruce_facturas_arca",
             help="Varios PDF o fotos; también un ZIP con comprobantes.",
         )
+        solo_nombre = st.checkbox(
+            "Cruce rápido por nombre de archivo (recomendado)",
+            value=True,
+            key="chk_cruce_arca_solo_nombre",
+            help=(
+                "Lee PV-Nro y proveedor del nombre (FC/NC/REC …). "
+                "Sin OCR, instantáneo. Desactivá solo si los archivos no traen el número en el nombre."
+            ),
+        )
         usar_ocr = st.checkbox(
             "OCR si el PDF viene escaneado o es foto",
-            value=True,
+            value=False,
             key="chk_cruce_arca_ocr",
-            help="Más lento. Desactivá si todos los PDF tienen texto nativo.",
+            help="Solo aplica si desactivás el cruce por nombre. Más lento.",
+            disabled=solo_nombre,
         )
     with c2:
         arca = st.file_uploader(
-            "Listado ARCA — Mis Comprobantes (xlsx / xls / csv)",
+            "Listado ARCA — Mis Comprobantes / Compras (xlsx / xls / csv)",
             type=["xlsx", "xls", "csv"],
             accept_multiple_files=False,
             key="uploader_cruce_arca_listado",
-            help="Export del portal Mis Comprobantes Recibidos.",
+            help="Export del portal Mis Comprobantes Recibidos o Compras.csv.",
         )
         cuit_manual = st.text_input(
             "CUIT contribuyente (opcional)",
@@ -12414,12 +12333,17 @@ def _herramienta_cruce_facturas_arca() -> None:
         key="btn_cruce_facturas_arca",
         disabled=not puede,
     ):
-        with st.spinner("Leyendo ARCA, extrayendo facturas y cruzando…"):
+        with st.spinner(
+            "Cruzando por nombre de archivo…"
+            if solo_nombre
+            else "Leyendo ARCA, extrayendo facturas y cruzando…"
+        ):
             try:
                 resultado, errores, cuit_det, xlsx = procesar_cruce_facturas_arca(
                     facturas,
                     arca,
                     usar_ocr=usar_ocr,
+                    solo_nombre=solo_nombre,
                     cuit_contribuyente=cuit_manual,
                     nombre_arca=str(getattr(arca, "name", "arca.xlsx")),
                 )
@@ -12430,6 +12354,9 @@ def _herramienta_cruce_facturas_arca() -> None:
         st.session_state["cruce_arca_errores"] = errores
         st.session_state["cruce_arca_cuit"] = cuit_det
         st.session_state["cruce_arca_xlsx"] = xlsx
+        st.session_state["cruce_arca_modo"] = (
+            "nombre" if solo_nombre else "ocr"
+        )
         st.success("Cruce listo.")
         st.rerun()
 
@@ -12447,25 +12374,44 @@ def _herramienta_cruce_facturas_arca() -> None:
     r = resultado.get("a_revisar")
     f = resultado.get("faltantes")
     d = resultado.get("diferencias")
+    dup = resultado.get("duplicados")
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("Matcheadas", 0 if m is None else len(m))
-    k2.metric("A revisar", 0 if r is None else len(r))
-    k3.metric("Faltantes", 0 if f is None else len(f))
+    k2.metric("Solo en carpeta", 0 if r is None else len(r))
+    k3.metric("Faltantes (sin PDF)", 0 if f is None else len(f))
     k4.metric("Diferencias", 0 if d is None else len(d))
 
     cuit_det = st.session_state.get("cruce_arca_cuit") or ""
+    modo = st.session_state.get("cruce_arca_modo") or ""
+    caps = []
     if cuit_det:
-        st.caption(f"CUIT detectado: {cuit_det}")
+        caps.append(f"CUIT detectado: {cuit_det}")
+    if modo == "nombre":
+        caps.append("Modo: cruce por nombre (PV-Nro)")
+    elif modo == "ocr":
+        caps.append("Modo: lectura PDF/OCR")
+    if caps:
+        st.caption(" · ".join(caps))
 
-    tabs = st.tabs(["Matcheadas", "A revisar", "Faltantes", "Diferencias"])
+    tabs = st.tabs(
+        ["Matcheadas", "Solo en carpeta", "Faltantes", "Diferencias", "Duplicados"]
+    )
     with tabs[0]:
         st.dataframe(m if m is not None else pd.DataFrame(), use_container_width=True, hide_index=True)
     with tabs[1]:
+        st.caption("Archivos en la carpeta que no están en el listado ARCA (REC, extras, etc.).")
         st.dataframe(r if r is not None else pd.DataFrame(), use_container_width=True, hide_index=True)
     with tabs[2]:
+        st.caption("Comprobantes del Portal IVA sin PDF/foto en lo subido.")
         st.dataframe(f if f is not None else pd.DataFrame(), use_container_width=True, hide_index=True)
     with tabs[3]:
         st.dataframe(d if d is not None else pd.DataFrame(), use_container_width=True, hide_index=True)
+    with tabs[4]:
+        st.dataframe(
+            dup if dup is not None else pd.DataFrame(),
+            use_container_width=True,
+            hide_index=True,
+        )
 
     cuit_limpio = re.sub(r"\D", "", str(cuit_det or st.session_state.get("cuit_activo") or ""))
     st.download_button(
@@ -12480,6 +12426,180 @@ def _herramienta_cruce_facturas_arca() -> None:
         key="dl_cruce_facturas_arca",
         use_container_width=True,
     )
+
+
+def _herramienta_fci_fifo_ejercicio() -> None:
+    """Proceso de app: 13 extractos FCI → saldo inicial + FIFO + Excel de control."""
+    st.markdown("#### FCI — Motor FIFO (ejercicio completo)")
+    st.info(
+        "Herramienta **genérica** (cualquier cliente / banco). "
+        "Subí **sí o sí**:\n"
+        "1. Extracto del **último mes del ejercicio anterior** → saldo inicial\n"
+        "2. Extractos de los **12 meses del ejercicio** → movimientos + valuación de cierre\n\n"
+        "El mayor debe cerrar con: "
+        "**SI + Suscripciones + Intereses + Tenencia − Rescates = saldo final del extracto** "
+        "(cuotas × valor cuota del último día)."
+    )
+
+    cliente = str(st.session_state.get("nombre_activo") or "").strip()
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        ini_txt = st.text_input(
+            "Inicio del ejercicio (DD/MM/AAAA)",
+            value=st.session_state.get("fci_fifo_ini") or "01/07/2025",
+            key="fci_fifo_ini_input",
+        )
+    with c2:
+        cie_txt = st.text_input(
+            "Cierre del ejercicio (DD/MM/AAAA)",
+            value=st.session_state.get("fci_fifo_cie") or "30/06/2026",
+            key="fci_fifo_cie_input",
+        )
+    with c3:
+        st.text_input(
+            "Cliente (opcional)",
+            value=cliente,
+            key="fci_fifo_cliente_input",
+            help="Si hay sociedad activa se precompleta.",
+        )
+
+    def _parse_f(txt: str) -> date | None:
+        t = (txt or "").strip()
+        if not t:
+            return None
+        try:
+            return datetime.strptime(t, "%d/%m/%Y").date()
+        except ValueError:
+            return None
+
+    fecha_ini = _parse_f(ini_txt)
+    fecha_cie = _parse_f(cie_txt)
+    if fecha_ini and fecha_cie:
+        mes_si = mes_saldo_inicial(fecha_ini)
+        st.caption(
+            f"Saldo inicial esperado del extracto **{label_mes(*mes_si)}**. "
+            f"Ejercicio: {fecha_ini.strftime('%d/%m/%Y')} → {fecha_cie.strftime('%d/%m/%Y')}."
+        )
+
+    pdfs = st.file_uploader(
+        "Extractos FCI (PDF) — 13 meses",
+        type=["pdf"],
+        accept_multiple_files=True,
+        key="uploader_fci_fifo_ejercicio",
+        help="Último mes del ejercicio anterior + los 12 meses del ejercicio.",
+    )
+
+    with st.expander("Overrides manuales (si el PDF no trae posición)", expanded=False):
+        o1, o2, o3 = st.columns(3)
+        with o1:
+            si_cuotas = st.number_input(
+                "SI — Cantidad de cuotas",
+                min_value=0.0,
+                value=float(st.session_state.get("fci_fifo_si_cuotas") or 0.0),
+                format="%.4f",
+                key="fci_fifo_si_cuotas_input",
+            )
+        with o2:
+            si_vc = st.number_input(
+                "SI — Valor cuota",
+                min_value=0.0,
+                value=float(st.session_state.get("fci_fifo_si_vc") or 0.0),
+                format="%.6f",
+                key="fci_fifo_si_vc_input",
+            )
+        with o3:
+            vc_cierre_manual = st.number_input(
+                "VC cierre (último extracto)",
+                min_value=0.0,
+                value=float(st.session_state.get("fci_fifo_vc_cie") or 0.0),
+                format="%.6f",
+                key="fci_fifo_vc_cie_input",
+                help="Valor cuota del último día del ejercicio (posición del extracto).",
+            )
+
+    if st.button(
+        "Procesar FCI FIFO (ejercicio)",
+        type="primary",
+        key="btn_fci_fifo_ejercicio",
+        disabled=not bool(pdfs) or fecha_ini is None or fecha_cie is None,
+    ):
+        if fecha_ini is None or fecha_cie is None:
+            st.error("Revisá las fechas del ejercicio (DD/MM/AAAA).")
+            return
+        st.session_state.fci_fifo_ini = ini_txt
+        st.session_state.fci_fifo_cie = cie_txt
+        with st.spinner("Leyendo extractos, armando saldo inicial y aplicando FIFO…"):
+            try:
+                resultado = procesar_ejercicio_fci(
+                    pdfs,
+                    fecha_inicio=fecha_ini,
+                    fecha_cierre=fecha_cie,
+                    si_cuotas=si_cuotas if si_cuotas > 0 else None,
+                    si_vc=si_vc if si_vc > 0 else None,
+                    vc_cierre=vc_cierre_manual if vc_cierre_manual > 0 else None,
+                    cliente=str(st.session_state.get("fci_fifo_cliente_input") or cliente or ""),
+                )
+            except Exception as exc:
+                st.error(f"No se pudo procesar: {exc}")
+                return
+        st.session_state["fci_fifo_resultado"] = resultado
+        st.rerun()
+
+    resultado = st.session_state.get("fci_fifo_resultado")
+    if resultado is None:
+        return
+
+    cob = cuadro_cobertura_meses(
+        _parse_f(st.session_state.get("fci_fifo_ini") or ini_txt) or date(2025, 7, 1),
+        _parse_f(st.session_state.get("fci_fifo_cie") or cie_txt) or date(2026, 6, 30),
+        resultado.extractos or [],
+    )
+    st.markdown("##### Cobertura de meses")
+    st.dataframe(cob, use_container_width=True, hide_index=True)
+
+    if resultado.errores:
+        for e in resultado.errores:
+            st.error(e)
+    if resultado.avisos:
+        with st.expander(f"Avisos ({len(resultado.avisos)})", expanded=False):
+            for a in resultado.avisos:
+                st.write(f"- {a}")
+
+    if not resultado.ok:
+        st.warning("Completá lo que falta (mes anterior / VC / cuotas) y volvé a procesar.")
+        return
+
+    si = resultado.saldo_inicial or {}
+    ctrl = resultado.control or {}
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Saldo inicial", f"$ {si.get('Pesos', 0):,.2f}")
+    k2.metric("Intereses ganados", f"$ {ctrl.get('intereses_ganados', 0):,.2f}")
+    k3.metric("Tenencia a contabilizar", f"$ {ctrl.get('tenencia_a_contabilizar', 0):,.2f}")
+    k4.metric("Valuación extracto", f"$ {resultado.valuacion_extracto or 0:,.2f}")
+
+    st.markdown("##### Fórmula de control")
+    st.write(
+        "Saldo inicial + Suscripciones + Intereses ganados + Resultado por tenencia − Rescates "
+        "= Saldo final del extracto"
+    )
+    d1, d2, d3 = st.columns(3)
+    d1.metric("Lado izquierdo", f"$ {ctrl.get('lado_izquierdo', 0):,.2f}")
+    d2.metric("Saldo final extracto", f"$ {ctrl.get('saldo_final_extracto', 0):,.2f}")
+    diff = float(ctrl.get("diferencia") or 0)
+    d3.metric("Diferencia (debe ser 0)", f"$ {diff:,.2f}")
+
+    if resultado.excel_bytes:
+        fondo = (resultado.meta or {}).get("fondo") or "FCI"
+        stamp = date.today().strftime("%Y%m%d")
+        st.download_button(
+            "Descargar Excel — FCI FIFO ejercicio",
+            data=resultado.excel_bytes,
+            file_name=f"{stamp}_FCI_FIFO_{fondo[:40].replace(' ', '_')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary",
+            key="dl_fci_fifo_ejercicio",
+            use_container_width=True,
+        )
 
 
 def _herramienta_extracto_fci() -> None:
@@ -12573,19 +12693,20 @@ def _seccion_herramientas() -> None:
     herramienta_activa = st.selectbox(
         "Seleccioná la herramienta que vas a usar:",
         options=[
+            "FCI — Motor FIFO (ejercicio)",
+            "Extracto FCI → Excel",
             "Completar cuadro bancario existente",
             "Matcheo inteligente PDF + Tango",
             "Extractos de PDF ➔ Excel",
-            "Analizador de inversiones (FIFO)",
             "Caja USD (dif. cotización)",
             "Convertidor de Liquidaciones de Tarjeta",
+            "Liquidaciones de tarjetas",
             "Match débitos - proveedores",
             "Cruce Facturas vs ARCA",
             "Desglose FCT — Detalle de ítems",
-            "Extracto FCI → Excel",
         ],
         index=0,
-        key="herramientas_selectbox_v12",
+        key="herramientas_selectbox_v16",
     )
     st.divider()
 
@@ -12595,12 +12716,12 @@ def _seccion_herramientas() -> None:
         _herramienta_matcheo_inteligente_pdf()
     elif herramienta_activa == "Extractos de PDF ➔ Excel":
         _herramienta_pdf_extractos_a_excel()
-    elif herramienta_activa == "Analizador de inversiones (FIFO)":
-        _herramienta_analizador_inversiones()
     elif herramienta_activa == "Caja USD (dif. cotización)":
         _herramienta_caja_usd()
     elif herramienta_activa == "Convertidor de Liquidaciones de Tarjeta":
         _herramienta_liquidaciones_tarjeta()
+    elif herramienta_activa == "Liquidaciones de tarjetas":
+        _herramienta_liquidaciones_tarjetas_fiserv()
     elif herramienta_activa == "Match débitos - proveedores":
         _herramienta_match_debitos_proveedores()
     elif herramienta_activa == "Cruce Facturas vs ARCA":
@@ -12609,6 +12730,8 @@ def _seccion_herramientas() -> None:
         _herramienta_desglose_fct_mercaderia_servicios()
     elif herramienta_activa == "Extracto FCI → Excel":
         _herramienta_extracto_fci()
+    elif herramienta_activa == "FCI — Motor FIFO (ejercicio)":
+        _herramienta_fci_fifo_ejercicio()
 
 def _seccion_recategorizacion_monotributo() -> None:
     """Análisis de períodos devengados en facturas electrónicas AFIP (PDF / ZIP)."""
@@ -13158,7 +13281,7 @@ def main() -> None:
             - **Conciliación Bancaria**: extractos PDF + lista Tango → planilla Excel clonada.
             - **Préstamos Financieros**: auditoría de cuotas desde PDFs bancarios.
             - **Recategorización Monotributo**: facturas AFIP PDF/ZIP → períodos devengados + Excel.
-            - **Herramientas**: **matcheo inteligente PDF + Tango**; completar cuadro bancario; PDF extractos → Excel; **analizador de inversiones (FIFO)**; **caja USD (dif. cotización)**; match débitos ↔ proveedores; liquidaciones de tarjeta; **cruce facturas vs ARCA**.
+            - **Herramientas**: **matcheo inteligente PDF + Tango**; completar cuadro bancario; PDF extractos → Excel; **FCI Motor FIFO (ejercicio 13 meses)**; **caja USD (dif. cotización)**; match débitos ↔ proveedores; **liquidaciones de tarjetas** (Fiserv); **cruce facturas vs ARCA**.
             - **Usuarios de oficina**: cada persona entra con su usuario; sesiones independientes.
             - **Cloud**: link público + muro de login (PIN). Planes/balances subidos se cifran con `DATA_ENCRYPTION_KEY`.
             - **Multi-PDF anual**: hasta {MAX_PDFS_ANUALES} extractos consolidados cronológicamente.

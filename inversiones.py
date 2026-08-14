@@ -1,11 +1,13 @@
 """
-Analizador de inversiones — PDF/Excel → clasificación por especie → FIFO/PEPS.
+Analizador de inversiones — identificar tipo → reglas por tipo → FIFO.
 
 Flujo:
 1. Normalizar movimientos (AlyC/broker PDF o Excel).
-2. Clasificar por grupo de especie (bonos, FCI, MEP/USD, acciones, otros).
+2. Identificar especie (FCI, bono, acción, USD/MEP, otro).
 3. Sembrar saldo inicial desde DDJJ (PDF) o Excel manual.
-4. Aplicar FIFO por especie y exportar Excel de trabajo.
+4. Aplicar reglas del tipo + FIFO y exportar Excel del estudio.
+   FCI puro: formato extracto (origen por fórmula + intereses + tenencia con
+   VC del último extracto de fondos del mes) vía inversiones_fci_formato.
 """
 
 from __future__ import annotations
@@ -15,26 +17,49 @@ import re
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Any, BinaryIO
+from typing import Any
 
 import pandas as pd
+
+from excel_formato_estudio import exportar_informe_excel
+from inversiones_catalogo import (
+    CONF_ALTA,
+    CONF_REVISAR,
+    EVENTO_AMORT,
+    EVENTO_ENTRADA,
+    EVENTO_INGRESO,
+    EVENTO_OMITIR,
+    EVENTO_OMITIR_USD,
+    EVENTO_REVISAR,
+    EVENTO_SALIDA,
+    GRUPOS_ESPECIE,
+    TIPO_A_GRUPO,
+    TIPO_FCI,
+    TIPO_LABEL,
+    TIPO_OTRO,
+    TIPO_USD_MEP,
+    TIPOS_INVERSION,
+    TITULOS_PUBLICOS,
+    IdentificacionEspecie,
+    canon_fima,
+    evento_para,
+    identificar_especie,
+    orden_evento,
+    tipo_desde_grupo,
+)
 
 # ---------------------------------------------------------------------------
 # Constantes / catálogos
 # ---------------------------------------------------------------------------
 
-GRUPOS_ESPECIE = (
-    "Bonos / Títulos públicos",
-    "FCI",
-    "Dólar / MEP",
-    "Acciones / Cedears",
-    "Otros",
-)
-
 COLUMNAS_MOV = [
     "Fecha",
     "Especie",
+    "Especie_canonica",
+    "Tipo_inversion",
     "Grupo",
+    "Confianza",
+    "Motivo_id",
     "Tipo_Operacion",
     "Cantidad",
     "Precio",
@@ -44,12 +69,6 @@ COLUMNAS_MOV = [
     "Archivo origen",
     "Nueva_Clasificacion",
 ]
-
-TITULOS_PUBLICOS = {
-    "AL30", "AL30D", "GD30", "GD30D", "AL29", "GD29", "AL35", "GD35",
-    "AL41", "GD41", "AE38", "GE38", "TX26", "TX28", "T2X4", "T4X4",
-    "BONAR", "BOPREAL", "LECAP", "LETRA", "S31L", "S30O",
-}
 
 _ALIAS_COLS: dict[str, list[str]] = {
     "Fecha": [
@@ -168,48 +187,118 @@ def _texto_pdf(data: bytes) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Clasificación por especie
+# Clasificación / identificación por especie
 # ---------------------------------------------------------------------------
 
 def clasificar_grupo_especie(especie: str, descripcion: str = "", tipo_op: str = "") -> str:
-    """Asigna grupo de trabajo (bonos / FCI / MEP-USD / acciones / otros)."""
-    texto = f"{especie} {descripcion} {tipo_op}"
-    n = _norm(texto)
-    esp = re.sub(r"[^A-Za-z0-9]", "", str(especie or "")).upper()
+    """Grupo de trabajo a partir del identificador (compatibilidad)."""
+    return identificar_especie(especie, descripcion, tipo_op).grupo
 
-    if any(k in n for k in ("dolar mep", "dólar mep", "compra mep", "venta mep", " billete", "u$s", "usd")):
-        if "fci" not in n and "fondo" not in n:
-            # AL30/GD30 usados para MEP → bonos; USD resultante → dólar
-            if esp in TITULOS_PUBLICOS or any(t in esp for t in TITULOS_PUBLICOS):
-                if "mep" in n or "dolar" in n or "dólar" in n:
-                    return "Dólar / MEP"
-            if esp in {"USD", "U$S", "DOLAR", "DOLARES"} or n.strip() in {"usd", "u$s", "dolar"}:
-                return "Dólar / MEP"
-            if "mep" in n and ("dolar" in n or "dólar" in n or "usd" in n):
-                return "Dólar / MEP"
 
-    for t in TITULOS_PUBLICOS:
-        if esp == t or esp.startswith(t) or t in esp:
-            return "Bonos / Títulos públicos"
-    if any(k in n for k in ("bono", "titulo publico", "título público", "lecap", "letra del tesoro", "bopreal")):
-        return "Bonos / Títulos públicos"
+def _id_desde_override(row: pd.Series) -> IdentificacionEspecie | None:
+    """Solo si el usuario forzó grupo (Nueva_Clasificacion) o tipo manual."""
+    nueva = str(row.get("Nueva_Clasificacion") or "").strip()
+    tipo = tipo_desde_grupo(nueva) if nueva else None
+    forzado = str(row.get("Tipo_forzado") or "").strip().lower()
+    if tipo is None and forzado in TIPOS_INVERSION:
+        tipo = forzado
+    if tipo is None:
+        return None
+    orig = str(row.get("Especie") or "").strip()
+    canon = str(row.get("Especie_canonica") or "").strip() or orig
+    if tipo == TIPO_FCI:
+        canon = canon_fima(f"{canon} {orig}") or canon
+    if tipo == TIPO_USD_MEP:
+        canon = "USD"
+    return IdentificacionEspecie(
+        orig,
+        canon,
+        tipo,
+        TIPO_A_GRUPO[tipo],
+        CONF_ALTA,
+        "Manual",
+    )
 
-    if any(k in n for k in ("fci", "fondo comun", "fondo común", "cuotaparte", "money market", "fima", "premium clase")):
-        return "FCI"
-    if "fima" in n or re.search(r"\bfondo\b", n):
-        return "FCI"
 
-    if any(k in n for k in ("cedear", "accion", "acción", "equity", "adr")):
-        return "Acciones / Cedears"
-    # Tickers cortos tipo acciones (heurística suave)
-    if re.fullmatch(r"[A-Z]{3,5}", esp) and esp not in TITULOS_PUBLICOS:
-        if not any(k in n for k in ("fci", "fondo", "on ", "obligacion")):
-            return "Acciones / Cedears"
+def aplicar_edicion_identificacion(df_mov: pd.DataFrame, df_id: pd.DataFrame) -> pd.DataFrame:
+    """Aplica canónica/tipo editados en el cuadro Identificación a cada movimiento."""
+    if df_mov is None or df_mov.empty or df_id is None or df_id.empty:
+        return identificar_movimientos(df_mov)
+    out = df_mov.copy()
+    mapa: dict[str, tuple[str, str]] = {}
+    for _, row in df_id.iterrows():
+        orig = str(row.get("Especie") or "").strip()
+        if not orig:
+            continue
+        canon = str(row.get("Especie_canonica") or "").strip() or orig
+        tipo = str(row.get("Tipo_inversion") or "").strip().lower()
+        if tipo not in TIPOS_INVERSION:
+            tipo = tipo_desde_grupo(str(row.get("Grupo") or "")) or ""
+        if tipo:
+            mapa[orig] = (canon, tipo)
+    if "Tipo_forzado" not in out.columns:
+        out["Tipo_forzado"] = ""
+    for idx, row in out.iterrows():
+        orig = str(row.get("Especie") or "").strip()
+        if orig not in mapa:
+            continue
+        canon, tipo = mapa[orig]
+        out.at[idx, "Especie_canonica"] = canon
+        out.at[idx, "Tipo_forzado"] = tipo
+        out.at[idx, "Nueva_Clasificacion"] = TIPO_A_GRUPO.get(tipo, row.get("Nueva_Clasificacion"))
+    return identificar_movimientos(out)
 
-    if any(k in n for k in ("obligacion negociable", "obligación negociable", "\bon\b")):
-        return "Otros"
 
-    return "Otros"
+def identificar_movimientos(df: pd.DataFrame) -> pd.DataFrame:
+    """Completa Especie_canonica / Tipo_inversion / Grupo / Confianza / Motivo_id."""
+    if df is None or df.empty:
+        out = pd.DataFrame(columns=COLUMNAS_MOV)
+        return out
+    out = df.copy()
+    ids: list[IdentificacionEspecie] = []
+    for _, row in out.iterrows():
+        forced = _id_desde_override(row)
+        if forced is not None:
+            ids.append(forced)
+            continue
+        ids.append(
+            identificar_especie(
+                str(row.get("Especie") or ""),
+                str(row.get("Descripcion") or ""),
+                str(row.get("Tipo_Operacion") or ""),
+                str(row.get("Moneda") or ""),
+            )
+        )
+    out["Especie_canonica"] = [i.especie_canonica for i in ids]
+    out["Tipo_inversion"] = [i.tipo_inversion for i in ids]
+    out["Grupo"] = [i.grupo for i in ids]
+    out["Confianza"] = [i.confianza for i in ids]
+    out["Motivo_id"] = [i.motivo for i in ids]
+    return out
+
+
+def cuadro_identificacion(df: pd.DataFrame) -> pd.DataFrame:
+    """Una fila por especie canónica para revisar antes del FIFO."""
+    if df is None or df.empty:
+        return pd.DataFrame(
+            columns=[
+                "Especie", "Especie_canonica", "Tipo_inversion", "Tipo",
+                "Grupo", "Confianza", "Motivo_id", "Movimientos",
+            ]
+        )
+    work = identificar_movimientos(df)
+    g = (
+        work.groupby(
+            ["Especie", "Especie_canonica", "Tipo_inversion", "Grupo", "Confianza", "Motivo_id"],
+            dropna=False,
+        )
+        .size()
+        .reset_index(name="Movimientos")
+    )
+    g["Tipo"] = g["Tipo_inversion"].map(lambda t: TIPO_LABEL.get(t, t))
+    return g[
+        ["Especie", "Especie_canonica", "Tipo_inversion", "Tipo", "Grupo", "Confianza", "Motivo_id", "Movimientos"]
+    ].sort_values(["Confianza", "Tipo_inversion", "Especie_canonica"], kind="stable")
 
 
 def normalizar_tipo_operacion(raw: str, cantidad: float | None = None, monto: float | None = None) -> str:
@@ -224,7 +313,9 @@ def normalizar_tipo_operacion(raw: str, cantidad: float | None = None, monto: fl
         if "rescate" in n:
             return "Rescate"
         return "Venta"
-    if "dividendo" in n or "cupon" in n or "cupón" in n or "renta" in n:
+    if "dividendo" in n:
+        return "Dividendo"
+    if "cupon" in n or "cupón" in n or "renta" in n:
         return "Renta"
     if "amortiz" in n:
         return "Amortizacion"
@@ -278,12 +369,16 @@ def _df_a_movimientos(df: pd.DataFrame, archivo: str) -> list[dict]:
             precio = round(monto_abs / cant_abs, 6)
         if monto_abs is None and cant_abs and precio:
             monto_abs = round(cant_abs * precio, 2)
-        grupo = clasificar_grupo_especie(especie, desc, tipo)
+        ident = identificar_especie(especie or "Sin especie", desc, tipo)
         out.append({
             "Fecha": fecha.strftime("%d/%m/%Y") if fecha else "",
             "_fecha": fecha or date.min,
             "Especie": especie or "Sin especie",
-            "Grupo": grupo,
+            "Especie_canonica": ident.especie_canonica,
+            "Tipo_inversion": ident.tipo_inversion,
+            "Grupo": ident.grupo,
+            "Confianza": ident.confianza,
+            "Motivo_id": ident.motivo,
             "Tipo_Operacion": tipo,
             "Cantidad": cant_abs,
             "Precio": precio,
@@ -378,11 +473,16 @@ def _movimientos_galicia_caja_usd(texto: str, archivo: str) -> list[dict]:
             tipo = "Venta"
         elif "rescate" in _norm(desc):
             tipo = "Compra"
+        ident = identificar_especie("USD", desc, tipo, "USD")
         movs.append({
             "Fecha": fecha.strftime("%d/%m/%Y"),
             "_fecha": fecha,
             "Especie": "USD",
-            "Grupo": "Dólar / MEP",
+            "Especie_canonica": ident.especie_canonica,
+            "Tipo_inversion": ident.tipo_inversion,
+            "Grupo": ident.grupo,
+            "Confianza": ident.confianza,
+            "Motivo_id": ident.motivo,
             "Tipo_Operacion": tipo,
             "Cantidad": abs(imp),
             "Precio": 1.0,
@@ -423,11 +523,16 @@ def _movimientos_galicia_resumen_inversiones(texto: str, archivo: str) -> list[d
         mon = "USD" if re.search(r"(?i)\bUSD\b|U\s*SD", ln) else "ARS"
         if "dolar" in _norm(especie) or "dolares" in _norm(especie):
             mon = "USD"
+        ident = identificar_especie(especie, f"{tipo_raw} {especie}", tipo, mon)
         movs.append({
             "Fecha": fecha.strftime("%d/%m/%Y"),
             "_fecha": fecha,
             "Especie": especie,
-            "Grupo": "FCI",
+            "Especie_canonica": ident.especie_canonica,
+            "Tipo_inversion": ident.tipo_inversion,
+            "Grupo": ident.grupo,
+            "Confianza": ident.confianza,
+            "Motivo_id": ident.motivo,
             "Tipo_Operacion": tipo,
             "Cantidad": abs(cant),
             "Precio": px,
@@ -502,17 +607,22 @@ def _movimientos_desde_pdf_texto(texto: str, archivo: str) -> list[dict]:
             else:
                 precio, monto = monto, round(cant * monto, 2)
         tipo = normalizar_tipo_operacion(ln, cant, monto)
-        grupo = clasificar_grupo_especie(especie, ln, tipo)
+        mon = "USD" if ("usd" in low or "u$s" in low or "mep" in low) else "ARS"
+        ident = identificar_especie(especie, ln, tipo, mon)
         movs.append({
             "Fecha": fecha.strftime("%d/%m/%Y"),
             "_fecha": fecha,
             "Especie": especie,
-            "Grupo": grupo,
+            "Especie_canonica": ident.especie_canonica,
+            "Tipo_inversion": ident.tipo_inversion,
+            "Grupo": ident.grupo,
+            "Confianza": ident.confianza,
+            "Motivo_id": ident.motivo,
             "Tipo_Operacion": tipo,
             "Cantidad": abs(cant) if cant else None,
             "Precio": precio,
             "Monto_Total": abs(monto) if monto else None,
-            "Moneda": "USD" if ("usd" in low or "u$s" in low or "mep" in low) else "ARS",
+            "Moneda": mon,
             "Descripcion": ln[:180],
             "Archivo origen": archivo,
             "Nueva_Clasificacion": None,
@@ -559,34 +669,14 @@ def procesar_archivos_inversiones(archivos) -> tuple[pd.DataFrame, list[dict]]:
         return pd.DataFrame(columns=COLUMNAS_MOV), errores
     df = pd.DataFrame(filas)
     df = df.sort_values(["_fecha", "Especie"], kind="stable").reset_index(drop=True)
-    # Reaplicar clasificación (permite Nueva_Clasificacion futura)
-    df["Grupo"] = [
-        clasificar_grupo_especie(e, d, t)
-        for e, d, t in zip(df["Especie"], df["Descripcion"], df["Tipo_Operacion"])
-    ]
-    return df, errores
+    return identificar_movimientos(df), errores
 
 
 def reclasificar_movimientos(df: pd.DataFrame) -> pd.DataFrame:
-    """Paso 2: asegura Grupo; respeta Nueva_Clasificacion si el usuario la completó."""
+    """Paso 2: reidentifica; respeta Nueva_Clasificacion / Tipo_forzado."""
     if df is None or df.empty:
         return pd.DataFrame(columns=COLUMNAS_MOV)
-    out = df.copy()
-    grupos = []
-    for _, row in out.iterrows():
-        nueva = str(row.get("Nueva_Clasificacion") or "").strip()
-        if nueva and nueva in GRUPOS_ESPECIE:
-            grupos.append(nueva)
-        else:
-            grupos.append(
-                clasificar_grupo_especie(
-                    str(row.get("Especie") or ""),
-                    str(row.get("Descripcion") or ""),
-                    str(row.get("Tipo_Operacion") or ""),
-                )
-            )
-    out["Grupo"] = grupos
-    return out
+    return identificar_movimientos(df)
 
 
 # ---------------------------------------------------------------------------
@@ -636,12 +726,8 @@ def extraer_saldo_inicial_ddjj_pdf(data: bytes, archivo: str = "ddjj.pdf") -> tu
         esp = re.sub(r"\s+", " ", m_desc.group(1)).strip(" -")
         esp = re.sub(r"\s+\d+\s*$", "", esp).strip()
         # Normalizar nombre
-        if "premium" in _norm(esp):
-            esp = "FIMA PREMIUM CLASE A"
-        elif "ahorro" in _norm(esp):
-            esp = "FIMA AHORRO PESOS CLASE A"
-        elif "renta fija" in _norm(esp) and "dolar" in _norm(esp):
-            esp = "FIMA RENTA FIJA DOLARES CLASE A"
+        ident = identificar_especie(esp, esp, "Saldo inicial")
+        esp = ident.especie_canonica
         key = f"FCI|{esp.upper()}"
         if key in vistos:
             continue
@@ -658,23 +744,39 @@ def extraer_saldo_inicial_ddjj_pdf(data: bytes, archivo: str = "ddjj.pdf") -> tu
                 cant = c
                 break
         if cant is None:
-            cant = 1.0
-            cu = costo
             avisos.append(
-                f"{esp}: valuación ${costo:,.2f} sin cuotas claras; "
-                "lote inicial = 1 @ costo total (revisar / estimar cuotas)."
+                f"{esp}: valuación ${costo:,.2f} sin cuotapartes. "
+                "Completá la cantidad en el Excel de saldo inicial; no se siembra lote ficticio."
             )
-        else:
-            cu = round(costo / cant, 6)
+            filas.append({
+                "Especie": esp,
+                "Especie_canonica": esp,
+                "Tipo_inversion": TIPO_FCI,
+                "Grupo": ident.grupo,
+                "Cantidad": None,
+                "Costo_Unitario": None,
+                "Costo_Total": costo,
+                "Moneda": "ARS",
+                "Origen": archivo,
+                "Fecha": "01/01/1900",
+                "Revisar": "SI — falta cantidad de cuotapartes",
+                "Confianza": CONF_REVISAR,
+            })
+            continue
+        cu = round(costo / cant, 6)
         filas.append({
             "Especie": esp,
-            "Grupo": "FCI",
+            "Especie_canonica": esp,
+            "Tipo_inversion": TIPO_FCI,
+            "Grupo": ident.grupo,
             "Cantidad": cant,
             "Costo_Unitario": cu,
             "Costo_Total": costo,
             "Moneda": "ARS",
             "Origen": archivo,
             "Fecha": "01/01/1900",
+            "Revisar": "",
+            "Confianza": CONF_ALTA,
         })
 
     # Depósitos USD (cantidad nominal razonable)
@@ -703,13 +805,17 @@ def extraer_saldo_inicial_ddjj_pdf(data: bytes, archivo: str = "ddjj.pdf") -> tu
         vistos.add(key)
         filas.append({
             "Especie": "USD",
-            "Grupo": "Dólar / MEP",
+            "Especie_canonica": "USD",
+            "Tipo_inversion": TIPO_USD_MEP,
+            "Grupo": TIPO_A_GRUPO[TIPO_USD_MEP],
             "Cantidad": cant,
             "Costo_Unitario": cu if costo_ars else 1.0,
             "Costo_Total": costo_ars if costo_ars else cant,
             "Moneda": "USD",
             "Origen": archivo,
             "Fecha": "01/01/1900",
+            "Revisar": "USD — analizar en Caja USD",
+            "Confianza": CONF_ALTA,
         })
 
     # Fallback tickers SOLO si el archivo parece un listado de títulos (no papeles BIENES ruidosos)
@@ -728,15 +834,20 @@ def extraer_saldo_inicial_ddjj_pdf(data: bytes, archivo: str = "ddjj.pdf") -> tu
             if key in vistos:
                 continue
             vistos.add(key)
+            ident = identificar_especie(esp)
             filas.append({
-                "Especie": esp,
-                "Grupo": clasificar_grupo_especie(esp),
+                "Especie": ident.especie_canonica,
+                "Especie_canonica": ident.especie_canonica,
+                "Tipo_inversion": ident.tipo_inversion,
+                "Grupo": ident.grupo,
                 "Cantidad": cant,
                 "Costo_Unitario": None,
                 "Costo_Total": None,
                 "Moneda": "ARS",
                 "Origen": archivo,
                 "Fecha": "01/01/1900",
+                "Revisar": "" if ident.confianza == CONF_ALTA else "SI — confirmar especie",
+                "Confianza": ident.confianza,
             })
 
     if not filas:
@@ -782,15 +893,20 @@ def leer_saldo_inicial_excel(data: bytes, archivo: str = "saldo.xlsx") -> pd.Dat
             cu = round(ct / cant, 6)
         if ct is None and cu is not None:
             ct = round(cant * cu, 2)
+        ident = identificar_especie(esp, "", "Saldo inicial", str(row.get("Moneda") or "ARS"))
         out.append({
-            "Especie": esp,
-            "Grupo": clasificar_grupo_especie(esp),
+            "Especie": ident.especie_canonica,
+            "Especie_canonica": ident.especie_canonica,
+            "Tipo_inversion": ident.tipo_inversion,
+            "Grupo": ident.grupo,
             "Cantidad": cant,
             "Costo_Unitario": cu,
             "Costo_Total": ct,
             "Moneda": str(row.get("Moneda") or "ARS"),
             "Origen": archivo,
             "Fecha": "01/01/1900",
+            "Revisar": "",
+            "Confianza": ident.confianza,
         })
     return pd.DataFrame(out)
 
@@ -805,6 +921,7 @@ class LoteFifo:
     cantidad: float
     costo_unitario: float
     origen: str = ""
+    tipo_inversion: str = ""
 
 
 @dataclass
@@ -813,10 +930,57 @@ class ResultadoFifo:
     saldos: list[dict] = field(default_factory=list)
     movimientos: list[dict] = field(default_factory=list)
     avisos: list[str] = field(default_factory=list)
+    lotes_abiertos: list[dict] = field(default_factory=list)
 
 
 def _clave_especie(especie: str, moneda: str = "ARS") -> str:
     return f"{str(especie).strip().upper()}|{str(moneda).strip().upper()}"
+
+
+def _num(val: object, default: float = 0.0) -> float:
+    if val is None or (isinstance(val, float) and pd.isna(val)):
+        return default
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return default
+
+
+def _fila_valuada(
+    *,
+    fecha_txt: str,
+    esp: str,
+    tipo_inv: str,
+    grupo: object,
+    tipo_op: str,
+    cant: float,
+    precio: float,
+    monto: float,
+    mon: str,
+    costo: float,
+    resultado: float,
+    detalle: str,
+    estado: str,
+    cant_aplicada: float | None = None,
+    cant_sin_stock: float = 0.0,
+) -> dict:
+    return {
+        "Fecha": fecha_txt,
+        "Especie": esp,
+        "Tipo_inversion": tipo_inv,
+        "Grupo": grupo,
+        "Tipo_Operacion": tipo_op,
+        "Cantidad": cant,
+        "Cantidad_aplicada": round(cant_aplicada if cant_aplicada is not None else cant, 6),
+        "Cantidad_sin_stock": round(cant_sin_stock, 6),
+        "Precio": precio,
+        "Monto_Total": monto,
+        "Moneda": mon,
+        "Costo_Aplicado": round(costo, 2),
+        "Resultado": round(resultado, 2),
+        "Detalle_FIFO": detalle,
+        "Estado": estado,
+    }
 
 
 def aplicar_fifo(
@@ -824,21 +988,38 @@ def aplicar_fifo(
     df_inicial: pd.DataFrame | None = None,
 ) -> ResultadoFifo:
     """
-    FIFO por especie (+ moneda):
-    - Compra / Suscripcion → entra lote
-    - Venta / Rescate → sale de los lotes más viejos
+    Identifica el tipo y recién ahí mueve lotes:
+    FCI suscrip/rescate · bono compra/venta/amort/cupón · acción compra/venta/div.
+    USD/MEP y 'otro' no entran al FIFO.
     """
     res = ResultadoFifo()
     colas: dict[str, deque[LoteFifo]] = defaultdict(deque)
 
-    # Sembrar saldo inicial
     if df_inicial is not None and not df_inicial.empty:
         for _, row in df_inicial.iterrows():
-            esp = str(row.get("Especie") or "").strip()
-            if not esp:
+            ident = identificar_especie(
+                str(row.get("Especie_canonica") or row.get("Especie") or ""),
+                str(row.get("Especie") or ""),
+                "Saldo inicial",
+                str(row.get("Moneda") or "ARS"),
+            )
+            tipo_inv = str(row.get("Tipo_inversion") or ident.tipo_inversion)
+            if tipo_inv == TIPO_USD_MEP:
+                res.avisos.append(
+                    f"Saldo inicial {ident.especie_canonica}: USD/MEP no se FIFO-ea acá — usá Caja USD."
+                )
                 continue
-            cant = float(row.get("Cantidad") or 0)
+            if tipo_inv == TIPO_OTRO:
+                res.avisos.append(
+                    f"Saldo inicial {ident.especie_canonica}: tipo Otro — confirmar antes de sembrar lote."
+                )
+                continue
+            cant = _num(row.get("Cantidad"))
             if cant <= 0:
+                nota = str(row.get("Revisar") or "sin cantidad")
+                res.avisos.append(
+                    f"Saldo inicial {ident.especie_canonica}: no se sembró lote ({nota})."
+                )
                 continue
             mon = str(row.get("Moneda") or "ARS")
             cu = row.get("Costo_Unitario")
@@ -847,106 +1028,184 @@ def aplicar_fifo(
                 cu = (float(ct) / cant) if ct not in (None, 0) and not (isinstance(ct, float) and pd.isna(ct)) else 0.0
             else:
                 cu = float(cu)
-            key = _clave_especie(esp, mon)
-            colas[key].append(LoteFifo(date(1900, 1, 1), cant, cu, "Saldo inicial"))
-            res.movimientos.append({
-                "Fecha": "Saldo inicial",
-                "Especie": esp,
-                "Grupo": row.get("Grupo") or clasificar_grupo_especie(esp),
-                "Tipo_Operacion": "Saldo inicial",
-                "Cantidad": cant,
-                "Precio": cu,
-                "Monto_Total": round(cant * cu, 2),
-                "Moneda": mon,
-                "Costo_Aplicado": round(cant * cu, 2),
-                "Resultado": 0.0,
-                "Detalle_FIFO": "Semilla DDJJ/manual",
-            })
+            key = _clave_especie(ident.especie_canonica, mon)
+            colas[key].append(LoteFifo(date(1900, 1, 1), cant, cu, "Saldo inicial", tipo_inv))
+            res.movimientos.append(_fila_valuada(
+                fecha_txt="Saldo inicial",
+                esp=ident.especie_canonica,
+                tipo_inv=tipo_inv,
+                grupo=row.get("Grupo") or ident.grupo,
+                tipo_op="Saldo inicial",
+                cant=cant,
+                precio=cu,
+                monto=round(cant * cu, 2),
+                mon=mon,
+                costo=round(cant * cu, 2),
+                resultado=0.0,
+                detalle="Semilla DDJJ/manual",
+                estado="ENTRADA",
+            ))
 
     work = reclasificar_movimientos(df_mov) if df_mov is not None else pd.DataFrame()
     if not work.empty:
         work = work.copy()
         if "_fecha" not in work.columns:
             work["_fecha"] = work["Fecha"].map(lambda x: _parse_fecha(x) or date.min)
-        work = work.sort_values(["_fecha", "Especie"], kind="stable")
+        work["_evento"] = [
+            evento_para(str(r.get("Tipo_inversion") or ""), str(r.get("Tipo_Operacion") or ""))
+            for _, r in work.iterrows()
+        ]
+        # FCI: respetar el orden del extracto (FIFO ya come lo más viejo).
+        # Bonos/acciones: el mismo día, entradas antes que salidas.
+        work["_ord_ev"] = [
+            0 if str(r.get("Tipo_inversion")) == TIPO_FCI else orden_evento(str(r.get("_evento")))
+            for _, r in work.iterrows()
+        ]
+        work["_idx"] = range(len(work))
+        work = work.sort_values(["_fecha", "_ord_ev", "_idx"], kind="stable")
 
     for _, row in work.iterrows():
-        esp = str(row.get("Especie") or "").strip()
+        ident_tipo = str(row.get("Tipo_inversion") or TIPO_OTRO)
+        esp = str(row.get("Especie_canonica") or row.get("Especie") or "").strip()
         if not esp:
             continue
         mon = str(row.get("Moneda") or "ARS")
         key = _clave_especie(esp, mon)
-        tipo = str(row.get("Tipo_Operacion") or "")
-        cant = float(row.get("Cantidad") or 0)
-        if cant <= 0:
-            continue
+        tipo_op = str(row.get("Tipo_Operacion") or "")
+        evento = str(row.get("_evento") or evento_para(ident_tipo, tipo_op))
+        cant = _num(row.get("Cantidad"))
         precio = row.get("Precio")
         monto = row.get("Monto_Total")
-        if precio is None or (isinstance(precio, float) and pd.isna(precio)):
-            precio = (float(monto) / cant) if monto not in (None, 0) and not pd.isna(monto) else 0.0
+        if cant > 0:
+            if precio is None or (isinstance(precio, float) and pd.isna(precio)):
+                precio = (float(monto) / cant) if monto not in (None, 0) and not pd.isna(monto) else 0.0
+            else:
+                precio = float(precio)
+            if monto is None or (isinstance(monto, float) and pd.isna(monto)):
+                monto = round(cant * precio, 2)
+            else:
+                monto = float(monto)
         else:
-            precio = float(precio)
-        if monto is None or (isinstance(monto, float) and pd.isna(monto)):
-            monto = round(cant * precio, 2)
-        else:
-            monto = float(monto)
+            precio = _num(precio)
+            monto = _num(monto)
         fecha = row.get("_fecha") or _parse_fecha(row.get("Fecha")) or date.min
-        fecha_txt = fecha.strftime("%d/%m/%Y") if isinstance(fecha, date) and fecha.year > 1900 else str(row.get("Fecha") or "")
+        fecha_txt = (
+            fecha.strftime("%d/%m/%Y")
+            if isinstance(fecha, date) and fecha.year > 1900
+            else str(row.get("Fecha") or "")
+        )
+        grupo = row.get("Grupo")
 
-        es_entrada = tipo.lower() in {
-            "compra", "suscripcion", "suscripción", "aporte", "ingreso", "saldo inicial",
-        }
-        es_salida = tipo.lower() in {"venta", "rescate", "egreso", "amortizacion", "amortización"}
+        if evento == EVENTO_OMITIR_USD:
+            res.avisos.append(
+                f"{fecha_txt} {esp}: USD/MEP no se analiza acá — usá la herramienta Caja USD."
+            )
+            res.movimientos.append(_fila_valuada(
+                fecha_txt=fecha_txt, esp=esp, tipo_inv=ident_tipo, grupo=grupo,
+                tipo_op=tipo_op, cant=cant, precio=precio, monto=monto, mon=mon,
+                costo=0.0, resultado=0.0,
+                detalle="Omitido — Caja USD", estado="OMITIDO_USD",
+                cant_aplicada=0.0,
+            ))
+            continue
 
-        if es_entrada or (not es_salida and tipo.lower() not in {"renta", "dividendo"}):
-            if not es_salida:
-                colas[key].append(LoteFifo(fecha if isinstance(fecha, date) else date.min, cant, precio, tipo))
-                res.movimientos.append({
-                    "Fecha": fecha_txt,
-                    "Especie": esp,
-                    "Grupo": row.get("Grupo"),
-                    "Tipo_Operacion": tipo,
-                    "Cantidad": cant,
-                    "Precio": precio,
-                    "Monto_Total": monto,
-                    "Moneda": mon,
-                    "Costo_Aplicado": round(cant * precio, 2),
-                    "Resultado": 0.0,
-                    "Detalle_FIFO": "Alta de lote",
-                })
+        if evento == EVENTO_REVISAR:
+            res.avisos.append(
+                f"{fecha_txt} {esp}: tipo Otro — confirmar identificación antes de FIFO."
+            )
+            res.movimientos.append(_fila_valuada(
+                fecha_txt=fecha_txt, esp=esp, tipo_inv=ident_tipo, grupo=grupo,
+                tipo_op=tipo_op, cant=cant, precio=precio, monto=monto, mon=mon,
+                costo=0.0, resultado=0.0,
+                detalle="Revisar tipo de inversión", estado="REVISAR",
+                cant_aplicada=0.0,
+            ))
+            continue
+
+        if evento == EVENTO_OMITIR:
+            res.avisos.append(
+                f"{fecha_txt} {esp}: operación '{tipo_op}' no aplica al tipo {ident_tipo}."
+            )
+            res.movimientos.append(_fila_valuada(
+                fecha_txt=fecha_txt, esp=esp, tipo_inv=ident_tipo, grupo=grupo,
+                tipo_op=tipo_op, cant=cant, precio=precio, monto=monto, mon=mon,
+                costo=0.0, resultado=0.0,
+                detalle="Operación no aplica al tipo", estado="OMITIDO",
+                cant_aplicada=0.0,
+            ))
+            continue
+
+        if evento == EVENTO_INGRESO:
+            res.movimientos.append(_fila_valuada(
+                fecha_txt=fecha_txt, esp=esp, tipo_inv=ident_tipo, grupo=grupo,
+                tipo_op=tipo_op, cant=cant, precio=precio, monto=monto, mon=mon,
+                costo=0.0, resultado=monto,
+                detalle="No toca stock (renta / dividendo / cupón)", estado="INGRESO",
+                cant_aplicada=0.0,
+            ))
+            continue
+
+        if evento == EVENTO_ENTRADA:
+            if cant <= 0:
                 continue
+            colas[key].append(
+                LoteFifo(fecha if isinstance(fecha, date) else date.min, cant, precio, tipo_op, ident_tipo)
+            )
+            res.movimientos.append(_fila_valuada(
+                fecha_txt=fecha_txt, esp=esp, tipo_inv=ident_tipo, grupo=grupo,
+                tipo_op=tipo_op, cant=cant, precio=precio, monto=monto, mon=mon,
+                costo=round(cant * precio, 2), resultado=0.0,
+                detalle="Alta de lote", estado="ENTRADA",
+            ))
+            continue
 
-        # Salida FIFO
+        if evento not in {EVENTO_SALIDA, EVENTO_AMORT} or cant <= 0:
+            continue
+
+        # Salida / amortización / rescate FCI: FIFO (first in, first out)
         restante = cant
         costo_total = 0.0
+        interes_fci = 0.0
+        aplicado = 0.0
         detalle_partes: list[str] = []
+        es_fci = ident_tipo == TIPO_FCI
         while restante > 1e-12:
             if not colas[key]:
-                # Sin stock: costo = precio de salida (resultado 0 sobre faltante)
-                costo_total += restante * precio
-                detalle_partes.append(f"SIN_STOCK:{restante:.4f}@{precio:.6f}")
+                detalle_partes.append(f"SIN_STOCK:{restante:.4f}")
                 res.avisos.append(
-                    f"{fecha_txt} {esp}: venta/rescate sin stock suficiente "
-                    f"(faltan {restante:.4f})."
+                    f"{fecha_txt} {esp}: {'amortización' if evento == EVENTO_AMORT else 'venta/rescate'} "
+                    f"sin stock suficiente (faltan {restante:.4f})."
                 )
-                restante = 0.0
                 break
             lote = colas[key][0]
             toma = min(lote.cantidad, restante)
-            costo_total += toma * lote.costo_unitario
-            detalle_partes.append(
-                f"{lote.fecha.strftime('%d/%m/%Y') if lote.fecha.year > 1900 else 'INI'}:"
-                f"{toma:.4f}@{lote.costo_unitario:.6f}"
-            )
+            costo_parte = toma * lote.costo_unitario
+            costo_total += costo_parte
+            aplicado += toma
+            vc_lote = lote.costo_unitario
+            interes_parte = (precio - vc_lote) * toma if es_fci else 0.0
+            interes_fci += interes_parte
+            lote_txt = lote.fecha.strftime("%d/%m/%Y") if lote.fecha.year > 1900 else "INI"
+            if es_fci:
+                detalle_partes.append(
+                    f"({precio:.6f}-{vc_lote:.6f})×{toma:.4f}"
+                )
+            else:
+                detalle_partes.append(f"{lote_txt}:{toma:.4f}@{vc_lote:.6f}")
             res.aplicaciones.append({
                 "Fecha_salida": fecha_txt,
                 "Especie": esp,
-                "Grupo": row.get("Grupo"),
+                "Tipo_inversion": ident_tipo,
+                "Grupo": grupo,
+                "Evento": "Amortizacion" if evento == EVENTO_AMORT else tipo_op,
                 "Cantidad": round(toma, 6),
-                "Costo_unitario_lote": lote.costo_unitario,
-                "Costo_parcial": round(toma * lote.costo_unitario, 2),
+                "Valor_CC_lote": vc_lote,
+                "Valor_CC_salida": precio,
+                "Costo_unitario_lote": vc_lote,
+                "Costo_parcial": round(costo_parte, 2),
+                "Interes": round(interes_parte, 2) if es_fci else None,
                 "Precio_salida": precio,
-                "Fecha_lote": lote.fecha.strftime("%d/%m/%Y") if lote.fecha.year > 1900 else "Saldo inicial",
+                "Fecha_lote": lote_txt if lote_txt != "INI" else "Saldo inicial",
                 "Origen_lote": lote.origen,
                 "Moneda": mon,
             })
@@ -955,37 +1214,60 @@ def aplicar_fifo(
             if lote.cantidad <= 1e-12:
                 colas[key].popleft()
 
-        resultado = round(float(monto) - costo_total, 2)
-        res.movimientos.append({
-            "Fecha": fecha_txt,
-            "Especie": esp,
-            "Grupo": row.get("Grupo"),
-            "Tipo_Operacion": tipo,
-            "Cantidad": cant,
-            "Precio": precio,
-            "Monto_Total": monto,
-            "Moneda": mon,
-            "Costo_Aplicado": round(costo_total, 2),
-            "Resultado": resultado,
-            "Detalle_FIFO": " | ".join(detalle_partes),
-        })
+        sin_stock = max(restante, 0.0)
+        if es_fci:
+            # Interés = (VC rescate − VC lote) × cuotas de ese lote
+            resultado = round(interes_fci, 2) if aplicado > 0 else 0.0
+            estado = "INTERES" if sin_stock <= 1e-12 else "SIN_STOCK"
+        else:
+            if cant > 0 and aplicado + 1e-12 < cant:
+                monto_aplicado = round(monto * (aplicado / cant), 2)
+            else:
+                monto_aplicado = monto
+            resultado = round(float(monto_aplicado) - costo_total, 2) if aplicado > 0 else 0.0
+            estado = "AMORTIZACION" if evento == EVENTO_AMORT else "SALIDA"
+            if sin_stock > 1e-12:
+                estado = "SIN_STOCK"
+        res.movimientos.append(_fila_valuada(
+            fecha_txt=fecha_txt, esp=esp, tipo_inv=ident_tipo, grupo=grupo,
+            tipo_op=tipo_op, cant=cant, precio=precio, monto=monto, mon=mon,
+            costo=costo_total, resultado=resultado,
+            detalle=" | ".join(detalle_partes) or "SIN_STOCK",
+            estado=estado, cant_aplicada=aplicado, cant_sin_stock=sin_stock,
+        ))
 
-    # Saldos de cierre
     for key, cola in colas.items():
         esp, mon = key.split("|", 1)
         cant = sum(l.cantidad for l in cola)
         if cant <= 1e-12:
             continue
         costo = sum(l.cantidad * l.costo_unitario for l in cola)
+        tipo_inv = next((l.tipo_inversion for l in cola if l.tipo_inversion), "")
+        ident = identificar_especie(esp)
         res.saldos.append({
             "Especie": esp,
-            "Grupo": clasificar_grupo_especie(esp),
+            "Tipo_inversion": tipo_inv or ident.tipo_inversion,
+            "Grupo": TIPO_A_GRUPO.get(tipo_inv, ident.grupo),
             "Cantidad": round(cant, 6),
             "Costo_Total": round(costo, 2),
             "Costo_Unitario_Promedio": round(costo / cant, 6) if cant else 0.0,
             "Moneda": mon,
             "Lotes": len(cola),
         })
+        for lote in cola:
+            if lote.cantidad <= 1e-12:
+                continue
+            fecha_lote = lote.fecha if isinstance(lote.fecha, date) and lote.fecha.year > 1900 else None
+            res.lotes_abiertos.append({
+                "Especie": esp,
+                "Fecha": fecha_lote,
+                "Fecha_txt": fecha_lote.strftime("%d/%m/%Y") if fecha_lote else "Saldo inicial",
+                "Origen": lote.origen or "",
+                "Cantidad": round(lote.cantidad, 6),
+                "Costo_Unitario": lote.costo_unitario,
+                "Costo_Total": round(lote.cantidad * lote.costo_unitario, 2),
+                "Moneda": mon,
+            })
     res.saldos = sorted(res.saldos, key=lambda r: (r["Grupo"], r["Especie"]))
     return res
 
@@ -1000,135 +1282,77 @@ def exportar_inversiones_excel(
     df_inicial: pd.DataFrame | None = None,
     meta: dict | None = None,
 ) -> bytes:
-    from openpyxl import Workbook
-    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-    from openpyxl.utils.dataframe import dataframe_to_rows
-
-    from excel_formato_estudio import COLOR_PRIMARIO, HDR_FONT
-
     meta = meta or {}
-    header_font = HDR_FONT
-    body_font = Font(name="Calibri", size=11)
-    fill_h = PatternFill("solid", fgColor=COLOR_PRIMARIO)
-    thin = Border(
-        left=Side(style="thin", color="B0B0B0"),
-        right=Side(style="thin", color="B0B0B0"),
-        top=Side(style="thin", color="B0B0B0"),
-        bottom=Side(style="thin", color="B0B0B0"),
-    )
-
-    def _style(ws, money_cols=()):
-        for cell in ws[1]:
-            cell.font = header_font
-            cell.fill = fill_h
-            cell.border = thin
-        for row in ws.iter_rows(min_row=2, max_row=max(2, ws.max_row), max_col=ws.max_column):
-            for cell in row:
-                cell.font = body_font
-                cell.border = thin
-                if cell.column in money_cols and isinstance(cell.value, (int, float)):
-                    cell.number_format = '#,##0.00;[Red]-#,##0.00'
-                    cell.alignment = Alignment(horizontal="right")
-
-    wb = Workbook()
-    # Resumen
-    ws = wb.active
-    ws.title = "Resumen"
-    resumen = pd.DataFrame([
-        {"Campo": "Cliente / nota", "Valor": meta.get("nota") or ""},
-        {"Campo": "Movimientos", "Valor": len(df_mov) if df_mov is not None else 0},
-        {"Campo": "Especies con saldo", "Valor": len(resultado.saldos)},
-        {"Campo": "Avisos FIFO", "Valor": len(resultado.avisos)},
-        {"Campo": "Metodo", "Valor": "FIFO / PEPS por especie"},
-        {"Campo": "Generado", "Valor": datetime.now().strftime("%d/%m/%Y %H:%M")},
-    ])
-    for r in dataframe_to_rows(resumen, index=False, header=True):
-        ws.append(r)
-    _style(ws)
-    ws.column_dimensions["A"].width = 22
-    ws.column_dimensions["B"].width = 60
-
-    # Movimientos normalizados
-    ws2 = wb.create_sheet("Movimientos")
-    cols = [c for c in COLUMNAS_MOV if c in (df_mov.columns if df_mov is not None else [])]
-    df_m = df_mov[cols].copy() if df_mov is not None and not df_mov.empty else pd.DataFrame(columns=COLUMNAS_MOV)
-    for r in dataframe_to_rows(df_m, index=False, header=True):
-        ws2.append(r)
-    _style(ws2, money_cols={5, 6, 7})
-    for i, w in enumerate([12, 22, 24, 14, 12, 12, 14, 10, 40, 22, 18], start=1):
-        from openpyxl.utils import get_column_letter
-        ws2.column_dimensions[get_column_letter(i)].width = w
-    ws2.freeze_panes = "A2"
-
-    # Saldo inicial
-    ws_i = wb.create_sheet("Saldo_inicial")
-    df_i = df_inicial if df_inicial is not None else pd.DataFrame()
-    if df_i.empty:
-        ws_i.append(["Especie", "Grupo", "Cantidad", "Costo_Unitario", "Costo_Total", "Moneda", "Origen"])
-    else:
-        for r in dataframe_to_rows(df_i, index=False, header=True):
-            ws_i.append(r)
-    _style(ws_i, money_cols={3, 4, 5})
-
-    # FIFO aplicaciones + movimientos valuados
-    ws_f = wb.create_sheet("FIFO_aplicaciones")
-    df_ap = pd.DataFrame(resultado.aplicaciones)
-    if df_ap.empty:
-        ws_f.append(["Fecha_salida", "Especie", "Cantidad", "Costo_unitario_lote", "Costo_parcial", "Precio_salida"])
-    else:
-        for r in dataframe_to_rows(df_ap, index=False, header=True):
-            ws_f.append(r)
-    _style(ws_f, money_cols=set(range(3, 12)))
-
-    ws_v = wb.create_sheet("FIFO_movimientos")
+    df_m = identificar_movimientos(df_mov) if df_mov is not None and not df_mov.empty else pd.DataFrame()
     df_v = pd.DataFrame(resultado.movimientos)
-    if df_v.empty:
-        ws_v.append(["Fecha", "Especie", "Tipo_Operacion", "Cantidad", "Costo_Aplicado", "Resultado"])
-    else:
-        for r in dataframe_to_rows(df_v, index=False, header=True):
-            ws_v.append(r)
-    _style(ws_v, money_cols=set(range(4, 12)))
-
-    # Saldos cierre
-    ws_s = wb.create_sheet("Saldos_cierre")
+    df_ap = pd.DataFrame(resultado.aplicaciones)
     df_s = pd.DataFrame(resultado.saldos)
-    if df_s.empty:
-        ws_s.append(["Especie", "Grupo", "Cantidad", "Costo_Total", "Costo_Unitario_Promedio", "Moneda"])
-    else:
-        for r in dataframe_to_rows(df_s, index=False, header=True):
-            ws_s.append(r)
-    _style(ws_s, money_cols={3, 4, 5})
+    df_i = df_inicial if df_inicial is not None else pd.DataFrame()
+    df_id = cuadro_identificacion(df_m) if not df_m.empty else pd.DataFrame()
 
-    # Una hoja por grupo
-    if df_mov is not None and not df_mov.empty and "Grupo" in df_mov.columns:
-        usados: set[str] = set()
-        for grupo in sorted(df_mov["Grupo"].dropna().unique()):
-            nombre = re.sub(r'[\\/*?:\[\]]', "-", str(grupo))[:31].strip() or "Grupo"
-            base = nombre
-            n = 2
-            while nombre.lower() in usados:
-                suf = f"_{n}"
-                nombre = (base[: 31 - len(suf)] + suf)
-                n += 1
-            usados.add(nombre.lower())
-            ws_g = wb.create_sheet(nombre)
-            sub = df_mov[df_mov["Grupo"] == grupo]
-            cols_g = [c for c in COLUMNAS_MOV if c in sub.columns]
-            for r in dataframe_to_rows(sub[cols_g], index=False, header=True):
-                ws_g.append(r)
-            _style(ws_g, money_cols={5, 6, 7})
+    por_tipo = []
+    if not df_v.empty and "Tipo_inversion" in df_v.columns:
+        tmp = df_v.copy()
+        tmp["Resultado_fifo"] = tmp.apply(
+            lambda r: r["Resultado"] if str(r.get("Estado")) in {
+                "SALIDA", "AMORTIZACION", "INTERES", "SIN_STOCK",
+            } else 0.0,
+            axis=1,
+        )
+        g = (
+            tmp.groupby("Tipo_inversion", dropna=False)
+            .agg(Movimientos=("Especie", "size"), Resultado=("Resultado_fifo", "sum"))
+            .reset_index()
+        )
+        g["Tipo"] = g["Tipo_inversion"].map(lambda t: TIPO_LABEL.get(t, t))
+        por_tipo = g[["Tipo", "Movimientos", "Resultado"]]
 
-    # Avisos
-    ws_a = wb.create_sheet("Avisos")
-    ws_a.append(["Aviso"])
-    for a in resultado.avisos or ["Sin avisos"]:
-        ws_a.append([a])
-    _style(ws_a)
-    ws_a.column_dimensions["A"].width = 100
+    kpis: list[tuple[str, Any]] = [
+        ("Movimientos", int(len(df_m))),
+        ("Especies con saldo", int(len(df_s))),
+        ("Avisos", int(len(resultado.avisos))),
+        (
+            "Resultado FIFO (ventas/rescates)",
+            float(df_v.loc[df_v["Estado"].isin(["SALIDA", "AMORTIZACION", "INTERES", "SIN_STOCK"]), "Resultado"].sum())
+            if not df_v.empty and "Estado" in df_v.columns
+            else 0.0,
+        ),
+    ]
 
-    buf = io.BytesIO()
-    wb.save(buf)
-    return buf.getvalue()
+    cols_mov = [c for c in COLUMNAS_MOV if c in df_m.columns] if not df_m.empty else COLUMNAS_MOV
+    avisos_df = pd.DataFrame({"Aviso": resultado.avisos or ["Sin avisos"]})
+
+    hojas: list[tuple[str, pd.DataFrame]] = [
+        ("Identificacion", df_id),
+        ("Saldo_inicial", df_i if not df_i.empty else pd.DataFrame(columns=["Especie", "Cantidad", "Costo_Total"])),
+        ("FIFO", df_ap),
+        ("Saldos_cierre", df_s),
+        ("Avisos", avisos_df),
+    ]
+    if not df_m.empty and "Grupo" in df_m.columns:
+        for grupo in sorted(df_m["Grupo"].dropna().unique()):
+            sub = df_m[df_m["Grupo"] == grupo]
+            hojas.append((str(grupo)[:31], sub[cols_mov]))
+
+    return exportar_informe_excel(
+        titulo="Analizador de inversiones FIFO",
+        subtitulo=str(meta.get("nota") or "Identificar tipo → reglas por tipo → FIFO"),
+        periodo=datetime.now().strftime("%d/%m/%Y %H:%M"),
+        kpis=kpis,
+        resumenes=[
+            ("Por tipo de inversión", pd.DataFrame(por_tipo) if len(por_tipo) else pd.DataFrame()),
+        ],
+        detalle=df_v if not df_v.empty else df_m[cols_mov] if not df_m.empty else pd.DataFrame(),
+        hoja_detalle="FIFO_movimientos" if not df_v.empty else "Movimientos",
+        hojas_adicionales=hojas + ([("Movimientos", df_m[cols_mov])] if not df_v.empty and not df_m.empty else []),
+        col_moneda=[
+            "Importe", "Monto_Total", "Precio", "Costo_Aplicado", "Resultado",
+            "Costo_Total", "Costo_Unitario", "Costo_unitario_lote", "Costo_parcial",
+            "Precio_salida", "Costo_Unitario_Promedio",
+        ],
+        col_fecha=["Fecha", "Fecha_salida", "Fecha_lote"],
+        total_col="Resultado" if not df_v.empty and "Resultado" in df_v.columns else None,
+    )
 
 
 def plantilla_saldo_inicial_excel() -> bytes:
