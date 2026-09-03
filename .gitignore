@@ -2,6 +2,8 @@
 .env
 .env.*
 !.env.example
+# Token / reglas de gastos personales (Mercado Pago)
+gastos_mp_local/
 *.pem
 *.key
 credentials.json
@@ -95,3 +97,17 @@ data/secure/
 
 # Local URL shortcuts / machine-specific launchers (optional to keep scripts)
 *.url
+
+# AFIP job queue (JSON runtime + plantillas subidas; keep folder structure)
+jobs/pending/*
+!jobs/pending/.gitkeep
+jobs/running/*
+!jobs/running/.gitkeep
+jobs/done/*
+!jobs/done/.gitkeep
+jobs/error/*
+!jobs/error/.gitkeep
+jobs/needs_auth/*
+!jobs/needs_auth/.gitkeep
+uploads/afip/*
+!uploads/afip/.gitkeep

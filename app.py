@@ -2392,46 +2392,54 @@ def _guardar_plan_cliente_en_disco(
 
         usuario = _usuario_oficina_actual()
         if tiene_clave_cifrado():
-            if cliente_id is not None:
-                enc = guardar_plan_cifrado_por_cliente(usuario, cliente_id, archivo_bytes)
-                # Espejo por CUIT para búsquedas legacy
-                try:
-                    guardar_plan_cifrado(usuario, cuit, archivo_bytes)
-                except Exception:
-                    pass
-            else:
-                enc = guardar_plan_cifrado(usuario, cuit, archivo_bytes)
-            tmp = materializar_descifrado(enc, suffix=".xlsx")
-            df = cargar_plan_cuentas(tmp)
             try:
-                tmp.unlink(missing_ok=True)
-            except OSError:
-                pass
-            # Espejo plaintext en data/planes_cuentas (reconocimiento inmediato + redeploy parcial)
-            try:
-                DATA_PLANES_DIR.mkdir(parents=True, exist_ok=True)
                 if cliente_id is not None:
-                    (DATA_PLANES_DIR / f"plan_id_{int(cliente_id)}.xlsx").write_bytes(archivo_bytes)
-                (DATA_PLANES_DIR / f"plan_{cuit}.xlsx").write_bytes(archivo_bytes)
-                df[["codigo", "descripcion", "imputable"]].to_csv(
-                    DATA_PLANES_DIR / f"plan_{cuit}.csv", index=False,
+                    enc = guardar_plan_cifrado_por_cliente(usuario, cliente_id, archivo_bytes)
+                    # Espejo por CUIT para búsquedas legacy
+                    try:
+                        guardar_plan_cifrado(usuario, cuit, archivo_bytes)
+                    except Exception:
+                        pass
+                else:
+                    enc = guardar_plan_cifrado(usuario, cuit, archivo_bytes)
+                tmp = materializar_descifrado(enc, suffix=".xlsx")
+                df = cargar_plan_cuentas(tmp)
+                try:
+                    tmp.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                # Espejo plaintext en data/planes_cuentas (reconocimiento inmediato + redeploy parcial)
+                try:
+                    DATA_PLANES_DIR.mkdir(parents=True, exist_ok=True)
+                    if cliente_id is not None:
+                        (DATA_PLANES_DIR / f"plan_id_{int(cliente_id)}.xlsx").write_bytes(archivo_bytes)
+                    (DATA_PLANES_DIR / f"plan_{cuit}.xlsx").write_bytes(archivo_bytes)
+                    df[["codigo", "descripcion", "imputable"]].to_csv(
+                        DATA_PLANES_DIR / f"plan_{cuit}.csv", index=False,
+                    )
+                except OSError:
+                    pass
+                _dbg_log(
+                    "C",
+                    "_guardar_plan_cliente_en_disco",
+                    "saved_xlsx_encrypted",
+                    {
+                        "cuit": cuit,
+                        "cliente_id": cliente_id,
+                        "path": str(enc),
+                        "rows": len(df),
+                    },
                 )
-            except OSError:
-                pass
-            _dbg_log(
-                "C",
-                "_guardar_plan_cliente_en_disco",
-                "saved_xlsx_encrypted",
-                {
-                    "cuit": cuit,
-                    "cliente_id": cliente_id,
-                    "path": str(enc),
-                    "rows": len(df),
-                },
-            )
-            return enc
+                return enc
+            except Exception as exc_cif:
+                _dbg_log(
+                    "C",
+                    "_guardar_plan_cliente_en_disco",
+                    "encrypt_failed_fallback_plaintext",
+                    {"cuit": cuit, "cliente_id": cliente_id, "error": str(exc_cif)},
+                )
 
-        # Sin clave: no bloquear al usuario; plaintext en carpeta del repo
+        # Sin clave válida: no bloquear al usuario; plaintext en carpeta del repo
         ruta_xlsx = DATA_PLANES_DIR / (
             f"plan_id_{int(cliente_id)}.xlsx" if cliente_id is not None else f"plan_{cuit}.xlsx"
         )
@@ -12683,6 +12691,16 @@ def _herramienta_extracto_fci() -> None:
     )
 
 
+def _herramienta_afip_cola() -> None:
+    """Orquestación AFIP: encolar jobs; el worker local ejecuta (sin claves)."""
+    try:
+        from afip_worker.ui_streamlit import render_afip_cola_admin
+    except Exception as exc:
+        st.error(f"No se pudo cargar afip_worker: {exc}")
+        return
+    render_afip_cola_admin()
+
+
 def _seccion_herramientas() -> None:
     """Solapa de utilidades de oficina (selectbox → herramienta activa)."""
     st.write(
@@ -12704,9 +12722,10 @@ def _seccion_herramientas() -> None:
             "Match débitos - proveedores",
             "Cruce Facturas vs ARCA",
             "Desglose FCT — Detalle de ítems",
+            "AFIP — Cola de trabajos",
         ],
         index=0,
-        key="herramientas_selectbox_v16",
+        key="herramientas_selectbox_v17",
     )
     st.divider()
 
@@ -12732,6 +12751,8 @@ def _seccion_herramientas() -> None:
         _herramienta_extracto_fci()
     elif herramienta_activa == "FCI — Motor FIFO (ejercicio)":
         _herramienta_fci_fifo_ejercicio()
+    elif herramienta_activa == "AFIP — Cola de trabajos":
+        _herramienta_afip_cola()
 
 def _seccion_recategorizacion_monotributo() -> None:
     """Análisis de períodos devengados en facturas electrónicas AFIP (PDF / ZIP)."""
