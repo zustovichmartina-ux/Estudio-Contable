@@ -2,6 +2,7 @@
 """Test dry-run: encola 3 jobs (una por acción) y verifica movimiento de carpetas."""
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 import tempfile
@@ -25,6 +26,9 @@ def main() -> int:
     ensure_job_dirs(tmp)
     dest = tmp / "destino_fake"
     dest.mkdir()
+    registry = tmp / "cuit_registry.json"
+    os.environ["AFIP_JOBS_ROOT"] = str(tmp)
+    os.environ["AFIP_CUIT_REGISTRY"] = str(registry)
 
     specs = [
         ("emitir_fcc", {"ruta_destino": str(dest), "plantilla_excel": "uploads/fake.xlsx", "fecha_emision": "2026-08-31"}),

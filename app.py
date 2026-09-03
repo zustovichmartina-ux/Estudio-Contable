@@ -658,8 +658,8 @@ _VENTANAS_PRINCIPALES = (
     "Devengamiento de Impuestos",
     "Conciliación Bancaria",
     "Préstamos Financieros",
-    "Recategorización Monotributo",
     "Herramientas",
+    "ARCA",
 )
 # v3: botones con keys fijas (el radio + CSS absolute del toolbar desincronizaba UI↔módulo)
 _VENTANA_KEY = "ventana_principal_v3"
@@ -668,8 +668,8 @@ _VENTANA_NAV_LABELS = {
     "Devengamiento de Impuestos": "Devengamiento",
     "Conciliación Bancaria": "Conciliación",
     "Préstamos Financieros": "Préstamos",
-    "Recategorización Monotributo": "Monotributo",
     "Herramientas": "Herramientas",
+    "ARCA": "ARCA",
 }
 
 
@@ -686,8 +686,11 @@ def _migrar_ventana_principal_session() -> None:
     # Alias legacy (emoji / nombres cortos) → canónicos sin iconos
     if actual in ("🧰 Herramientas", "Herramientas", "💰 Liquidación de Sueldos"):
         actual = "Herramientas"
-    elif actual in ("📊 Recategorización Monotributo", "Recategorización Monotributo"):
-        actual = "Recategorización Monotributo"
+    elif actual in ("📊 Recategorización Monotributo", "Recategorización Monotributo", "Monotributo"):
+        # Monotributo salió de la barra top-level; redirigir a Herramientas
+        actual = "Herramientas"
+    elif actual in ("ARCA", "AFIP", "AFIP — Cola de trabajos"):
+        actual = "ARCA"
     if actual not in _VENTANAS_PRINCIPALES:
         actual = _VENTANAS_PRINCIPALES[0]
     st.session_state[_VENTANA_KEY] = actual
@@ -12691,14 +12694,14 @@ def _herramienta_extracto_fci() -> None:
     )
 
 
-def _herramienta_afip_cola() -> None:
-    """Orquestación AFIP: encolar jobs; el worker local ejecuta (sin claves)."""
+def _seccion_arca() -> None:
+    """ARCA top-level: solo encola jobs AFIP; worker local ejecuta."""
     try:
-        from afip_worker.ui_streamlit import render_afip_cola_admin
+        from afip_worker.ui_streamlit import render_arca_module
     except Exception as exc:
-        st.error(f"No se pudo cargar afip_worker: {exc}")
+        st.error(f"No se pudo cargar el módulo ARCA: {exc}")
         return
-    render_afip_cola_admin()
+    render_arca_module()
 
 
 def _seccion_herramientas() -> None:
@@ -12722,10 +12725,9 @@ def _seccion_herramientas() -> None:
             "Match débitos - proveedores",
             "Cruce Facturas vs ARCA",
             "Desglose FCT — Detalle de ítems",
-            "AFIP — Cola de trabajos",
         ],
         index=0,
-        key="herramientas_selectbox_v17",
+        key="herramientas_selectbox_v18",
     )
     st.divider()
 
@@ -12751,8 +12753,7 @@ def _seccion_herramientas() -> None:
         _herramienta_extracto_fci()
     elif herramienta_activa == "FCI — Motor FIFO (ejercicio)":
         _herramienta_fci_fifo_ejercicio()
-    elif herramienta_activa == "AFIP — Cola de trabajos":
-        _herramienta_afip_cola()
+
 
 def _seccion_recategorizacion_monotributo() -> None:
     """Análisis de períodos devengados en facturas electrónicas AFIP (PDF / ZIP)."""
@@ -13301,8 +13302,8 @@ def main() -> None:
             - **Devengamientos de Fin de Mes**: solo Personas Jurídicas → Excel asientos Tango.
             - **Conciliación Bancaria**: extractos PDF + lista Tango → planilla Excel clonada.
             - **Préstamos Financieros**: auditoría de cuotas desde PDFs bancarios.
-            - **Recategorización Monotributo**: facturas AFIP PDF/ZIP → períodos devengados + Excel.
-            - **Herramientas**: **matcheo inteligente PDF + Tango**; completar cuadro bancario; PDF extractos → Excel; **FCI Motor FIFO (ejercicio 13 meses)**; **caja USD (dif. cotización)**; match débitos ↔ proveedores; **liquidaciones de tarjetas** (Fiserv); **cruce facturas vs ARCA**.
+            - **Herramientas**: matcheo PDF + Tango; cuadro bancario; extractos; FCI FIFO; caja USD; liquidaciones; cruce facturas.
+            - **ARCA**: encola jobs AFIP (emitir FCC / VEPs / comprobantes); el worker local ejecuta en Chrome. Sin claves en la web.
             - **Usuarios de oficina**: cada persona entra con su usuario; sesiones independientes.
             - **Cloud**: link público + muro de login (PIN). Planes/balances subidos se cifran con `DATA_ENCRYPTION_KEY`.
             - **Multi-PDF anual**: hasta {MAX_PDFS_ANUALES} extractos consolidados cronológicamente.
@@ -13332,9 +13333,12 @@ def main() -> None:
                 _seccion_conciliacion_bancaria_balance()
         elif ventana_activa == "Préstamos Financieros":
             _seccion_auditoria_prestamos()
-        elif ventana_activa == "Recategorización Monotributo":
-            _seccion_recategorizacion_monotributo()
+        elif ventana_activa == "ARCA":
+            _seccion_arca()
         elif _es_ventana_herramientas(ventana_activa):
+            _seccion_herramientas()
+        elif ventana_activa == "Recategorización Monotributo":
+            # Legacy: ya no está en la barra; por si quedó session state viejo
             _seccion_herramientas()
     except Exception as _exc_modulo:
         from cursor_error_report import render_boton_enviar_error_cursor

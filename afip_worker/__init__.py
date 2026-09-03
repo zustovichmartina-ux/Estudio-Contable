@@ -8,6 +8,7 @@ from .jobs import (
     list_jobs,
     jobs_root,
 )
+from .registry import badge_label, ensure_cuit_registered, list_cuits
 
 __all__ = [
     "ACTIONS",
@@ -16,4 +17,7 @@ __all__ = [
     "enqueue_job",
     "list_jobs",
     "jobs_root",
+    "badge_label",
+    "ensure_cuit_registered",
+    "list_cuits",
 ]

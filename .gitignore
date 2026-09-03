@@ -109,5 +109,6 @@ jobs/error/*
 !jobs/error/.gitkeep
 jobs/needs_auth/*
 !jobs/needs_auth/.gitkeep
+jobs/cuit_registry.json
 uploads/afip/*
 !uploads/afip/.gitkeep
