@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
@@ -44,8 +45,6 @@ class CuitEntry:
 
 
 def registry_path() -> Path:
-    import os
-
     raw = (os.environ.get("AFIP_CUIT_REGISTRY") or "").strip()
     if raw:
         return Path(raw)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 from dataclasses import asdict, dataclass, field
@@ -29,8 +30,6 @@ def _repo_root() -> Path:
 
 def jobs_root() -> Path:
     """Raíz de la cola. Override con env AFIP_JOBS_ROOT (UNC o local)."""
-    import os
-
     raw = (os.environ.get("AFIP_JOBS_ROOT") or "").strip()
     root = Path(raw) if raw else _repo_root() / "jobs"
     ensure_job_dirs(root)
@@ -126,6 +125,22 @@ def normalizar_cuit(cuit: str) -> str:
     return (cuit or "").strip()
 
 
+def require_cuit(cuit: str) -> str:
+    """Normaliza y exige 11 dígitos (evita CUITs truncados al encolar)."""
+    norm = normalizar_cuit(cuit)
+    digits = re.sub(r"\D", "", norm)
+    if len(digits) != 11:
+        raise ValueError(
+            f"CUIT inválido ({cuit!r}): se necesitan 11 dígitos, hay {len(digits)}"
+        )
+    return norm
+
+
+def limpiar_ruta(ruta: str) -> str:
+    """Quita comillas y espacios que suelen pegarse desde Excel/UI."""
+    return (ruta or "").strip().strip('"').strip("'").strip()
+
+
 def new_job_id(action: str, razon: str = "") -> str:
     now = datetime.now(TZ)
     slug = _INVALID.sub("", (razon or "job").lower().replace(" ", "-"))[:24].strip("-") or "job"
@@ -145,14 +160,17 @@ def create_job(
     if action not in ACTIONS:
         raise ValueError(f"action inválida: {action}")
     now = datetime.now(TZ)
+    clean_params = dict(params or {})
+    if "ruta_destino" in clean_params:
+        clean_params["ruta_destino"] = limpiar_ruta(str(clean_params["ruta_destino"]))
     return Job(
         id=job_id or new_job_id(action, razon_social),
         created_at=now.isoformat(timespec="seconds"),
         requested_by=requested_by,
-        cuit=normalizar_cuit(cuit),
+        cuit=require_cuit(cuit),
         razon_social=(razon_social or "").strip(),
         action=action,
-        params=dict(params or {}),
+        params=clean_params,
         auth=JobAuth(status="unknown"),
         status="pending",
         result=JobResult(),

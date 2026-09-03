@@ -1,6 +1,7 @@
 """UI Streamlit ARCA: solo encola jobs. Nunca claves. Badge de acceso por CUIT."""
 from __future__ import annotations
 
+import base64
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -8,6 +9,7 @@ from typing import Any
 import streamlit as st
 
 from afip_worker.auth import admin_mark_cuit_ready
+from afip_worker.client import RemoteError, RemoteWorker
 from afip_worker.jobs import (
     ACTIONS,
     create_job,
@@ -39,7 +41,20 @@ _STATUS_BADGE = {
 }
 
 
-def _badge_acceso(cuit: str, razon: str = "") -> tuple[str, str]:
+def _remote() -> RemoteWorker | None:
+    try:
+        url = str(st.secrets.get("AFIP_WORKER_URL") or "").strip()
+        token = str(st.secrets.get("AFIP_WORKER_TOKEN") or "").strip()
+    except Exception:
+        return None
+    if url.startswith("http://127.0.0.1") or url.startswith("http://localhost"):
+        return None
+    if url and token:
+        return RemoteWorker(url, token)
+    return None
+
+
+def _badge_acceso_local(cuit: str, razon: str = "") -> tuple[str, str]:
     entry = ensure_cuit_registered(cuit, razon)
     return badge_label(entry.status), entry.note
 
@@ -50,17 +65,29 @@ def render_arca_module() -> None:
         "ARCA **solo encola** trabajos. El worker local (PC RECEPCION) abre Chrome/AFIP. "
         "Las claves viven solo en el autofill de Chrome — nunca en Excel ni en esta web."
     )
-    root = jobs_root()
-    st.caption(f"Cola: `{root}`")
+    remote = _remote()
+    if remote:
+        if remote.health():
+            st.success("Conectado al worker de RECEPCION (nube → túnel → tu PC).")
+        else:
+            st.error(
+                "No se llega al worker. En la PC RECEPCION dejá abierto "
+                "`iniciar_afip_worker.bat` y actualizá `AFIP_WORKER_URL` en Secrets "
+                "si el túnel cambió de URL."
+            )
+        st.caption(f"Cola remota: `{st.secrets.get('AFIP_WORKER_URL')}`")
+    else:
+        root = jobs_root()
+        st.caption(f"Cola local: `{root}` — para la web en la nube configurá AFIP_WORKER_URL en Secrets.")
 
     tab_encolar, tab_cola, tab_cuits = st.tabs(["Encolar", "Cola", "CUITs / acceso"])
 
     with tab_encolar:
-        _render_encolar()
+        _render_encolar(remote)
     with tab_cola:
-        _render_cola()
+        _render_cola(remote)
     with tab_cuits:
-        _render_registry()
+        _render_registry(remote)
 
 
 def render_afip_cola_admin() -> None:
@@ -68,9 +95,18 @@ def render_afip_cola_admin() -> None:
     render_arca_module()
 
 
-def _render_encolar() -> None:
-    conocidos = list_cuits()
-    cuit_opts = [""] + [f"{e.cuit} — {e.razon_social or '(sin nombre)'}" for e in conocidos]
+def _render_encolar(remote: RemoteWorker | None) -> None:
+    conocidos: list[tuple[str, str]] = []
+    if remote:
+        try:
+            for e in remote.list_cuits():
+                conocidos.append((str(e.get("cuit") or ""), str(e.get("razon_social") or "")))
+        except RemoteError as exc:
+            st.error(str(exc))
+    else:
+        for e in list_cuits():
+            conocidos.append((e.cuit, e.razon_social))
+    cuit_opts = [""] + [f"{c} — {r or '(sin nombre)'}" for c, r in conocidos if c]
 
     c1, c2 = st.columns(2)
     with c1:
@@ -104,7 +140,16 @@ def _render_encolar() -> None:
         requested_by = st.text_input("Solicitado por", value="admin", key="arca_job_by")
 
     if cuit.strip():
-        label, note = _badge_acceso(cuit, razon)
+        try:
+            if remote:
+                entry = remote.ensure_cuit(cuit, razon)
+                label = str(entry.get("acceso") or badge_label(str(entry.get("status") or "")))
+                note = str(entry.get("note") or "")
+            else:
+                label, note = _badge_acceso_local(cuit, razon)
+        except RemoteError as exc:
+            st.error(str(exc))
+            label, note = "", ""
         if label == "Listo":
             st.success(f"Acceso: **{label}** — {note}")
         elif label == "Pedir acceso":
@@ -113,7 +158,7 @@ def _render_encolar() -> None:
                 "CUIT nuevo o sin sesión: el admin abre AFIP en la PC del worker (2FA una vez), "
                 "después marca el CUIT como Listo en la pestaña **CUITs / acceso**."
             )
-        else:
+        elif label:
             st.info(f"Acceso: **{label}** — {note}")
 
     params: dict[str, Any] = {}
@@ -122,8 +167,10 @@ def _render_encolar() -> None:
         placeholder=r"\\TANGOSRV\Compartido\CLIENTES\...\Facturas\08-2026",
         key="arca_job_ruta",
     )
-    params["ruta_destino"] = ruta.strip()
+    params["ruta_destino"] = ruta.strip().strip('"').strip("'")
 
+    plantilla_b64 = ""
+    plantilla_name = ""
     if action == "emitir_fcc":
         plantilla = st.file_uploader(
             "Plantilla Excel (montos / receptor / concepto — SIN claves)",
@@ -133,10 +180,16 @@ def _render_encolar() -> None:
         fecha_emision = st.date_input("Fecha emisión", value=date.today(), key="arca_job_emision")
         params["fecha_emision"] = fecha_emision.isoformat()
         if plantilla is not None:
-            dest = uploads_dir() / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}_{plantilla.name}"
-            dest.write_bytes(plantilla.getvalue())
-            params["plantilla_excel"] = str(dest.relative_to(Path(__file__).resolve().parents[1]))
-            st.caption(f"Plantilla guardada: `{params['plantilla_excel']}`")
+            raw = plantilla.getvalue()
+            if remote:
+                plantilla_b64 = base64.b64encode(raw).decode("ascii")
+                plantilla_name = plantilla.name
+                st.caption(f"Plantilla se envía al worker: `{plantilla.name}`")
+            else:
+                dest = uploads_dir() / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}_{plantilla.name}"
+                dest.write_bytes(raw)
+                params["plantilla_excel"] = str(dest.relative_to(Path(__file__).resolve().parents[1]))
+                st.caption(f"Plantilla guardada: `{params['plantilla_excel']}`")
     else:
         d1, d2 = st.columns(2)
         with d1:
@@ -155,67 +208,121 @@ def _render_encolar() -> None:
             st.error("CUIT y razón social son obligatorios.")
         elif not ruta.strip():
             st.error("Ruta destino UNC es obligatoria.")
-        elif action == "emitir_fcc" and not params.get("plantilla_excel"):
+        elif action == "emitir_fcc" and not (params.get("plantilla_excel") or plantilla_b64):
             st.error("Subí la plantilla Excel para emitir FCC.")
         else:
-            ensure_cuit_registered(cuit, razon)
-            job = create_job(
-                cuit=cuit,
-                razon_social=razon,
-                action=action,  # type: ignore[arg-type]
-                params=params,
-                requested_by=requested_by or "admin",
-            )
-            path = enqueue_job(job)
-            st.success(f"Encolado `{job.id}` → `{path.name}`")
-            st.json(job.to_dict())
+            try:
+                if remote:
+                    job = remote.enqueue(
+                        cuit=cuit,
+                        razon_social=razon,
+                        action=action,
+                        params=params,
+                        requested_by=requested_by or "admin",
+                        plantilla_b64=plantilla_b64,
+                        plantilla_name=plantilla_name,
+                    )
+                    st.success(f"Encolado en RECEPCION `{job.get('id')}`")
+                    st.caption("El worker local lo toma solo. Solo frena si el CUIT dice **Pedir acceso**.")
+                    st.json(job)
+                else:
+                    ensure_cuit_registered(cuit, razon)
+                    job_obj = create_job(
+                        cuit=cuit,
+                        razon_social=razon,
+                        action=action,  # type: ignore[arg-type]
+                        params=params,
+                        requested_by=requested_by or "admin",
+                    )
+                    path = enqueue_job(job_obj)
+                    st.success(f"Encolado `{job_obj.id}` → `{path.name}`")
+                    st.caption(
+                        "El worker local lo toma solo. Solo frena si el CUIT dice **Pedir acceso**."
+                    )
+                    st.json(job_obj.to_dict())
+            except (ValueError, RemoteError) as exc:
+                st.error(str(exc))
 
 
-def _render_cola() -> None:
-    jobs = list_jobs()
-    if not jobs:
+def _render_cola(remote: RemoteWorker | None) -> None:
+    rows_src: list[dict[str, Any]] = []
+    try:
+        if remote:
+            rows_src = remote.list_jobs()
+        else:
+            rows_src = [j.to_dict() for j in list_jobs()]
+    except RemoteError as exc:
+        st.error(str(exc))
+        return
+    if not rows_src:
         st.info("Sin trabajos todavía.")
         return
     rows = []
-    for j in reversed(jobs):
+    for j in reversed(rows_src):
+        auth = j.get("auth") or {}
+        result = j.get("result") or {}
         rows.append(
             {
-                "Estado": _STATUS_BADGE.get(j.status, j.status),
-                "ID": j.id,
-                "CUIT": j.cuit,
-                "Cliente": j.razon_social,
-                "Acción": _ACTION_LABELS.get(j.action, j.action),
-                "Auth": j.auth.status,
-                "Creado": j.created_at,
-                "Mensaje": (j.result.message or "")[:140],
+                "Estado": _STATUS_BADGE.get(str(j.get("status")), j.get("status")),
+                "ID": j.get("id"),
+                "CUIT": j.get("cuit"),
+                "Cliente": j.get("razon_social"),
+                "Acción": _ACTION_LABELS.get(str(j.get("action")), j.get("action")),
+                "Auth": auth.get("status") if isinstance(auth, dict) else "",
+                "Creado": j.get("created_at"),
+                "Mensaje": str(result.get("message") or "")[:140] if isinstance(result, dict) else "",
             }
         )
     st.dataframe(rows, use_container_width=True, hide_index=True)
 
-    needs = [j for j in jobs if j.status == "needs_auth"]
+    needs = [j for j in rows_src if j.get("status") == "needs_auth"]
     if needs:
         st.warning(
             f"**{len(needs)} job(s) needs_auth.** "
             "Abrí AFIP conmigo en la PC del worker (2FA una vez) y marcá el CUIT como Listo."
         )
         for j in needs:
-            st.code(f"{j.id}\nCUIT {j.cuit}\n{j.auth.note or j.result.message}")
+            auth = j.get("auth") or {}
+            result = j.get("result") or {}
+            note = ""
+            if isinstance(auth, dict):
+                note = str(auth.get("note") or "")
+            if isinstance(result, dict) and not note:
+                note = str(result.get("message") or "")
+            st.code(f"{j.get('id')}\nCUIT {j.get('cuit')}\n{note}")
 
 
-def _render_registry() -> None:
+def _render_registry(remote: RemoteWorker | None) -> None:
     st.markdown("##### Registry de CUITs")
     st.caption("Solo estado de acceso. Sin contraseñas ni tokens.")
-    entries = list_cuits()
+    try:
+        if remote:
+            entries = remote.list_cuits()
+        else:
+            entries = [
+                {
+                    "cuit": e.cuit,
+                    "razon_social": e.razon_social,
+                    "acceso": badge_label(e.status),
+                    "note": e.note,
+                    "updated_at": e.updated_at,
+                    "chrome_profile": e.chrome_profile,
+                }
+                for e in list_cuits()
+            ]
+    except RemoteError as exc:
+        st.error(str(exc))
+        return
     if entries:
         st.dataframe(
             [
                 {
-                    "CUIT": e.cuit,
-                    "Razón social": e.razon_social,
-                    "Acceso": badge_label(e.status),
-                    "Nota": e.note,
-                    "Actualizado": e.updated_at,
-                    "Perfil Chrome": e.chrome_profile,
+                    "CUIT": e.get("cuit"),
+                    "Razón social": e.get("razon_social"),
+                    "Acceso": e.get("acceso") or badge_label(str(e.get("status") or "")),
+                    "Nota": e.get("note"),
+                    "Actualizado": e.get("updated_at"),
+                    "Perfil Chrome": e.get("chrome_profile"),
                 }
                 for e in entries
             ],
@@ -236,13 +343,25 @@ def _render_registry() -> None:
             if not cuit_h.strip():
                 st.error("Indicá el CUIT.")
             else:
-                admin_mark_cuit_ready(cuit_h, razon_h)
-                st.success(f"{cuit_h} → Listo")
-                st.rerun()
+                try:
+                    if remote:
+                        remote.mark_ready(cuit_h, razon_h)
+                    else:
+                        admin_mark_cuit_ready(cuit_h, razon_h)
+                    st.success(f"{cuit_h} → Listo")
+                    st.rerun()
+                except RemoteError as exc:
+                    st.error(str(exc))
         if st.button("Marcar Pedir acceso", key="arca_hand_need"):
             if not cuit_h.strip():
                 st.error("Indicá el CUIT.")
             else:
-                mark_needs_admin(cuit_h, razon_social=razon_h)
-                st.warning(f"{cuit_h} → Pedir acceso")
-                st.rerun()
+                try:
+                    if remote:
+                        remote.mark_needs_admin(cuit_h, razon_h)
+                    else:
+                        mark_needs_admin(cuit_h, razon_social=razon_h)
+                    st.warning(f"{cuit_h} → Pedir acceso")
+                    st.rerun()
+                except RemoteError as exc:
+                    st.error(str(exc))

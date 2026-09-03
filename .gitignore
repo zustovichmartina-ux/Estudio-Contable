@@ -110,5 +110,9 @@ jobs/error/*
 jobs/needs_auth/*
 !jobs/needs_auth/.gitkeep
 jobs/cuit_registry.json
+jobs/.worker_token
+jobs/cloud_bridge.txt
+jobs/worker.log
+jobs/worker.log.err
 uploads/afip/*
 !uploads/afip/.gitkeep

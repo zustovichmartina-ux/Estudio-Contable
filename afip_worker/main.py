@@ -23,6 +23,9 @@ from afip_worker.jobs import (
     mark_needs_auth,
     write_job,
 )
+from afip_worker.server import start_api_thread
+from afip_worker.token import load_or_create_token
+from afip_worker.tunnel import start_cloudflared_tunnel
 
 LOG = logging.getLogger("afip_worker")
 
@@ -89,6 +92,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--once", action="store_true", help="Procesar un solo job y salir")
     parser.add_argument("--interval", type=float, default=3.0, help="Segundos entre polls")
     parser.add_argument("--jobs-root", type=str, default="", help="Override AFIP_JOBS_ROOT")
+    parser.add_argument("--serve", action="store_true", help="API HTTP para Streamlit Cloud")
+    parser.add_argument("--no-tunnel", action="store_true", help="API local sin cloudflared")
+    parser.add_argument("--host", type=str, default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8765)
     args = parser.parse_args(argv)
 
     logging.basicConfig(
@@ -99,6 +106,13 @@ def main(argv: list[str] | None = None) -> int:
     root = Path(args.jobs_root) if args.jobs_root else None
     if root:
         ensure_job_dirs(root)
+
+    if args.serve:
+        token = load_or_create_token()
+        start_api_thread(host=args.host, port=args.port, token=token)
+        LOG.info("AFIP_WORKER_TOKEN listo (jobs/.worker_token). No lo subas a git.")
+        if not args.no_tunnel:
+            start_cloudflared_tunnel(port=args.port, token=token)
 
     loop(dry_run=dry_run, interval=args.interval, once=args.once, root=root)
     return 0

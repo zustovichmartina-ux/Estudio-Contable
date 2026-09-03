@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..jobs import Job
+from ..jobs import Job, limpiar_ruta
 from ..naming import nombre_comprobante, nombre_fcc, nombre_vep
 
 
@@ -18,7 +18,7 @@ class ActionResult:
 
 
 def _destino(job: Job) -> Path:
-    raw = str(job.params.get("ruta_destino") or "").strip()
+    raw = limpiar_ruta(str(job.params.get("ruta_destino") or ""))
     if not raw:
         raise ValueError("params.ruta_destino es obligatorio")
     return Path(raw)

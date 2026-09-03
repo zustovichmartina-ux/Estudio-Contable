@@ -20,9 +20,9 @@ def check_session_ready(job: Job, *, dry_run: bool = True) -> AuthCheck:
     Registry:
       - CUIT nuevo → needs_admin (UI muestra Pedir acceso).
       - ready → Chrome autofill OK.
-    Worker:
-      - dry-run: OK salvo force_needs_auth (simula y marca ready).
-      - live: bloquea si no está ready.
+    Worker (dry-run o live):
+      - ready → actúa solo.
+      - needs_admin / unknown / force_needs_auth → needs_auth (solo ahí pide admin).
     """
     ensure_cuit_registered(job.cuit, job.razon_social)
 
@@ -40,20 +40,13 @@ def check_session_ready(job: Job, *, dry_run: bool = True) -> AuthCheck:
 
     entry = get_cuit(job.cuit)
 
-    if dry_run:
-        mark_ready(
-            job.cuit,
-            razon_social=job.razon_social,
-            note="dry-run: auth simulada OK (sin Chrome)",
-        )
-        return AuthCheck(ready=True, status="ready", note="dry-run: auth simulada OK")
-
+    # Autónomo: si el CUIT está Listo, sigue solo (dry-run o live).
+    # Solo frena y pide admin cuando no hay acceso AFIP.
     if entry and entry.status == "ready":
-        return AuthCheck(
-            ready=True,
-            status="ready",
-            note=entry.note or "Registry: ready (Chrome autofill)",
-        )
+        note = entry.note or "Registry: ready (Chrome autofill)"
+        if dry_run:
+            note = f"dry-run + {note}"
+        return AuthCheck(ready=True, status="ready", note=note)
 
     status = entry.status if entry else "needs_admin"
     note = (

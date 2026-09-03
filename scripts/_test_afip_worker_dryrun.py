@@ -19,6 +19,7 @@ from afip_worker.jobs import (
     list_jobs,
 )
 from afip_worker.main import process_one
+from afip_worker.registry import mark_ready
 
 
 def main() -> int:
@@ -29,6 +30,9 @@ def main() -> int:
     registry = tmp / "cuit_registry.json"
     os.environ["AFIP_JOBS_ROOT"] = str(tmp)
     os.environ["AFIP_CUIT_REGISTRY"] = str(registry)
+
+    # CUIT con acceso: worker actúa solo
+    mark_ready("27-42043034-0", razon_social="Camila Rocio Albarello", note="test ready")
 
     specs = [
         ("emitir_fcc", {"ruta_destino": str(dest), "plantilla_excel": "uploads/fake.xlsx", "fecha_emision": "2026-08-31"}),
@@ -69,17 +73,38 @@ def main() -> int:
     done_ids = {j.id for j in done}
     assert set(ids) == done_ids
 
-    # needs_auth path
+    # needs_auth: CUIT sin acceso (nuevo) → frena solo
     job_auth = create_job(
         cuit="20-00000000-0",
         razon_social="Test Auth",
         action="bajar_veps",
-        params={"ruta_destino": str(dest), "force_needs_auth": True, "periodo_desde": "2026-01-01", "periodo_hasta": "2026-01-31"},
+        params={
+            "ruta_destino": str(dest),
+            "periodo_desde": "2026-01-01",
+            "periodo_hasta": "2026-01-31",
+        },
     )
     enqueue_job(job_auth, tmp)
     assert process_one(dry_run=True, root=tmp)
     assert len(list_jobs("needs_auth", tmp)) == 1
-    print("needs_auth OK", list_jobs("needs_auth", tmp)[0].id)
+    print("needs_auth OK (CUIT sin acceso)", list_jobs("needs_auth", tmp)[0].id)
+
+    # force_needs_auth explícito también frena
+    job_force = create_job(
+        cuit="27-42043034-0",
+        razon_social="Camila Rocio Albarello",
+        action="bajar_veps",
+        params={
+            "ruta_destino": str(dest),
+            "force_needs_auth": True,
+            "periodo_desde": "2026-01-01",
+            "periodo_hasta": "2026-01-31",
+        },
+    )
+    enqueue_job(job_force, tmp)
+    assert process_one(dry_run=True, root=tmp)
+    assert len(list_jobs("needs_auth", tmp)) == 2
+    print("needs_auth OK (force)", job_force.id)
 
     shutil.rmtree(tmp, ignore_errors=True)
     print("PASS dry-run 3 jobs + needs_auth")
