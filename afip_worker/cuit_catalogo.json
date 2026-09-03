@@ -1,0 +1,33 @@
+{
+  "note": "CUITs con acceso AFIP en RECEPCION. Sin claves ni tokens.",
+  "cuits": [
+    {"cuit": "20-14671451-0", "razon_social": "", "status": "ready"},
+    {"cuit": "20-18773715-0", "razon_social": "", "status": "ready"},
+    {"cuit": "20-20752758-1", "razon_social": "", "status": "ready"},
+    {"cuit": "20-25607878-4", "razon_social": "", "status": "ready"},
+    {"cuit": "20-26703726-5", "razon_social": "Wertheimer Diego", "status": "ready"},
+    {"cuit": "20-27158465-3", "razon_social": "", "status": "ready"},
+    {"cuit": "20-30025365-3", "razon_social": "Carlos Bazan", "status": "ready"},
+    {"cuit": "20-30799547-7", "razon_social": "", "status": "ready"},
+    {"cuit": "20-31476304-2", "razon_social": "Ramiro Diaz Rodriguez", "status": "ready"},
+    {"cuit": "20-34501632-6", "razon_social": "", "status": "ready"},
+    {"cuit": "20-36005786-1", "razon_social": "", "status": "ready"},
+    {"cuit": "20-37557211-8", "razon_social": "", "status": "ready"},
+    {"cuit": "20-38670892-5", "razon_social": "", "status": "ready"},
+    {"cuit": "23-22138612-4", "razon_social": "", "status": "ready"},
+    {"cuit": "23-25569905-9", "razon_social": "", "status": "ready"},
+    {"cuit": "23-42284343-4", "razon_social": "Martina Zustovich", "status": "ready"},
+    {"cuit": "27-06364011-0", "razon_social": "", "status": "ready"},
+    {"cuit": "27-23706399-1", "razon_social": "", "status": "ready"},
+    {"cuit": "27-23818604-3", "razon_social": "", "status": "ready"},
+    {"cuit": "27-29495595-5", "razon_social": "Vivas Natalia Soledad", "status": "ready"},
+    {"cuit": "27-32104048-4", "razon_social": "Rodriguez Llames Florencia", "status": "ready"},
+    {"cuit": "27-36217100-3", "razon_social": "Nicolao Lucrecia", "status": "ready"},
+    {"cuit": "27-36383052-3", "razon_social": "Raciti Agustina", "status": "ready"},
+    {"cuit": "27-42043034-0", "razon_social": "Camila Rocio Albarello", "status": "ready"},
+    {"cuit": "27-44759605-4", "razon_social": "Wertheimer Sofia", "status": "ready"},
+    {"cuit": "30-71246365-8", "razon_social": "Bazan Seguridad SRL", "status": "ready"},
+    {"cuit": "30-71597134-4", "razon_social": "LORDZAID SRL", "status": "ready"},
+    {"cuit": "30-71725098-9", "razon_social": "Zaid Corp S.A.", "status": "ready"}
+  ]
+}

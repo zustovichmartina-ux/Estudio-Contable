@@ -26,6 +26,7 @@ class RemoteWorker:
         headers = {
             "Authorization": f"Bearer {self.token}",
             "Accept": "application/json",
+            "User-Agent": "EstudioContable-ARCA/1.0",
         }
         if payload is not None:
             data = json.dumps(payload).encode("utf-8")
@@ -54,7 +55,11 @@ class RemoteWorker:
 
     def health(self) -> bool:
         url = f"{self.base_url}/health"
-        req = urllib.request.Request(url, method="GET")
+        req = urllib.request.Request(
+            url,
+            method="GET",
+            headers={"User-Agent": "EstudioContable-ARCA/1.0", "Accept": "application/json"},
+        )
         try:
             with urllib.request.urlopen(req, timeout=8) as resp:
                 return resp.status == 200

@@ -9,6 +9,7 @@ from typing import Any
 import streamlit as st
 
 from afip_worker.auth import admin_mark_cuit_ready
+from afip_worker.catalogo import catalogo_lookup, load_catalogo
 from afip_worker.client import RemoteError, RemoteWorker
 from afip_worker.jobs import (
     ACTIONS,
@@ -41,17 +42,63 @@ _STATUS_BADGE = {
 }
 
 
-def _remote() -> RemoteWorker | None:
+def _secret_str(key: str) -> str:
     try:
-        url = str(st.secrets.get("AFIP_WORKER_URL") or "").strip()
-        token = str(st.secrets.get("AFIP_WORKER_TOKEN") or "").strip()
+        return str(st.secrets.get(key) or "").strip().strip('"').strip("'")
     except Exception:
-        return None
+        return ""
+
+
+def _remote() -> RemoteWorker | None:
+    url = _secret_str("AFIP_WORKER_URL")
+    token = _secret_str("AFIP_WORKER_TOKEN")
     if url.startswith("http://127.0.0.1") or url.startswith("http://localhost"):
         return None
     if url and token:
         return RemoteWorker(url, token)
     return None
+
+
+def _cuit_rows(remote: RemoteWorker | None) -> list[dict[str, Any]]:
+    """Lista para la UI: worker si responde; si no, catálogo del repo (la nube no tiene jobs/)."""
+    seed = load_catalogo()
+    by_cuit = {str(r.get("cuit")): r for r in seed}
+    if remote:
+        try:
+            for row in remote.list_cuits():
+                cuit = str(row.get("cuit") or "")
+                if cuit:
+                    by_cuit[cuit] = row
+        except RemoteError:
+            pass
+    elif not remote:
+        for e in list_cuits():
+            by_cuit[e.cuit] = {
+                "cuit": e.cuit,
+                "razon_social": e.razon_social,
+                "status": e.status,
+                "acceso": badge_label(e.status),
+                "note": e.note,
+                "updated_at": e.updated_at,
+                "chrome_profile": e.chrome_profile,
+            }
+    return sorted(by_cuit.values(), key=lambda r: str(r.get("cuit") or ""))
+
+
+def _badge_acceso(cuit: str, razon: str, remote: RemoteWorker | None) -> tuple[str, str]:
+    if remote:
+        try:
+            entry = remote.ensure_cuit(cuit, razon)
+            label = str(entry.get("acceso") or badge_label(str(entry.get("status") or "")))
+            return label, str(entry.get("note") or "")
+        except RemoteError:
+            pass
+    hit = catalogo_lookup(cuit)
+    if hit:
+        return str(hit.get("acceso") or "Listo"), str(hit.get("note") or "")
+    if not remote:
+        return _badge_acceso_local(cuit, razon)
+    return "Pedir acceso", "Sin confirmación del worker; si es CUIT nuevo hace falta 2FA en RECEPCION."
 
 
 def _badge_acceso_local(cuit: str, razon: str = "") -> tuple[str, str]:
@@ -96,16 +143,10 @@ def render_afip_cola_admin() -> None:
 
 
 def _render_encolar(remote: RemoteWorker | None) -> None:
-    conocidos: list[tuple[str, str]] = []
-    if remote:
-        try:
-            for e in remote.list_cuits():
-                conocidos.append((str(e.get("cuit") or ""), str(e.get("razon_social") or "")))
-        except RemoteError as exc:
-            st.error(str(exc))
-    else:
-        for e in list_cuits():
-            conocidos.append((e.cuit, e.razon_social))
+    conocidos = [
+        (str(e.get("cuit") or ""), str(e.get("razon_social") or ""))
+        for e in _cuit_rows(remote)
+    ]
     cuit_opts = [""] + [f"{c} — {r or '(sin nombre)'}" for c, r in conocidos if c]
 
     c1, c2 = st.columns(2)
@@ -140,16 +181,7 @@ def _render_encolar(remote: RemoteWorker | None) -> None:
         requested_by = st.text_input("Solicitado por", value="admin", key="arca_job_by")
 
     if cuit.strip():
-        try:
-            if remote:
-                entry = remote.ensure_cuit(cuit, razon)
-                label = str(entry.get("acceso") or badge_label(str(entry.get("status") or "")))
-                note = str(entry.get("note") or "")
-            else:
-                label, note = _badge_acceso_local(cuit, razon)
-        except RemoteError as exc:
-            st.error(str(exc))
-            label, note = "", ""
+        label, note = _badge_acceso(cuit, razon, remote)
         if label == "Listo":
             st.success(f"Acceso: **{label}** — {note}")
         elif label == "Pedir acceso":
@@ -295,24 +327,7 @@ def _render_cola(remote: RemoteWorker | None) -> None:
 def _render_registry(remote: RemoteWorker | None) -> None:
     st.markdown("##### Registry de CUITs")
     st.caption("Solo estado de acceso. Sin contraseñas ni tokens.")
-    try:
-        if remote:
-            entries = remote.list_cuits()
-        else:
-            entries = [
-                {
-                    "cuit": e.cuit,
-                    "razon_social": e.razon_social,
-                    "acceso": badge_label(e.status),
-                    "note": e.note,
-                    "updated_at": e.updated_at,
-                    "chrome_profile": e.chrome_profile,
-                }
-                for e in list_cuits()
-            ]
-    except RemoteError as exc:
-        st.error(str(exc))
-        return
+    entries = _cuit_rows(remote)
     if entries:
         st.dataframe(
             [
