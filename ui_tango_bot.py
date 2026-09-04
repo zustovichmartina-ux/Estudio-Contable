@@ -46,9 +46,26 @@ div[data-testid="stChatMessage"] {
 
 def _secret(nombre: str) -> str:
     try:
-        return str(st.secrets.get(nombre) or "").strip().strip('"').strip("'")
+        val = st.secrets.get(nombre)
+        if val:
+            texto = str(val).strip().strip('"').strip("'")
+            if texto and texto not in {"xai-...", "xai-", "..."}:
+                return texto
+        ofi = st.secrets.get("oficina_usuarios")
+        if ofi:
+            bloques = ofi.values() if hasattr(ofi, "values") else []
+            for bloque in bloques:
+                try:
+                    extra = bloque.get(nombre) if bloque is not None else None
+                except Exception:
+                    extra = None
+                if extra:
+                    texto = str(extra).strip().strip('"').strip("'")
+                    if texto and texto not in {"xai-...", "xai-", "..."}:
+                        return texto
     except Exception:
         return ""
+    return ""
 
 
 def _leer_chat_input(raw: object) -> tuple[str, list]:
