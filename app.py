@@ -127,7 +127,7 @@ from procesador import (
     PERFILES_BANCO,
 )
 
-from liquidaciones_fiserv import procesar_pdfs_fiserv
+from ui_tango_bot import render_tango_bot
 from motor_fci_fifo import (
     cuadro_cobertura_meses,
     label_mes,
@@ -659,6 +659,7 @@ _VENTANAS_PRINCIPALES = (
     "Conciliación Bancaria",
     "Préstamos Financieros",
     "Herramientas",
+    "Tango",
     "ARCA",
 )
 # v3: botones con keys fijas (el radio + CSS absolute del toolbar desincronizaba UI↔módulo)
@@ -669,6 +670,7 @@ _VENTANA_NAV_LABELS = {
     "Conciliación Bancaria": "Conciliación",
     "Préstamos Financieros": "Préstamos",
     "Herramientas": "Herramientas",
+    "Tango": "Tango",
     "ARCA": "ARCA",
 }
 
@@ -13303,6 +13305,7 @@ def main() -> None:
             - **Conciliación Bancaria**: extractos PDF + lista Tango → planilla Excel clonada.
             - **Préstamos Financieros**: auditoría de cuotas desde PDFs bancarios.
             - **Herramientas**: matcheo PDF + Tango; cuadro bancario; extractos; FCI FIFO; caja USD; liquidaciones; cruce facturas.
+            - **Tango**: chat con las ayudas Axoft recolectadas (escritorio + normativas) y las reglas de exportación del estudio.
             - **ARCA**: encola jobs AFIP (emitir FCC / VEPs / comprobantes); el worker local ejecuta en Chrome. Sin claves en la web.
             - **Usuarios de oficina**: cada persona entra con su usuario; sesiones independientes.
             - **Cloud**: link público + muro de login (PIN). Planes/balances subidos se cifran con `DATA_ENCRYPTION_KEY`.
@@ -13322,8 +13325,8 @@ def main() -> None:
     _render_barra_superior_cuenta()
     st.divider()
 
-    # Título dinámico = exactamente la opción seleccionada en la barra
-    st.markdown(f"### **{ventana_activa}**")
+    if ventana_activa != "Tango":
+        st.markdown(f"### **{ventana_activa}**")
 
     try:
         if ventana_activa == "Devengamiento de Impuestos":
@@ -13333,6 +13336,8 @@ def main() -> None:
                 _seccion_conciliacion_bancaria_balance()
         elif ventana_activa == "Préstamos Financieros":
             _seccion_auditoria_prestamos()
+        elif ventana_activa == "Tango":
+            render_tango_bot()
         elif ventana_activa == "ARCA":
             _seccion_arca()
         elif _es_ventana_herramientas(ventana_activa):
