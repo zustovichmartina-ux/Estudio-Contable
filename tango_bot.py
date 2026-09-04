@@ -348,11 +348,15 @@ def _explicar_formula(hit: dict[str, str]) -> str:
     return "\n".join(lineas)
 
 
+_GROK_MODELOS = ("grok-4.6", "grok-4", "grok-3")
+
+
 def _resolver_llm(*, api_key: str = "", model: str = "") -> tuple[str, str, str]:
-    """Devuelve (api_key, url, model). Vacío si no hay proveedor."""
+    """Devuelve (api_key, url, model). Prioriza Grok (xAI)."""
     xai = (api_key or os.environ.get("XAI_API_KEY") or "").strip()
     if xai:
-        return xai, "https://api.x.ai/v1/chat/completions", (model or os.environ.get("XAI_MODEL") or "grok-4").strip() or "grok-4"
+        elegido = (model or os.environ.get("XAI_MODEL") or "grok-4.6").strip() or "grok-4.6"
+        return xai, "https://api.x.ai/v1/chat/completions", elegido
     openai = (os.environ.get("OPENAI_API_KEY") or "").strip()
     if openai:
         return openai, "https://api.openai.com/v1/chat/completions", (os.environ.get("OPENAI_MODEL") or "gpt-4o-mini").strip()
@@ -375,7 +379,7 @@ def _llamar_llm(
         return ""
     if imagenes:
         if "x.ai" in url:
-            modelo = (os.environ.get("XAI_VISION_MODEL") or modelo or "grok-4").strip()
+            modelo = (os.environ.get("XAI_VISION_MODEL") or modelo or "grok-4.6").strip()
         elif "openai.com" in url:
             modelo = (os.environ.get("OPENAI_VISION_MODEL") or "gpt-4o-mini").strip()
         elif "groq.com" in url:
@@ -392,53 +396,64 @@ def _llamar_llm(
                 "image_url": {"url": img["data_url"]},
             })
         messages = [*messages[:-1], {"role": "user", "content": partes}]
-    payload = {
-        "model": modelo,
-        "temperature": 0.2,
-        "messages": [{"role": "system", "content": system}, *messages],
-    }
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {key}",
-            "Content-Type": "application/json",
-            "User-Agent": "EstudioContable-TangoBot/1.0",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")[:400]
-        raise RuntimeError(f"IA HTTP {exc.code}: {body}") from exc
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"No se llegó al servicio de IA: {exc.reason}") from exc
-    choices = data.get("choices") or []
-    if not choices:
-        return ""
-    return str((choices[0].get("message") or {}).get("content") or "").strip()
+    candidatos = [modelo]
+    if "x.ai" in url:
+        for alt in _GROK_MODELOS:
+            if alt not in candidatos:
+                candidatos.append(alt)
+    ultimo = ""
+    for modelo_try in candidatos:
+        payload = {
+            "model": modelo_try,
+            "temperature": 0.2,
+            "messages": [{"role": "system", "content": system}, *messages],
+        }
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+                "User-Agent": "EstudioContable-TangoBot/1.0",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")[:400]
+            ultimo = f"IA HTTP {exc.code}: {body}"
+            if exc.code in {400, 404} and "model" in body.lower() and modelo_try != candidatos[-1]:
+                continue
+            raise RuntimeError(ultimo) from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"No se llegó a Grok (xAI): {exc.reason}") from exc
+        choices = data.get("choices") or []
+        if not choices:
+            continue
+        return str((choices[0].get("message") or {}).get("content") or "").strip()
+    if ultimo:
+        raise RuntimeError(ultimo)
+    return ""
 
 
-_SYSTEM = """Sos el agente especializado en Tango Estudios (Axoft 26ar) del Estudio Contable.
-Trabajás adentro del chat de la app. Tu trabajo es responder, explicar y FORMULAR
-(armar o corregir fórmulas de Tango Sueldos y modelos de asiento).
+_SYSTEM = """Sos Grok, el agente de Tango Estudios (Axoft 26ar) del Estudio Contable.
+Respondé y formulá. No vuelques CSV ni pegues ayudas crudas.
 
 Cómo operás:
-1. Leé el contexto (ayudas Axoft, reglas del estudio, export de fórmulas).
-2. Si hay captura de pantalla: describí qué pantalla/error/fórmula se ve, y recién después respondé.
-3. Si piden una fórmula: escribí la fórmula lista para pegar en Tango (sintaxis Axoft:
-   SI(), NOVCA, NOVCAG, USUELD, CANTIDAD, SUELDO, ABS, ACUCTA, MOVCTA, etc.) y explicá cada variable.
-4. Distinguí: asiento por comprobante (Liquidador de IVA) vs determinación mensual (DETIVA/DETIIBB/DETTISH).
-5. No mezcles SIAp/SICOSS con fórmulas de conceptos salvo que lo pidan.
-6. Si el contexto trae FormulaImporte / FormulaCantidad del export de Tango Sueldos,
-   esa es la fuente de verdad: copiá esa fórmula, no inventes otra.
-7. Concepto 1 del estudio es Sueldo básico (`USUELD/30*CANTIDAD`), no el proporcional.
-8. Si no está en el contexto ni en la imagen, decilo. No inventes menús ni importes.
-10. Si piden “en limpio”, copiar o pegar: respondé SOLO las fórmulas en bloques de código,
-    sin volcar el CSV ni ObsFormula.
-Respondé en español, claro, como un compañero del estudio.
+1. Usá el contexto solo como fuente. Contestá con tus palabras, corto y útil.
+2. Si hay captura: qué pantalla/error se ve, y después la solución.
+3. Si piden fórmula: bloques listos para pegar (Importe y Cantidad). Sintaxis Axoft:
+   SI(), NOVCA, NOVCAG, USUELD, CANTIDAD, SUELDO, ABS, ACUCTA, MOVCTA.
+4. Asiento por comprobante (Liquidador de IVA) ≠ determinación mensual DETIVA/DETIIBB/DETTISH.
+5. No mezcles SIAp/SICOSS salvo que lo pidan.
+6. FormulaImporte / FormulaCantidad del export es la fuente de verdad.
+7. Concepto 1 = Sueldo básico `USUELD/30*CANTIDAD` (no el proporcional).
+8. Si no está en el contexto ni en la imagen, decilo. No inventes menús.
+9. Nunca pidas ni escribas claves SQL, TANGO.INI ni contraseñas.
+10. “En limpio” / copiar / pegar: SOLO las fórmulas en bloques de código.
+Respondé en español, como un compañero del estudio.
 """
 
 
@@ -549,13 +564,26 @@ def responder(
         formula_hit = _mejor_formula(busqueda, _docs_formula(docs) or hits)
         if formula_hit:
             hits = [formula_hit] + [h for h in hits if h is not formula_hit][:7]
-    if formula_hit and (_pide_pegar(consulta) or not (api_key or os.environ.get("XAI_API_KEY") or os.environ.get("OPENAI_API_KEY") or os.environ.get("GROQ_API_KEY"))):
-        texto = _formula_para_pegar(formula_hit) if _pide_pegar(consulta) else _explicar_formula(formula_hit)
+    key, _url, _modelo = _resolver_llm(api_key=api_key, model=model)
+    if formula_hit and (_pide_pegar(consulta) or not key):
         return {
-            "texto": texto,
+            "texto": _formula_para_pegar(formula_hit) if _pide_pegar(consulta) else _explicar_formula(formula_hit),
             "fuentes": [
                 {"title": formula_hit.get("title") or "", "source": Path(str(formula_hit.get("source") or "")).name}
             ],
+            "docs": len(docs),
+            "uso_grok": False,
+        }
+    if not key:
+        return {
+            "texto": (
+                "Este chat responde con **Grok**. Falta la clave xAI.\n\n"
+                "En **Tango → Ajustes** pegá `XAI_API_KEY` (empieza con `xai-`) "
+                "o en Streamlit **Manage app → Secrets**:\n\n"
+                "`XAI_API_KEY = \"xai-...\"`\n\n"
+                "La clave se crea en https://console.x.ai"
+            ),
+            "fuentes": [],
             "docs": len(docs),
             "uso_grok": False,
         }
@@ -565,11 +593,16 @@ def responder(
             "### Fórmula del export Tango Sueldos (fuente de verdad)\n"
             + _explicar_formula(formula_hit)
         )
-    bloques_ctx.extend(
-        f"### {h.get('title')}\nFuente: {Path(str(h.get('source') or '')).name}\n{h.get('text')}"
-        for h in hits
-        if h is not formula_hit
-    )
+    extra_hits = [h for h in hits if h is not formula_hit][:3]
+    for h in extra_hits:
+        texto_h = (h.get("text") or "").strip()
+        if _es_doc_formula(h):
+            texto_h = _explicar_formula(h)
+        else:
+            texto_h = re.sub(r"\s+\|\s+", "\n", texto_h)[:700]
+        bloques_ctx.append(
+            f"### {h.get('title')}\nFuente: {Path(str(h.get('source') or '')).name}\n{texto_h}"
+        )
     contexto = "\n\n".join(bloques_ctx)
     msgs: list[dict[str, Any]] = []
     for m in (historial or [])[-8:]:
@@ -591,7 +624,6 @@ def responder(
     })
     ia = ""
     error = ""
-    key, _url, _modelo = _resolver_llm(api_key=api_key, model=model)
     if imagenes and not key:
         return {
             "texto": (
@@ -613,9 +645,18 @@ def responder(
         )
     except Exception as exc:
         error = str(exc)
-    texto = ia or _fallback(consulta, _docs_formula(docs) + hits)
-    if error and not ia:
-        texto = f"{texto}\n\n_(El agente no pudo llamar a la IA: {error[:180]})_"
+    if ia:
+        texto = ia
+    elif formula_hit:
+        texto = _explicar_formula(formula_hit)
+        if error:
+            texto = f"{texto}\n\n_(Grok no respondió: {error[:180]})_"
+    else:
+        texto = (
+            f"Grok no pudo responder: {error[:240]}"
+            if error
+            else _fallback(consulta, hits)
+        )
     return {
         "texto": texto,
         "fuentes": [

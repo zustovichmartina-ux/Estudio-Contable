@@ -67,24 +67,45 @@ def render_tango_bot() -> None:
     if "tango_chat" not in st.session_state:
         st.session_state.tango_chat = []
 
-    api_key = _secret("XAI_API_KEY")
-    model = _secret("XAI_MODEL") or "grok-4"
+    if "tango_xai_key" not in st.session_state:
+        st.session_state.tango_xai_key = ""
+    api_key = _secret("XAI_API_KEY") or str(st.session_state.get("tango_xai_key") or "").strip()
+    model = _secret("XAI_MODEL") or "grok-4.6"
     for nombre in ("OPENAI_API_KEY", "OPENAI_MODEL", "GROQ_API_KEY", "GROQ_MODEL", "XAI_API_KEY", "XAI_MODEL"):
         val = _secret(nombre)
         if val:
             os.environ[nombre] = val
-    hay_ia = bool(api_key or _secret("OPENAI_API_KEY") or _secret("GROQ_API_KEY"))
+    if api_key:
+        os.environ["XAI_API_KEY"] = api_key
+        os.environ.setdefault("XAI_MODEL", model)
+    hay_ia = bool(api_key)
     chat = st.session_state.tango_chat
+
+    def _panel_grok() -> None:
+        if hay_ia:
+            st.caption(f"Grok activo (`{model}`). Razona, formula y lee capturas.")
+            return
+        st.caption("Sin Grok el chat solo pega ayudas. Pegá la clave xAI para activarlo.")
+        clave = st.text_input(
+            "Clave Grok (xAI)",
+            type="password",
+            key="tango_xai_input",
+            placeholder="xai-...",
+            help="Creala en https://console.x.ai → API keys. Para que quede fija: Manage app → Secrets → XAI_API_KEY.",
+        )
+        if st.button("Activar Grok", key="tango_activar_grok"):
+            if clave.strip().startswith("xai-"):
+                st.session_state.tango_xai_key = clave.strip()
+                st.rerun()
+            else:
+                st.warning("La clave tiene que empezar con xai- (console.x.ai).")
 
     if chat:
         top_l, top_r = st.columns([4, 1])
         with top_l:
-            with st.expander("Ajustes", expanded=False):
-                st.caption("Agente Tango: responde, formula y lee capturas. Usa las ayudas del estudio.")
-                if hay_ia:
-                    st.caption("IA con visión activa (podés adjuntar pantallazos).")
-                else:
-                    st.caption("Sin clave de IA: fórmulas salen del export. Para leer imágenes, Secrets → XAI_API_KEY.")
+            with st.expander("Ajustes", expanded=not hay_ia):
+                st.caption("Agente Tango con Grok. Usa las ayudas y el export de sueldos del estudio.")
+                _panel_grok()
                 if st.button("Reindexar ayudas Tango", key="tango_reindex"):
                     with st.spinner("Leyendo Desktop\\Tango y normativas…"):
                         docs = reconstruir_indice(guardar=True)
@@ -97,15 +118,11 @@ def render_tango_bot() -> None:
     if not chat:
         st.markdown(
             '<div class="tango-hero"><h1>Agente Tango</h1>'
-            "<p>Preguntá, pedí una fórmula o adjuntá una captura de pantalla.</p></div>",
+            "<p>Grok responde, formula y lee capturas de Tango.</p></div>",
             unsafe_allow_html=True,
         )
         if not hay_ia:
-            st.info(
-                "Las fórmulas de sueldos se arman con el export de Tango. "
-                "Para que el agente razone y lea imágenes, en **Gestionar la aplicación → Secrets** "
-                "agregá `XAI_API_KEY` (o `OPENAI_API_KEY`)."
-            )
+            _panel_grok()
         for i, (label, pregunta) in enumerate(_SUGERIDAS):
             if st.button(label, key=f"tango_sug_{i}", use_container_width=True):
                 with st.spinner("El agente está pensando…"):
