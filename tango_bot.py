@@ -223,8 +223,26 @@ def _tokens(texto: str) -> set[str]:
 def _es_consulta_formula(pregunta: str) -> bool:
     p = _sin_acento(pregunta or "").lower()
     return bool(
-        re.search(r"formula|concepto\s*\d+|sueldo basico|liquidacion", p)
+        re.search(
+            r"formula|concepto\s*\d+|sueldo basico|sueldo proporcional|liquidacion|"
+            r"en limpio|copi[aeo]|pegar|para pegar",
+            p,
+        )
     )
+
+
+def _pide_pegar(pregunta: str) -> bool:
+    p = _sin_acento(pregunta or "").lower()
+    return bool(
+        re.search(r"en limpio|copi[aeo]|pegar|para pegar|lista para|solo la formula|solamente la formula", p)
+    )
+
+
+def _texto_busqueda(pregunta: str, historial: list[dict[str, str]] | None) -> str:
+    partes = [pregunta or ""]
+    for m in (historial or [])[-6:]:
+        partes.append(str(m.get("content") or ""))
+    return "\n".join(partes)
 
 
 def _nro_concepto(pregunta: str) -> str:
@@ -274,32 +292,60 @@ def _campo_csv(texto: str, nombre: str) -> str:
     return m.group(1).strip().strip("|").strip()
 
 
+def _nro_de_hit(hit: dict[str, str]) -> str:
+    m = re.search(
+        r'codigo["\']?\s*:\s*["\']?(\d+)',
+        _sin_acento(hit.get("text") or ""),
+        re.I,
+    )
+    return m.group(1) if m else ""
+
+
+def _nombre_concepto(hit: dict[str, str]) -> str:
+    texto = hit.get("text") or ""
+    desc = _campo_csv(texto, "Descripcion")
+    if not desc:
+        titulo = hit.get("title") or "Concepto"
+        desc = re.sub(r"^Sueldos\s+\d+\s+", "", titulo, flags=re.I).strip() or titulo
+    nro = _nro_de_hit(hit)
+    if nro:
+        return f"Concepto {nro} — {desc}"
+    return desc
+
+
+def _formula_para_pegar(hit: dict[str, str]) -> str:
+    texto = hit.get("text") or ""
+    importe = _campo_csv(texto, "FormulaImporte")
+    cantidad = _campo_csv(texto, "FormulaCantidad")
+    lineas = [f"**{_nombre_concepto(hit)}**", "", "Listo para pegar en Tango:"]
+    if importe:
+        lineas.extend(["", "**Importe**", "", "```", importe, "```"])
+    if cantidad:
+        lineas.extend(["", "**Cantidad**", "", "```", cantidad, "```"])
+    if not importe and not cantidad:
+        return _explicar_formula(hit)
+    return "\n".join(lineas)
+
+
 def _explicar_formula(hit: dict[str, str]) -> str:
     texto = hit.get("text") or ""
-    titulo = (hit.get("title") or "Concepto").strip()
     importe = _campo_csv(texto, "FormulaImporte")
     cantidad = _campo_csv(texto, "FormulaCantidad")
     tipo = _campo_csv(texto, "TipoConcepto")
-    obs = _campo_csv(texto, "ObsFormula")
-    lineas = [f"**{titulo}**"]
+    lineas = [f"**{_nombre_concepto(hit)}**"]
     if tipo:
         lineas.append(f"Tipo: {tipo}")
     if importe:
-        lineas.append("**Importe:**")
-        lineas.append(f"`{importe}`")
+        lineas.extend(["", "**Importe** (pegá en FormulaImporte):", "", "```", importe, "```"])
         if "USUELD" in importe:
-            lineas.append("- `USUELD` = sueldo básico del legajo")
+            lineas.append("`USUELD` = sueldo básico del legajo")
         if "CANTIDAD" in importe:
-            lineas.append("- `CANTIDAD` = cantidad liquidada del concepto (días, horas, etc.)")
+            lineas.append("`CANTIDAD` = días/horas del concepto")
     if cantidad:
-        lineas.append("**Cantidad:**")
-        lineas.append(f"`{cantidad}`")
-    if obs:
-        lineas.append("**Notas de la fórmula (Tango):**")
-        lineas.append(obs[:900])
+        lineas.extend(["", "**Cantidad** (pegá en FormulaCantidad):", "", "```", cantidad, "```"])
     if not importe and not cantidad:
-        lineas.append(texto[:1200])
-    return "\n\n".join(lineas)
+        lineas.append(texto[:800])
+    return "\n".join(lineas)
 
 
 def _resolver_llm(*, api_key: str = "", model: str = "") -> tuple[str, str, str]:
@@ -390,7 +436,8 @@ Cómo operás:
    esa es la fuente de verdad: copiá esa fórmula, no inventes otra.
 7. Concepto 1 del estudio es Sueldo básico (`USUELD/30*CANTIDAD`), no el proporcional.
 8. Si no está en el contexto ni en la imagen, decilo. No inventes menús ni importes.
-9. Nunca pidas ni escribas claves SQL, TANGO.INI ni contraseñas.
+10. Si piden “en limpio”, copiar o pegar: respondé SOLO las fórmulas en bloques de código,
+    sin volcar el CSV ni ObsFormula.
 Respondé en español, claro, como un compañero del estudio.
 """
 
@@ -435,19 +482,23 @@ def _mejor_formula(pregunta: str, hits: list[dict[str, str]]) -> dict[str, str] 
 
 
 def _fallback(pregunta: str, hits: list[dict[str, str]]) -> str:
-    if _es_consulta_formula(pregunta):
+    if _es_consulta_formula(pregunta) or _pide_pegar(pregunta):
         hit = _mejor_formula(pregunta, hits)
         if hit:
-            return _explicar_formula(hit)
+            return _formula_para_pegar(hit) if _pide_pegar(pregunta) else _explicar_formula(hit)
+    for h in hits:
+        if _es_doc_formula(h):
+            return _explicar_formula(h)
     if not hits:
         return (
             "No lo tengo en las ayudas Tango del estudio. "
             "Probá con el nombre de la pantalla (Asientos, Modelos, Sueldos, IVA)."
         )
     bloques = []
-    for h in hits[:3]:
+    for h in hits[:2]:
         titulo = (h.get("title") or "Ayuda").strip()
-        texto = (h.get("text") or "").strip()[:800]
+        texto = (h.get("text") or "").strip()
+        texto = re.sub(r"\s+\|\s+", "\n", texto)[:600]
         bloques.append(f"**{titulo}**\n\n{texto}")
     return "Según las ayudas del estudio:\n\n" + "\n\n".join(bloques)
 
@@ -491,12 +542,23 @@ def responder(
     consulta = pregunta or ""
     if imagenes and not consulta.strip():
         consulta = "Leé la captura de Tango: qué pantalla es, qué error o fórmula muestra, y cómo se resuelve."
-    hits = recuperar(consulta, docs, k=8)
+    busqueda = _texto_busqueda(consulta, historial)
+    hits = recuperar(busqueda if _pide_pegar(consulta) else consulta, docs, k=8)
     formula_hit = None
-    if _es_consulta_formula(consulta):
-        formula_hit = _mejor_formula(consulta, _docs_formula(docs) or hits)
+    if _es_consulta_formula(busqueda) or _pide_pegar(consulta):
+        formula_hit = _mejor_formula(busqueda, _docs_formula(docs) or hits)
         if formula_hit:
             hits = [formula_hit] + [h for h in hits if h is not formula_hit][:7]
+    if formula_hit and (_pide_pegar(consulta) or not (api_key or os.environ.get("XAI_API_KEY") or os.environ.get("OPENAI_API_KEY") or os.environ.get("GROQ_API_KEY"))):
+        texto = _formula_para_pegar(formula_hit) if _pide_pegar(consulta) else _explicar_formula(formula_hit)
+        return {
+            "texto": texto,
+            "fuentes": [
+                {"title": formula_hit.get("title") or "", "source": Path(str(formula_hit.get("source") or "")).name}
+            ],
+            "docs": len(docs),
+            "uso_grok": False,
+        }
     bloques_ctx: list[str] = []
     if formula_hit:
         bloques_ctx.append(
