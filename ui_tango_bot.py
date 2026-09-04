@@ -1,17 +1,18 @@
 # -*- coding: utf-8 -*-
-"""Chat Tango tipo Grok dentro de la app Streamlit."""
+"""Chat del agente Tango: responde, formula y lee capturas."""
 from __future__ import annotations
+
+import os
 
 import streamlit as st
 
-from tango_bot import INDEX_PATH, reconstruir_indice, responder
+from tango_bot import INDEX_PATH, preparar_imagen, reconstruir_indice, responder
 
 _SUGERIDAS = [
-    ("Asiento IVA al cargar una factura", "¿Cómo se genera el asiento automático de IVA al cargar una factura?"),
-    ("Determinación mensual DETIVA", "Diferencia entre asiento por comprobante y determinación mensual DETIVA"),
-    ("Por qué IVA se exporta como VARIOS", "Por qué el estudio exporta IVA como VARIOS y no como tipo IVA"),
-    ("Fórmula de sueldo básico", "Fórmula de sueldo básico concepto 1 en Tango Sueldos"),
-    ("Cuentas con auxiliares", "Qué pasa si una cuenta usa auxiliares al importar Excel a Tango"),
+    ("Fórmula sueldo básico", "Armá y explicá la fórmula del concepto 1 Sueldo básico en Tango Sueldos"),
+    ("Asiento IVA al cargar factura", "¿Cómo se genera el asiento automático de IVA al cargar una factura?"),
+    ("DETIVA mensual", "Diferencia entre asiento por comprobante y determinación mensual DETIVA"),
+    ("IVA como VARIOS", "Por qué el estudio exporta IVA como VARIOS y no como tipo IVA"),
 ]
 
 _CSS = """
@@ -50,6 +51,16 @@ def _secret(nombre: str) -> str:
         return ""
 
 
+def _leer_chat_input(raw: object) -> tuple[str, list]:
+    if raw is None:
+        return "", []
+    if isinstance(raw, str):
+        return raw.strip(), []
+    texto = str(getattr(raw, "text", "") or "").strip()
+    archivos = list(getattr(raw, "files", None) or [])
+    return texto, archivos
+
+
 def render_tango_bot() -> None:
     st.markdown(_CSS, unsafe_allow_html=True)
 
@@ -58,17 +69,22 @@ def render_tango_bot() -> None:
 
     api_key = _secret("XAI_API_KEY")
     model = _secret("XAI_MODEL") or "grok-4"
+    for nombre in ("OPENAI_API_KEY", "OPENAI_MODEL", "GROQ_API_KEY", "GROQ_MODEL", "XAI_API_KEY", "XAI_MODEL"):
+        val = _secret(nombre)
+        if val:
+            os.environ[nombre] = val
+    hay_ia = bool(api_key or _secret("OPENAI_API_KEY") or _secret("GROQ_API_KEY"))
     chat = st.session_state.tango_chat
 
     if chat:
         top_l, top_r = st.columns([4, 1])
         with top_l:
             with st.expander("Ajustes", expanded=False):
-                st.caption("Responde con las ayudas Tango del escritorio y normativas, más las reglas de esta app.")
-                if not api_key:
-                    st.caption("Opcional: `XAI_API_KEY` en Secrets para redacción tipo Grok.")
+                st.caption("Agente Tango: responde, formula y lee capturas. Usa las ayudas del estudio.")
+                if hay_ia:
+                    st.caption("IA con visión activa (podés adjuntar pantallazos).")
                 else:
-                    st.caption(f"Grok activo (`{model}`).")
+                    st.caption("Sin clave de IA: fórmulas salen del export. Para leer imágenes, Secrets → XAI_API_KEY.")
                 if st.button("Reindexar ayudas Tango", key="tango_reindex"):
                     with st.spinner("Leyendo Desktop\\Tango y normativas…"):
                         docs = reconstruir_indice(guardar=True)
@@ -80,29 +96,52 @@ def render_tango_bot() -> None:
 
     if not chat:
         st.markdown(
-            '<div class="tango-hero"><h1>¿En qué te ayudo con Tango?</h1>'
-            "<p>Preguntame por menús, asientos, IVA, sueldos o la exportación del estudio.</p></div>",
+            '<div class="tango-hero"><h1>Agente Tango</h1>'
+            "<p>Preguntá, pedí una fórmula o adjuntá una captura de pantalla.</p></div>",
             unsafe_allow_html=True,
         )
+        if not hay_ia:
+            st.info(
+                "Las fórmulas de sueldos se arman con el export de Tango. "
+                "Para que el agente razone y lea imágenes, en **Gestionar la aplicación → Secrets** "
+                "agregá `XAI_API_KEY` (o `OPENAI_API_KEY`)."
+            )
         for i, (label, pregunta) in enumerate(_SUGERIDAS):
             if st.button(label, key=f"tango_sug_{i}", use_container_width=True):
-                with st.spinner("Pensando…"):
-                    _enviar(pregunta, api_key, model)
+                with st.spinner("El agente está pensando…"):
+                    _enviar(pregunta, api_key, model, [])
                 st.rerun()
     else:
         for msg in chat:
             with st.chat_message(msg["role"]):
+                for data_url in msg.get("imagenes") or []:
+                    st.image(data_url, width=420)
                 st.markdown(msg["content"])
 
-    prompt = st.chat_input("Escribí tu duda de Tango…")
-    if prompt:
-        with st.spinner("Pensando…"):
-            _enviar(prompt, api_key, model)
+    try:
+        raw = st.chat_input(
+            "Escribí o adjuntá una captura de Tango…",
+            accept_file=True,
+            file_type=["png", "jpg", "jpeg", "webp"],
+        )
+    except TypeError:
+        raw = st.chat_input("Escribí tu consulta de Tango…")
+    texto, archivos = _leer_chat_input(raw)
+    if texto or archivos:
+        imagenes = []
+        for f in archivos[:4]:
+            imagenes.append(preparar_imagen(f.getvalue(), getattr(f, "name", "captura.png")))
+        with st.spinner("El agente está leyendo y formulando…"):
+            _enviar(texto, api_key, model, imagenes)
         st.rerun()
 
 
-def _enviar(prompt: str, api_key: str, model: str) -> None:
-    st.session_state.tango_chat.append({"role": "user", "content": prompt})
+def _enviar(prompt: str, api_key: str, model: str, imagenes: list[dict[str, str]]) -> None:
+    st.session_state.tango_chat.append({
+        "role": "user",
+        "content": prompt or "(captura de Tango)",
+        "imagenes": [img["data_url"] for img in imagenes],
+    })
     historial = [
         {"role": m["role"], "content": m["content"]}
         for m in st.session_state.tango_chat
@@ -110,7 +149,13 @@ def _enviar(prompt: str, api_key: str, model: str) -> None:
     ][:-1]
     if not INDEX_PATH.exists():
         reconstruir_indice(guardar=True)
-    out = responder(prompt, historial, api_key=api_key, model=model)
+    out = responder(
+        prompt,
+        historial,
+        api_key=api_key,
+        model=model,
+        imagenes=imagenes,
+    )
     st.session_state.tango_chat.append({
         "role": "assistant",
         "content": out["texto"],

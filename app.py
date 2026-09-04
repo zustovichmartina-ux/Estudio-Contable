@@ -13305,7 +13305,7 @@ def main() -> None:
             - **Conciliación Bancaria**: extractos PDF + lista Tango → planilla Excel clonada.
             - **Préstamos Financieros**: auditoría de cuotas desde PDFs bancarios.
             - **Herramientas**: matcheo PDF + Tango; cuadro bancario; extractos; FCI FIFO; caja USD; liquidaciones; cruce facturas.
-            - **Tango**: chat con las ayudas Axoft recolectadas (escritorio + normativas) y las reglas de exportación del estudio.
+            - **Tango**: agente del estudio (responde, formula y lee capturas) con las ayudas Axoft y el export de sueldos.
             - **ARCA**: encola jobs AFIP (emitir FCC / VEPs / comprobantes); el worker local ejecuta en Chrome. Sin claves en la web.
             - **Usuarios de oficina**: cada persona entra con su usuario; sesiones independientes.
             - **Cloud**: link público + muro de login (PIN). Planes/balances subidos se cifran con `DATA_ENCRYPTION_KEY`.

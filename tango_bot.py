@@ -2,15 +2,23 @@
 """Bot Tango: índice de ayudas Axoft + reglas del estudio. Nunca guarda claves."""
 from __future__ import annotations
 
+import base64
 import csv
 import json
 import os
 import re
+import unicodedata
 import urllib.error
 import urllib.request
 from html.parser import HTMLParser
+from io import BytesIO
 from pathlib import Path
 from typing import Any
+
+try:
+    from PIL import Image
+except ImportError:
+    Image = None  # type: ignore[misc, assignment]
 
 ROOT = Path(__file__).resolve().parent
 CONOCIMIENTO_DIR = ROOT / "tango_conocimiento"
@@ -110,7 +118,7 @@ def _leer_archivo(path: Path) -> list[dict[str, str]]:
 
 def _csv_sueldos(path: Path) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
-    with path.open(encoding="utf-8", errors="replace", newline="") as fh:
+    with path.open(encoding="utf-8-sig", errors="replace", newline="") as fh:
         reader = csv.DictReader(fh)
         for i, row in enumerate(reader):
             if i > 400:
@@ -118,7 +126,7 @@ def _csv_sueldos(path: Path) -> list[dict[str, str]]:
             partes = [f"{k}: {v}" for k, v in row.items() if str(v or "").strip()]
             if not partes:
                 continue
-            codigo = str(row.get("Codigo") or row.get("TIPO_CONCEPTO") or i)
+            codigo = str(row.get("Codigo") or row.get("TIPO_CONCEPTO") or "").strip() or str(i + 1)
             desc = str(row.get("Descripcion") or row.get("DESC_TIPO_CONCEPTO") or path.stem)
             rows.append({
                 "source": str(path),
@@ -194,14 +202,41 @@ def cargar_indice() -> list[dict[str, str]]:
     return out
 
 
+def _sin_acento(texto: str) -> str:
+    nfd = unicodedata.normalize("NFD", texto or "")
+    return "".join(ch for ch in nfd if unicodedata.category(ch) != "Mn")
+
+
 def _tokens(texto: str) -> set[str]:
-    return {t.lower() for t in _TOKEN.findall(texto or "")}
+    plano = _sin_acento(texto or "").lower()
+    plano = plano.replace("formulaimporte", "formula importe")
+    plano = plano.replace("formulacantidad", "formula cantidad")
+    plano = plano.replace("formulavalor", "formula valor")
+    found = {t for t in _TOKEN.findall(plano)}
+    extra: set[str] = set()
+    for t in list(found):
+        if t.endswith("s") and len(t) > 4:
+            extra.add(t[:-1])
+    return found | extra
+
+
+def _es_consulta_formula(pregunta: str) -> bool:
+    p = _sin_acento(pregunta or "").lower()
+    return bool(
+        re.search(r"formula|concepto\s*\d+|sueldo basico|liquidacion", p)
+    )
+
+
+def _nro_concepto(pregunta: str) -> str:
+    m = re.search(r"concepto\s*(\d+)", _sin_acento(pregunta or ""), re.I)
+    return m.group(1) if m else ""
 
 
 def recuperar(pregunta: str, docs: list[dict[str, str]], k: int = 8) -> list[dict[str, str]]:
     q = _tokens(pregunta)
     if not q or not docs:
         return docs[:k]
+    nro = _nro_concepto(pregunta) if _es_consulta_formula(pregunta) else ""
     scored: list[tuple[float, dict[str, str]]] = []
     for doc in docs:
         blob = f"{doc.get('title', '')} {doc.get('text', '')}"
@@ -211,30 +246,113 @@ def recuperar(pregunta: str, docs: list[dict[str, str]], k: int = 8) -> list[dic
         hit = len(q & t)
         if hit == 0:
             continue
-        extra = 1.5 if any(w in (doc.get("title") or "").lower() for w in q) else 1.0
-        scored.append((hit * extra, doc))
+        score = float(hit)
+        title = (doc.get("title") or "").lower()
+        source = (doc.get("source") or "").lower()
+        if any(w in title for w in q):
+            score += 2.0
+        if "formulas_completo.csv" in source or "sueldos_formulas" in source:
+            score += 12.0
+        if nro and re.search(rf'codigo["\']?\s*:\s*["\']?{nro}\b', _sin_acento(blob).lower()):
+            score += 25.0
+        if nro and re.search(rf"^sueldos {nro} ", title):
+            score += 4.0
+        if "sueldo basico" in _sin_acento(title) and "basico" in q:
+            score += 18.0
+        if "sicoss" in source or "siap" in source:
+            if "sicoss" not in q and "siap" not in q:
+                score -= 8.0
+        scored.append((score, doc))
     scored.sort(key=lambda x: x[0], reverse=True)
     return [d for _, d in scored[:k]]
 
 
-def _llamar_grok(
+def _campo_csv(texto: str, nombre: str) -> str:
+    m = re.search(rf"{re.escape(nombre)}:\s*(.*?)(?:\s+\|\s+[A-Za-zÁÉÍÓÚÑ][\w]*:|$)", texto, re.S)
+    if not m:
+        return ""
+    return m.group(1).strip().strip("|").strip()
+
+
+def _explicar_formula(hit: dict[str, str]) -> str:
+    texto = hit.get("text") or ""
+    titulo = (hit.get("title") or "Concepto").strip()
+    importe = _campo_csv(texto, "FormulaImporte")
+    cantidad = _campo_csv(texto, "FormulaCantidad")
+    tipo = _campo_csv(texto, "TipoConcepto")
+    obs = _campo_csv(texto, "ObsFormula")
+    lineas = [f"**{titulo}**"]
+    if tipo:
+        lineas.append(f"Tipo: {tipo}")
+    if importe:
+        lineas.append("**Importe:**")
+        lineas.append(f"`{importe}`")
+        if "USUELD" in importe:
+            lineas.append("- `USUELD` = sueldo básico del legajo")
+        if "CANTIDAD" in importe:
+            lineas.append("- `CANTIDAD` = cantidad liquidada del concepto (días, horas, etc.)")
+    if cantidad:
+        lineas.append("**Cantidad:**")
+        lineas.append(f"`{cantidad}`")
+    if obs:
+        lineas.append("**Notas de la fórmula (Tango):**")
+        lineas.append(obs[:900])
+    if not importe and not cantidad:
+        lineas.append(texto[:1200])
+    return "\n\n".join(lineas)
+
+
+def _resolver_llm(*, api_key: str = "", model: str = "") -> tuple[str, str, str]:
+    """Devuelve (api_key, url, model). Vacío si no hay proveedor."""
+    xai = (api_key or os.environ.get("XAI_API_KEY") or "").strip()
+    if xai:
+        return xai, "https://api.x.ai/v1/chat/completions", (model or os.environ.get("XAI_MODEL") or "grok-4").strip() or "grok-4"
+    openai = (os.environ.get("OPENAI_API_KEY") or "").strip()
+    if openai:
+        return openai, "https://api.openai.com/v1/chat/completions", (os.environ.get("OPENAI_MODEL") or "gpt-4o-mini").strip()
+    groq = (os.environ.get("GROQ_API_KEY") or "").strip()
+    if groq:
+        return groq, "https://api.groq.com/openai/v1/chat/completions", (os.environ.get("GROQ_MODEL") or "llama-3.3-70b-versatile").strip()
+    return "", "", ""
+
+
+def _llamar_llm(
     system: str,
-    messages: list[dict[str, str]],
+    messages: list[dict[str, Any]],
     *,
     api_key: str = "",
     model: str = "",
+    imagenes: list[dict[str, str]] | None = None,
 ) -> str:
-    key = (api_key or os.environ.get("XAI_API_KEY") or "").strip()
-    if not key:
+    key, url, modelo = _resolver_llm(api_key=api_key, model=model)
+    if not key or not url:
         return ""
-    model = (model or os.environ.get("XAI_MODEL") or "grok-4").strip() or "grok-4"
+    if imagenes:
+        if "x.ai" in url:
+            modelo = (os.environ.get("XAI_VISION_MODEL") or modelo or "grok-4").strip()
+        elif "openai.com" in url:
+            modelo = (os.environ.get("OPENAI_VISION_MODEL") or "gpt-4o-mini").strip()
+        elif "groq.com" in url:
+            modelo = (
+                os.environ.get("GROQ_VISION_MODEL")
+                or "meta-llama/llama-4-scout-17b-16e-instruct"
+            ).strip()
+        last = messages[-1]
+        texto = last.get("content") if isinstance(last.get("content"), str) else str(last.get("content") or "")
+        partes: list[dict[str, Any]] = [{"type": "text", "text": texto}]
+        for img in imagenes[:4]:
+            partes.append({
+                "type": "image_url",
+                "image_url": {"url": img["data_url"]},
+            })
+        messages = [*messages[:-1], {"role": "user", "content": partes}]
     payload = {
-        "model": model,
+        "model": modelo,
         "temperature": 0.2,
         "messages": [{"role": "system", "content": system}, *messages],
     }
     req = urllib.request.Request(
-        "https://api.x.ai/v1/chat/completions",
+        url,
         data=json.dumps(payload).encode("utf-8"),
         headers={
             "Authorization": f"Bearer {key}",
@@ -244,30 +362,83 @@ def _llamar_grok(
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=90) as resp:
+        with urllib.request.urlopen(req, timeout=120) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")[:300]
-        raise RuntimeError(f"Grok HTTP {exc.code}: {body}") from exc
+        body = exc.read().decode("utf-8", errors="replace")[:400]
+        raise RuntimeError(f"IA HTTP {exc.code}: {body}") from exc
     except urllib.error.URLError as exc:
-        raise RuntimeError(f"No se llegó a xAI: {exc.reason}") from exc
+        raise RuntimeError(f"No se llegó al servicio de IA: {exc.reason}") from exc
     choices = data.get("choices") or []
     if not choices:
         return ""
     return str((choices[0].get("message") or {}).get("content") or "").strip()
 
 
-_SYSTEM = """Sos el asistente Tango del Estudio Contable (Axoft Tango Estudios, ayudas 26ar).
-Respondé en español, claro y ordenado, como un compañero del estudio.
-Usá SOLO el contexto que te pasan (ayudas Axoft recolectadas + reglas del estudio).
-Si el menú o la fórmula no está en el contexto, decilo: no inventes pantallas.
-Nunca pidas ni escribas claves SQL, TANGO.INI ni contraseñas.
-Si hay dos caminos (asiento por comprobante vs determinación mensual), distinguilos.
-Cuando cites un menú, usá la ruta tal cual (ej. Liquidador de IVA > Archivos > …).
+_SYSTEM = """Sos el agente especializado en Tango Estudios (Axoft 26ar) del Estudio Contable.
+Trabajás adentro del chat de la app. Tu trabajo es responder, explicar y FORMULAR
+(armar o corregir fórmulas de Tango Sueldos y modelos de asiento).
+
+Cómo operás:
+1. Leé el contexto (ayudas Axoft, reglas del estudio, export de fórmulas).
+2. Si hay captura de pantalla: describí qué pantalla/error/fórmula se ve, y recién después respondé.
+3. Si piden una fórmula: escribí la fórmula lista para pegar en Tango (sintaxis Axoft:
+   SI(), NOVCA, NOVCAG, USUELD, CANTIDAD, SUELDO, ABS, ACUCTA, MOVCTA, etc.) y explicá cada variable.
+4. Distinguí: asiento por comprobante (Liquidador de IVA) vs determinación mensual (DETIVA/DETIIBB/DETTISH).
+5. No mezcles SIAp/SICOSS con fórmulas de conceptos salvo que lo pidan.
+6. Si el contexto trae FormulaImporte / FormulaCantidad del export de Tango Sueldos,
+   esa es la fuente de verdad: copiá esa fórmula, no inventes otra.
+7. Concepto 1 del estudio es Sueldo básico (`USUELD/30*CANTIDAD`), no el proporcional.
+8. Si no está en el contexto ni en la imagen, decilo. No inventes menús ni importes.
+9. Nunca pidas ni escribas claves SQL, TANGO.INI ni contraseñas.
+Respondé en español, claro, como un compañero del estudio.
 """
 
 
+def _es_doc_formula(doc: dict[str, str]) -> bool:
+    source = (doc.get("source") or "").lower()
+    return "formulas_completo.csv" in source or "sueldos_formulas" in source
+
+
+def _docs_formula(docs: list[dict[str, str]]) -> list[dict[str, str]]:
+    return [d for d in docs if _es_doc_formula(d)]
+
+
+def _codigo_en_texto(texto: str, nro: str) -> bool:
+    plano = _sin_acento(texto or "").lower()
+    return bool(re.search(rf'codigo["\']?\s*:\s*["\']?{re.escape(nro)}\b', plano))
+
+
+def _mejor_formula(pregunta: str, hits: list[dict[str, str]]) -> dict[str, str] | None:
+    csv_hits = _docs_formula(hits)
+    if not csv_hits:
+        return None
+    p = _sin_acento(pregunta or "").lower()
+    nro = _nro_concepto(pregunta)
+
+    def titulo(h: dict[str, str]) -> str:
+        return _sin_acento(h.get("title") or "").lower()
+
+    if "basico" in p:
+        for h in csv_hits:
+            t = titulo(h)
+            if "sueldo basico" in t and "proporcional" not in t:
+                return h
+    if nro:
+        for h in csv_hits:
+            if _codigo_en_texto(h.get("text") or "", nro) and "sueldo basico" in titulo(h):
+                return h
+        for h in csv_hits:
+            if _codigo_en_texto(h.get("text") or "", nro):
+                return h
+    return csv_hits[0]
+
+
 def _fallback(pregunta: str, hits: list[dict[str, str]]) -> str:
+    if _es_consulta_formula(pregunta):
+        hit = _mejor_formula(pregunta, hits)
+        if hit:
+            return _explicar_formula(hit)
     if not hits:
         return (
             "No lo tengo en las ayudas Tango del estudio. "
@@ -281,20 +452,64 @@ def _fallback(pregunta: str, hits: list[dict[str, str]]) -> str:
     return "Según las ayudas del estudio:\n\n" + "\n\n".join(bloques)
 
 
+def preparar_imagen(raw: bytes, nombre: str = "captura.png") -> dict[str, str]:
+    """Comprime la captura para visión (JPEG). Devuelve data_url."""
+    mime = "image/jpeg"
+    data = raw
+    try:
+        if Image is not None:
+            im = Image.open(BytesIO(raw))
+            im = im.convert("RGB")
+            im.thumbnail((1600, 1600))
+            buf = BytesIO()
+            im.save(buf, format="JPEG", quality=85)
+            data = buf.getvalue()
+        else:
+            raise RuntimeError("sin Pillow")
+    except Exception:
+        data = raw
+        lower = (nombre or "").lower()
+        if lower.endswith(".png"):
+            mime = "image/png"
+        elif lower.endswith(".webp"):
+            mime = "image/webp"
+        else:
+            mime = "image/jpeg"
+    b64 = base64.b64encode(data).decode("ascii")
+    return {"data_url": f"data:{mime};base64,{b64}", "nombre": Path(nombre).name}
+
+
 def responder(
     pregunta: str,
     historial: list[dict[str, str]] | None = None,
     *,
     api_key: str = "",
     model: str = "",
+    imagenes: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     docs = cargar_indice()
-    hits = recuperar(pregunta, docs, k=8)
-    contexto = "\n\n".join(
+    consulta = pregunta or ""
+    if imagenes and not consulta.strip():
+        consulta = "Leé la captura de Tango: qué pantalla es, qué error o fórmula muestra, y cómo se resuelve."
+    hits = recuperar(consulta, docs, k=8)
+    formula_hit = None
+    if _es_consulta_formula(consulta):
+        formula_hit = _mejor_formula(consulta, _docs_formula(docs) or hits)
+        if formula_hit:
+            hits = [formula_hit] + [h for h in hits if h is not formula_hit][:7]
+    bloques_ctx: list[str] = []
+    if formula_hit:
+        bloques_ctx.append(
+            "### Fórmula del export Tango Sueldos (fuente de verdad)\n"
+            + _explicar_formula(formula_hit)
+        )
+    bloques_ctx.extend(
         f"### {h.get('title')}\nFuente: {Path(str(h.get('source') or '')).name}\n{h.get('text')}"
         for h in hits
+        if h is not formula_hit
     )
-    msgs: list[dict[str, str]] = []
+    contexto = "\n\n".join(bloques_ctx)
+    msgs: list[dict[str, Any]] = []
     for m in (historial or [])[-8:]:
         role = m.get("role") or "user"
         if role not in {"user", "assistant"}:
@@ -302,19 +517,43 @@ def responder(
         content = str(m.get("content") or "").strip()
         if content:
             msgs.append({"role": role, "content": content})
+    extra_img = ""
+    if imagenes:
+        extra_img = (
+            f"\n\nEl usuario adjuntó {len(imagenes)} captura(s) de Tango. "
+            "Leelas y usalas para formular o corregir."
+        )
     msgs.append({
         "role": "user",
-        "content": f"Pregunta:\n{pregunta}\n\nContexto:\n{contexto}",
+        "content": f"Pregunta:\n{consulta}{extra_img}\n\nContexto:\n{contexto}",
     })
-    grok = ""
+    ia = ""
     error = ""
+    key, _url, _modelo = _resolver_llm(api_key=api_key, model=model)
+    if imagenes and not key:
+        return {
+            "texto": (
+                "Para leer capturas el agente necesita IA con visión. "
+                "En **Gestionar la aplicación → Secrets** pegá `XAI_API_KEY` o `OPENAI_API_KEY`. "
+                "Mientras, escribí qué dice la pantalla o pegá la fórmula en texto."
+            ),
+            "fuentes": [],
+            "docs": len(docs),
+            "uso_grok": False,
+        }
     try:
-        grok = _llamar_grok(_SYSTEM, msgs, api_key=api_key, model=model)
+        ia = _llamar_llm(
+            _SYSTEM,
+            msgs,
+            api_key=api_key,
+            model=model,
+            imagenes=imagenes,
+        )
     except Exception as exc:
         error = str(exc)
-    texto = grok or _fallback(pregunta, hits)
-    if error and not grok:
-        texto = f"{texto}\n\n_(Grok no respondió: {error[:180]})_"
+    texto = ia or _fallback(consulta, _docs_formula(docs) + hits)
+    if error and not ia:
+        texto = f"{texto}\n\n_(El agente no pudo llamar a la IA: {error[:180]})_"
     return {
         "texto": texto,
         "fuentes": [
@@ -322,5 +561,5 @@ def responder(
             for h in hits[:6]
         ],
         "docs": len(docs),
-        "uso_grok": bool(grok),
+        "uso_grok": bool(ia),
     }
