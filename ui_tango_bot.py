@@ -91,8 +91,7 @@ def render_tango_bot() -> None:
                 st.rerun()
     else:
         for msg in chat:
-            avatar = "👤" if msg["role"] == "user" else "✦"
-            with st.chat_message(msg["role"], avatar=avatar):
+            with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
 
     prompt = st.chat_input("Escribí tu duda de Tango…")
