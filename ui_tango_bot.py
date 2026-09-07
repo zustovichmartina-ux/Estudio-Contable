@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import streamlit as st
 
@@ -82,19 +83,34 @@ def _modelo_para_clave(api_key: str) -> str:
         return _secret("GROQ_MODEL") or "llama-3.3-70b-versatile"
     if api_key.startswith("sk-"):
         return _secret("OPENAI_MODEL") or "gpt-4o-mini"
-    return _secret("ANTHROPIC_MODEL") or "claude-sonnet-5"
+    return _secret("XAI_MODEL") or "grok-4.6"
 
 
 def _etiqueta_ia(api_key: str, model: str) -> str:
-    if api_key.startswith("sk-ant-") or "claude" in model.lower():
-        return "Claude"
     if api_key.startswith("xai-") or model.startswith("grok"):
         return "Grok"
+    if api_key.startswith("sk-ant-") or "claude" in model.lower():
+        return "Claude"
     if api_key.startswith("gsk_"):
         return "Groq"
     if api_key.startswith("sk-"):
         return "OpenAI"
     return "IA"
+
+
+def _es_web_publica() -> bool:
+    """True en Streamlit Cloud. Ajustes/clave solo se muestran en la PC local."""
+    flags = (
+        os.environ.get("STREAMLIT_SHARING_MODE"),
+        os.environ.get("STREAMLIT_CLOUD"),
+        os.environ.get("IS_STREAMLIT_CLOUD"),
+    )
+    if any(str(f).strip().lower() in {"1", "true", "yes"} for f in flags if f):
+        return True
+    if Path("/mount/src").is_dir() or Path("/home/appuser").is_dir():
+        return True
+    host = str(os.environ.get("HOSTNAME") or os.environ.get("COMPUTERNAME") or "").lower()
+    return host.endswith(".streamlit.app") or "streamlit" in host
 
 
 def _leer_chat_input(raw: object) -> tuple[str, list]:
@@ -115,6 +131,7 @@ def render_tango_bot() -> None:
 
     if "tango_api_key" not in st.session_state:
         st.session_state.tango_api_key = str(st.session_state.get("tango_xai_key") or "")
+    web = _es_web_publica()
     for nombre in (
         "ANTHROPIC_API_KEY",
         "ANTHROPIC_MODEL",
@@ -128,8 +145,9 @@ def render_tango_bot() -> None:
         val = _secret(nombre)
         if val:
             os.environ[nombre] = val
+    # En la web pública solo Secrets. En la PC, la clave pegada en Ajustes.
     api_key = (
-        str(st.session_state.get("tango_api_key") or "").strip()
+        ("" if web else str(st.session_state.get("tango_api_key") or "").strip())
         or _secret("XAI_API_KEY")
         or _secret("ANTHROPIC_API_KEY")
         or _secret("OPENAI_API_KEY")
@@ -165,19 +183,26 @@ def render_tango_bot() -> None:
                 st.warning("La clave de Grok empieza con xai- (console.x.ai).")
 
     if chat:
-        top_l, top_r = st.columns([4, 1])
-        with top_l:
-            with st.expander("Ajustes", expanded=not hay_ia):
-                st.caption("Agente Tango con Grok o Claude. Usa las ayudas y el export de sueldos del estudio.")
-                _panel_ia()
-                if st.button("Reindexar ayudas Tango", key="tango_reindex"):
-                    with st.spinner("Leyendo Desktop\\Tango y normativas…"):
-                        docs = reconstruir_indice(guardar=True)
-                    st.success(f"Listo: {len(docs)} fragmentos")
-        with top_r:
-            if st.button("Nueva charla", key="tango_clear", use_container_width=True):
-                st.session_state.tango_chat = []
-                st.rerun()
+        if web:
+            _, top_r = st.columns([4, 1])
+            with top_r:
+                if st.button("Nueva charla", key="tango_clear", use_container_width=True):
+                    st.session_state.tango_chat = []
+                    st.rerun()
+        else:
+            top_l, top_r = st.columns([4, 1])
+            with top_l:
+                with st.expander("Ajustes", expanded=not hay_ia):
+                    st.caption("Solo visible en esta PC. La web pública no muestra la clave.")
+                    _panel_ia()
+                    if st.button("Reindexar ayudas Tango", key="tango_reindex"):
+                        with st.spinner("Leyendo Desktop\\Tango y normativas…"):
+                            docs = reconstruir_indice(guardar=True)
+                        st.success(f"Listo: {len(docs)} fragmentos")
+            with top_r:
+                if st.button("Nueva charla", key="tango_clear", use_container_width=True):
+                    st.session_state.tango_chat = []
+                    st.rerun()
 
     if not chat:
         st.markdown(
@@ -185,7 +210,8 @@ def render_tango_bot() -> None:
             "<p>Grok responde, formula y lee capturas de Tango.</p></div>",
             unsafe_allow_html=True,
         )
-        _panel_ia()
+        if not web:
+            _panel_ia()
         for i, (label, pregunta) in enumerate(_SUGERIDAS):
             if st.button(label, key=f"tango_sug_{i}", use_container_width=True):
                 with st.spinner("El agente está pensando…"):

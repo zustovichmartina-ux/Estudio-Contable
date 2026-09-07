@@ -545,7 +545,7 @@ def _llamar_anthropic(
                 continue
             raise RuntimeError(ultimo) from exc
         except urllib.error.URLError as exc:
-            raise RuntimeError(f"No se llegó a Claude (Anthropic): {exc.reason}") from exc
+            raise RuntimeError(f"No se llegó a Anthropic: {exc.reason}") from exc
         texto = _texto_respuesta_claude(data)
         if texto:
             return texto
@@ -634,7 +634,7 @@ def _llamar_llm(
     return ""
 
 
-_SYSTEM = """Sos Claude, el agente de Tango Estudios (Axoft 26ar) del Estudio Contable.
+_SYSTEM = """Sos Grok, el agente de Tango Estudios (Axoft 26ar) del Estudio Contable.
 Respondé y formulá. No vuelques CSV ni pegues ayudas crudas.
 
 Cómo operás:
@@ -739,6 +739,18 @@ def _completar_formula_copiable(
     return extra
 
 
+def _error_ia_amigable(error: str) -> str:
+    e = (error or "").lower()
+    if "incorrect api key" in e or "invalid api key" in e or "authentication" in e:
+        return (
+            "Grok no está configurado en esta web: la clave de Secrets no vale. "
+            "En la PC del estudio (localhost), Tango → Ajustes, pegá una clave nueva de console.x.ai."
+        )
+    if error:
+        return f"La IA no respondió: {error[:160]}"
+    return ""
+
+
 def _fallback(pregunta: str, hits: list[dict[str, str]]) -> str:
     if _pide_formula(pregunta):
         hit = _mejor_formula(pregunta, hits)
@@ -813,16 +825,16 @@ def responder(
         extra = ""
         if formula_hit:
             extra = (
-                "\n\nMientras tanto, del export de sueldos (sin Claude):\n\n"
+                "\n\nMientras tanto, del export de sueldos (sin Grok):\n\n"
                 + _formula_para_pegar(formula_hit)
             )
         return {
             "texto": (
-                "Este chat responde con **Claude**. Falta la clave de Anthropic.\n\n"
-                "En **Tango → Ajustes** pegá `ANTHROPIC_API_KEY` (empieza con `sk-ant-`) "
-                "o en Streamlit **Manage app → Secrets**:\n\n"
-                "`ANTHROPIC_API_KEY = \"sk-ant-...\"`\n\n"
-                "La clave se crea en https://console.anthropic.com"
+                "Este chat responde con **Grok**. Falta la clave de xAI.\n\n"
+                "En **Tango → Ajustes** (solo en la PC del estudio) pegá `XAI_API_KEY` "
+                "(empieza con `xai-`) o en Streamlit **Manage app → Secrets**:\n\n"
+                "`XAI_API_KEY = \"xai-...\"`\n\n"
+                "La clave se crea en https://console.x.ai"
                 + extra
             ),
             "fuentes": [
@@ -890,14 +902,13 @@ def responder(
         texto = _completar_formula_copiable(ia, formula_hit, consulta)
     elif formula_hit:
         texto = _formula_para_pegar(formula_hit)
-        if error:
-            texto = f"{texto}\n\n_(Claude no respondió: {error[:180]})_"
     else:
-        texto = (
-            f"Claude no pudo responder: {error[:240]}"
-            if error
-            else _fallback(consulta, hits)
-        )
+        texto = _fallback(consulta, hits)
+        aviso = _error_ia_amigable(error)
+        if aviso and "incorrect api key" not in (error or "").lower():
+            texto = f"{texto}\n\n_({aviso})_"
+        elif aviso and texto.startswith("No lo tengo"):
+            texto = aviso
     return {
         "texto": texto,
         "fuentes": [
