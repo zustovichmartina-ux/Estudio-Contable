@@ -13078,7 +13078,7 @@ def _pantalla_login_oficina() -> None:
         )
         return
 
-    opciones = {u["usuario"]: f"{u['nombre']} ({u['usuario']})" for u in usuarios}
+    opciones = {u["usuario"]: str(u["nombre"] or u["usuario"]).strip() for u in usuarios}
     elegido = st.selectbox(
         "Usuario",
         options=list(opciones.keys()),
@@ -13135,7 +13135,7 @@ def _pantalla_login_oficina() -> None:
             format_func=lambda x: opciones[x],
             key="recup_usuario_objetivo",
         )
-        mapa_admin = {u["usuario"]: f"{u['nombre']} ({u['usuario']})" for u in admins}
+        mapa_admin = {u["usuario"]: str(u["nombre"] or u["usuario"]).strip() for u in admins}
         admin_elegido = st.selectbox(
             "Administrador que autoriza",
             options=list(mapa_admin.keys()),
