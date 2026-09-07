@@ -13060,22 +13060,23 @@ def _pantalla_login_oficina() -> None:
         "varios pueden trabajar a la vez sin pisarse."
     )
     if _es_entorno_cloud():
-        st.info(
-            "En la web, el administrador es el usuario **admin** con su PIN de Secrets. "
-            "Un PIN vacío no entra. Guada, Mauri o Tobi no son administradores."
-        )
-        # Re-sincronizar usuarios desde Secrets en cada visita al login (Cloud)
+        st.caption("Cada uno elige su nombre. PIN del equipo: el que les pasó el estudio.")
         try:
             auth_oficina._aplicar_usuarios_desde_secrets()
+        except Exception:
+            pass
+        try:
+            if not st.session_state.get("_equipo_oficina_ok"):
+                auth_oficina.sembrar_equipo_oficina(forzar_pin=True)
+                st.session_state["_equipo_oficina_ok"] = True
+            else:
+                auth_oficina.sembrar_equipo_oficina(forzar_pin=False)
         except Exception:
             pass
 
     usuarios = auth_oficina.listar_usuarios_oficina(solo_activos=True)
     if not usuarios:
-        st.error(
-            "No hay usuarios cargados. En Cloud, pegá el bloque `oficina_usuarios` en Secrets "
-            "y reiniciá la app."
-        )
+        st.error("No hay usuarios cargados. Probá de nuevo en un minuto.")
         return
 
     opciones = {u["usuario"]: str(u["nombre"] or u["usuario"]).strip() for u in usuarios}

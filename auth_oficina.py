@@ -155,6 +155,24 @@ def usuario_bloqueado_oficina(usuario: str) -> int:
     return _segundos_bloqueo_restantes(fila)
 
 
+_PIN_EQUIPO_OFICINA = "3278"
+_EQUIPO_OFICINA = (
+    ("guada", "Guada"),
+    ("tobi", "Tobi"),
+    ("sol", "Sol"),
+    ("mauri", "Mauri"),
+    ("lu", "Lu"),
+    ("agus", "Agus"),
+    ("cami", "Cami"),
+    ("karencita", "Karencita"),
+    ("hernan", "Hernan"),
+    ("marti", "Marti"),
+)
+_EQUIPO_LOGINS = {login for login, _nombre in _EQUIPO_OFICINA}
+_ROLES_GENERICOS_OFICINA = ("recepcion", "contador", "auxiliar")
+_EQUIPO_PIN_LISTO = False
+
+
 def _secrets_oficina_usuarios() -> list[dict]:
     """Lee usuarios desde st.secrets['oficina_usuarios'] (Cloud / local secrets.toml)."""
     try:
@@ -205,7 +223,7 @@ def _aplicar_usuarios_desde_secrets() -> int:
     aplicados = 0
     for u in definidos:
         user = u["usuario"]
-        if not user:
+        if not user or user in _EQUIPO_LOGINS:
             continue
         existente = obtener_usuario_oficina(user)
         if existente is None:
@@ -234,24 +252,45 @@ def _aplicar_usuarios_desde_secrets() -> int:
     return aplicados
 
 
+def sembrar_equipo_oficina(*, forzar_pin: bool = False) -> int:
+    """Crea el equipo de la oficina. En Cloud no hace falta Manage app / Secrets."""
+    global _EQUIPO_PIN_LISTO
+    aplicar_pin = bool(forzar_pin) and not _EQUIPO_PIN_LISTO
+    aplicados = 0
+    for login, nombre in _EQUIPO_OFICINA:
+        existente = obtener_usuario_oficina(login)
+        if existente is None:
+            crear_usuario_oficina(login, nombre, pin=_PIN_EQUIPO_OFICINA, es_admin=False)
+            aplicados += 1
+            continue
+        kwargs: dict = {
+            "nombre": nombre,
+            "es_admin": False,
+            "activo": True,
+        }
+        if aplicar_pin or not str(existente.get("pin_hash") or "").strip():
+            kwargs["pin"] = _PIN_EQUIPO_OFICINA
+        actualizar_usuario_oficina(int(existente["id"]), **kwargs)
+        aplicados += 1
+    for extra in _ROLES_GENERICOS_OFICINA:
+        viejo = obtener_usuario_oficina(extra)
+        if viejo and viejo.get("activo"):
+            actualizar_usuario_oficina(int(viejo["id"]), activo=False)
+    if aplicar_pin:
+        _EQUIPO_PIN_LISTO = True
+    return aplicados
+
+
 def sembrar_usuarios_oficina_default() -> None:
-    """Crea usuarios iniciales si la tabla está vacía; prioriza Secrets en Cloud."""
+    """Crea admin si falta, y siempre deja el equipo (Guada, Tobi, …) listo."""
     _aplicar_usuarios_desde_secrets()
     existentes = listar_usuarios_oficina(solo_activos=False)
-    if existentes:
-        return
-    defaults = [
-        ("admin", "Administrador", "", True),
-        ("recepcion", "Recepción", "", False),
-        ("contador", "Contador", "", False),
-        ("auxiliar", "Auxiliar contable", "", False),
-    ]
-    for usuario, nombre, pin, admin in defaults:
+    if not existentes:
         try:
-            crear_usuario_oficina(usuario, nombre, pin=pin, es_admin=admin)
+            crear_usuario_oficina("admin", "Administrador", pin="", es_admin=True)
         except ValueError:
-            # Ya existe (carrera con Secrets / otro worker) — no romper el arranque
-            continue
+            pass
+    sembrar_equipo_oficina(forzar_pin=_exigir_pin_en_entorno())
 
 
 def listar_usuarios_oficina(solo_activos: bool = True) -> list[dict]:
