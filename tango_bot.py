@@ -629,7 +629,7 @@ def _llamar_llm(
     for modelo_try in candidatos:
         payload = {
             "model": modelo_try,
-            "temperature": 0.2,
+            "temperature": 0.5,
             "messages": [{"role": "system", "content": system}, *messages],
         }
         req = urllib.request.Request(
@@ -662,29 +662,29 @@ def _llamar_llm(
     return ""
 
 
-_SYSTEM = """Sos Grok, el agente de Tango Estudios (Axoft 26ar) del Estudio Contable.
-Respondé y formulá. No vuelques CSV ni pegues ayudas crudas.
+_SYSTEM = """Sos el chat de Tango del Estudio Contable (Axoft 26ar).
+Respondé como ChatGPT: conversación natural, de vos, en español. No armes PDF ni informes.
 
 Cómo operás:
-1. Usá el contexto solo como fuente. Contestá con tus palabras, corto y útil.
-2. Si hay captura: qué pantalla/error se ve, y después la solución.
-3. Si piden fórmula: formulala vos. Siempre bloques ``` listos para copiar y pegar
-   en FormulaImporte y FormulaCantidad. Sintaxis Axoft:
-   SI(cond;verdadero;falso), NOVCA, NOVCAG, USUELD, CANTIDAD, SUELDO, ABS, ACUCTA, MOVCTA.
-4. Asiento por comprobante (Liquidador de IVA) ≠ determinación mensual DETIVA/DETIIBB/DETTISH.
-5. No mezcles SIAp/SICOSS salvo que lo pidan.
-6. Si el export trae FormulaImporte / FormulaCantidad, esa es la fuente de verdad (no la reescribas).
-   Si no está, armala vos con la sintaxis de arriba.
-7. Concepto 1 = Sueldo básico `USUELD/30*CANTIDAD` (no el proporcional).
-8. Si no está en el contexto ni en la imagen, decilo. No inventes menús.
-9. Nunca pidas ni escribas claves SQL, TANGO.INI ni contraseñas.
-10. “En limpio” / copiar / pegar: SOLO las fórmulas en bloques de código, nada más.
-Respondé en español, como un compañero del estudio.
+1. Si piden un PROCESO: empezá con una frase tipo «El proceso es así» y listá pasos cortos (menú → pantalla → qué hacer). Nada de pegar un documento.
+2. Usá el contexto solo como memoria. Contestá con tus palabras.
+3. Si hay captura: qué pantalla/error se ve, y después la solución.
+4. Si piden FÓRMULA: 2 líneas de qué es, y bloques ``` para FormulaImporte y FormulaCantidad.
+   Sintaxis Axoft: SI(cond;verdadero;falso), NOVCA, NOVCAG, USUELD, CANTIDAD, SUELDO, ABS, ACUCTA, MOVCTA.
+5. Asiento por comprobante ≠ determinación mensual DETIVA/DETIIBB/DETTISH.
+6. No mezcles SIAp/SICOSS salvo que lo pidan.
+7. Si el export trae FormulaImporte / FormulaCantidad, usá ESA (no la reescribas).
+8. Concepto 1 = Sueldo básico `USUELD/30*CANTIDAD` (no el proporcional).
+9. Si no está en el contexto ni en la imagen, decilo. No inventes menús.
+10. Nunca pidas ni escribas claves SQL, TANGO.INI ni contraseñas.
+11. “En limpio” / copiar / pegar: SOLO las fórmulas en bloques de código.
+No vuelques CSV ni ayudas crudas.
 """
 
 _SYSTEM_FORMULA = _SYSTEM + """
 
 Esta consulta es de FÓRMULA de Tango Sueldos. Obligatorio:
+- Contestá en el chat, no armes PDF.
 - Formulá. No describas el archivo ni copies el CSV.
 - Devolvé SIEMPRE dos bloques ``` listos para pegar en Tango:
   **Importe** → FormulaImporte
@@ -785,24 +785,56 @@ def _error_ia_amigable(error: str) -> str:
     return ""
 
 
+def _respuesta_proceso_arca() -> str:
+    return (
+        "El proceso es así, en el chat (no hace falta ningún PDF):\n\n"
+        "**1.** En ARCA entrá a **Portal IVA** con clave fiscal.\n"
+        "**2.** Nueva declaración jurada → elegí el período → **Libro de IVA**.\n"
+        "**3.** Compras o Ventas → **Importar comprobantes desde ARCA** → descargá el **CSV** "
+        "(si viene en ZIP, descomprimilo; Tango no importa el ZIP).\n"
+        "**4.** En Tango: **Liquidador de IVA → Comprobantes → Importación de comprobantes desde ARCA**.\n"
+        "**5.** Origen: Libro IVA compras o ventas. Examiná y elegí el `.csv`.\n"
+        "**6.** Completá las equivalencias de tipos de comprobante ARCA ↔ Tango "
+        "(la primera vez, o si aparece un tipo nuevo).\n"
+        "**7.** Si hay duplicados: solo los nuevos, o nuevos + actualizar.\n"
+        "**8.** Confirmá. Al final Tango arma un Excel de qué entró y qué se rechazó.\n\n"
+        "Importante: **esta importación no genera el asiento**. Después tenés que ir a "
+        "**Generación de asientos contables** (modelos PIVAC compras / PIVAV ventas).\n\n"
+        "Si un comprobante no entra, casi siempre es equivalencia de tipo, cliente/proveedor, "
+        "o una percepción que hay que reimputar a mano en la registración."
+    )
+
+
 def _fallback(pregunta: str, hits: list[dict[str, str]]) -> str:
+    p = _sin_acento(pregunta or "").lower()
+    if _es_consulta_proceso(pregunta) and re.search(r"arca|portal iva|importar", p):
+        return _respuesta_proceso_arca()
     if _pide_formula(pregunta):
         hit = _mejor_formula(pregunta, hits)
         if hit:
-            return _formula_para_pegar(hit)
+            return (
+                "Esta es la fórmula, lista para pegar en Tango (no es un PDF):\n\n"
+                + _formula_para_pegar(hit)
+            )
     utiles = [h for h in hits if not _es_doc_formula(h)]
     if not utiles:
         return (
-            "No lo tengo como proceso en las ayudas Tango del estudio. "
-            "Si es una fórmula de sueldos, pedila por concepto (número o nombre)."
+            "No tengo ese proceso armado. Decime la pantalla de Tango "
+            "(IVA, Sueldos, Compras) y te lo explico paso a paso acá en el chat."
         )
-    bloques = []
-    for h in utiles[:3]:
-        titulo = (h.get("title") or "Ayuda").strip()
-        texto = (h.get("text") or "").strip()
-        texto = re.sub(r"\s+\|\s+", "\n", texto)[:1200]
-        bloques.append(f"**{titulo}**\n\n{texto}")
-    return "Según las ayudas del estudio:\n\n" + "\n\n".join(bloques)
+    prefer = [
+        h for h in utiles
+        if "guia" in _sin_acento(h.get("title") or "").lower()
+        or "tango_conocimiento" in (h.get("source") or "").lower()
+    ]
+    elegido = (prefer or utiles)[0]
+    texto = re.sub(r"\s+\|\s+", "\n", (elegido.get("text") or "").strip())
+    texto = re.sub(r"\n{3,}", "\n\n", texto).strip()[:1800]
+    return (
+        "El proceso es así:\n\n"
+        + texto
+        + "\n\nSi querés, te lo bajo a pasos más cortos. No te mando PDF: queda acá en el chat."
+    )
 
 
 def preparar_imagen(raw: bytes, nombre: str = "captura.png") -> dict[str, str]:
