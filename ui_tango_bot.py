@@ -20,14 +20,15 @@ _CSS = """
 <style>
 div[data-testid="stChatMessage"] {
     background: #fff;
-    border: 1px solid #E6E4EA;
+    border: 1px solid #B8C7D9;
     border-radius: 16px;
-    padding: 0.35rem 0.2rem;
+    padding: 0.45rem 0.35rem;
     margin-bottom: 0.55rem;
+    box-shadow: 0 2px 8px rgba(31, 78, 121, 0.06);
 }
 .tango-hero {
     text-align: center;
-    padding: 3.2rem 0.75rem 1.4rem;
+    padding: 2.4rem 0.75rem 1.1rem;
 }
 .tango-hero h1 {
     font-size: 1.85rem;
@@ -37,9 +38,80 @@ div[data-testid="stChatMessage"] {
     margin: 0 0 0.45rem 0;
 }
 .tango-hero p {
-    color: #6B6B75;
-    font-size: 1.02rem;
+    color: #3D4F63;
+    font-size: 1.05rem;
     margin: 0;
+}
+.tango-sug-label {
+    color: #1F4E79;
+    font-weight: 700;
+    font-size: 0.95rem;
+    letter-spacing: 0.02em;
+    margin: 0.35rem 0 0.65rem 0;
+    text-align: center;
+}
+[class*="st-key-tango_sug_box"],
+div.stMarkdown:has(.tango-sug-label) + div [data-testid="stVerticalBlockBorderWrapper"] {
+    background: #FFFFFF !important;
+    border: 2px solid #1F4E79 !important;
+    border-radius: 14px !important;
+    box-shadow: 0 4px 16px rgba(31, 78, 121, 0.12) !important;
+}
+[class*="st-key-tango_sug_box"] .stButton > button,
+[class*="st-key-tango_sug_box"] button[kind="secondary"],
+[class*="st-key-tango_sug_"] .stButton > button,
+[class*="st-key-tango_sug_"] button[kind="secondary"] {
+    background: #F4F8FC !important;
+    color: #1F4E79 !important;
+    border: 2px solid #1F4E79 !important;
+    font-weight: 600 !important;
+    font-size: 0.98rem !important;
+    min-height: 3.05rem !important;
+    box-shadow: 0 2px 10px rgba(31, 78, 121, 0.12) !important;
+}
+[class*="st-key-tango_sug_box"] .stButton > button:hover,
+[class*="st-key-tango_sug_box"] button[kind="secondary"]:hover,
+[class*="st-key-tango_sug_"] .stButton > button:hover,
+[class*="st-key-tango_sug_"] button[kind="secondary"]:hover {
+    background: #1F4E79 !important;
+    color: #FFFFFF !important;
+    opacity: 1 !important;
+}
+[data-testid="stBottomBlockContainer"] {
+    background: linear-gradient(to top, #E8EEF5 70%, rgba(247, 249, 252, 0)) !important;
+    padding-bottom: 1.15rem !important;
+}
+[data-testid="stChatInput"] {
+    background: #FFFFFF !important;
+    border: 2px solid #1F4E79 !important;
+    border-radius: 18px !important;
+    box-shadow: 0 6px 22px rgba(31, 78, 121, 0.18) !important;
+}
+[data-testid="stChatInput"] > div,
+[data-testid="stChatInput"] .stChatInputContainer {
+    background: #FFFFFF !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 16px !important;
+}
+[data-testid="stChatInput"] textarea,
+[data-testid="stChatInput"] [data-testid="stChatInputTextArea"],
+[data-testid="stChatInput"] input,
+[data-testid="stChatInput"] [data-baseweb="textarea"] textarea {
+    color: #1A1A1A !important;
+    font-size: 1.05rem !important;
+    caret-color: #1F4E79 !important;
+}
+[data-testid="stChatInput"] textarea::placeholder,
+[data-testid="stChatInput"] [data-baseweb="textarea"] textarea::placeholder {
+    color: #4A5D73 !important;
+    opacity: 1 !important;
+}
+[data-testid="stChatInput"] button {
+    background: #1F4E79 !important;
+    color: #FFFFFF !important;
+    border: none !important;
+    border-radius: 10px !important;
 }
 </style>
 """
@@ -119,7 +191,11 @@ def _leer_chat_input(raw: object) -> tuple[str, list]:
     if isinstance(raw, str):
         return raw.strip(), []
     texto = str(getattr(raw, "text", "") or "").strip()
-    archivos = list(getattr(raw, "files", None) or [])
+    archivos = getattr(raw, "files", None) or []
+    if archivos and not isinstance(archivos, (list, tuple)):
+        archivos = [archivos]
+    else:
+        archivos = list(archivos)
     return texto, archivos
 
 
@@ -212,16 +288,25 @@ def render_tango_bot() -> None:
         )
         if not web:
             _panel_ia()
-        for i, (label, pregunta) in enumerate(_SUGERIDAS):
-            if st.button(label, key=f"tango_sug_{i}", use_container_width=True):
-                with st.spinner("El agente está pensando…"):
-                    _enviar(pregunta, api_key, model, [])
-                st.rerun()
+        st.markdown(
+            '<p class="tango-sug-label">Consultas frecuentes</p>',
+            unsafe_allow_html=True,
+        )
+        try:
+            sug_box = st.container(border=True, key="tango_sug_box")
+        except TypeError:
+            sug_box = st.container(border=True)
+        with sug_box:
+            for i, (label, pregunta) in enumerate(_SUGERIDAS):
+                if st.button(label, key=f"tango_sug_{i}", use_container_width=True):
+                    with st.spinner("El agente está pensando…"):
+                        _enviar(pregunta, api_key, model, [])
+                    st.rerun()
     else:
         for msg in chat:
             with st.chat_message(msg["role"]):
                 for data_url in msg.get("imagenes") or []:
-                    st.image(data_url, width=420)
+                    st.image(data_url, width=480, caption="Captura de Tango")
                 st.markdown(msg["content"])
 
     try:

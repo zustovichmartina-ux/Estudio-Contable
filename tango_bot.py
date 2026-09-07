@@ -220,6 +220,18 @@ def _tokens(texto: str) -> set[str]:
     return found | extra
 
 
+def _es_seguimiento_visual(pregunta: str) -> bool:
+    """«desde acá cómo sigo» y similares: manda la captura, no el tema anterior."""
+    p = _sin_acento(pregunta or "").lower()
+    return bool(
+        re.search(
+            r"\b(desde aca|de aca|aca como|como sigo|y ahora|esta pantalla|"
+            r"esta ventana|esto que se ve|que se ve)\b",
+            p,
+        )
+    ) or (len(_tokens(pregunta)) <= 4 and bool(re.search(r"\b(aca|aqui|esto|sigo)\b", p)))
+
+
 def _es_consulta_proceso(pregunta: str) -> bool:
     p = _sin_acento(pregunta or "").lower()
     return bool(
@@ -613,12 +625,13 @@ def _llamar_llm(
             ).strip()
         last = messages[-1]
         texto = last.get("content") if isinstance(last.get("content"), str) else str(last.get("content") or "")
-        partes: list[dict[str, Any]] = [{"type": "text", "text": texto}]
+        partes: list[dict[str, Any]] = []
         for img in imagenes[:4]:
             partes.append({
                 "type": "image_url",
-                "image_url": {"url": img["data_url"]},
+                "image_url": {"url": img["data_url"], "detail": "high"},
             })
+        partes.append({"type": "text", "text": texto})
         messages = [*messages[:-1], {"role": "user", "content": partes}]
     candidatos = [modelo]
     if "x.ai" in url:
@@ -626,10 +639,12 @@ def _llamar_llm(
             if alt not in candidatos:
                 candidatos.append(alt)
     ultimo = ""
+    timeout = 180 if imagenes else 120
     for modelo_try in candidatos:
         payload = {
             "model": modelo_try,
             "temperature": 0.5,
+            "max_tokens": 4096,
             "messages": [{"role": "system", "content": system}, *messages],
         }
         req = urllib.request.Request(
@@ -643,11 +658,13 @@ def _llamar_llm(
             method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=120) as resp:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")[:400]
             ultimo = f"IA HTTP {exc.code}: {body}"
+            if imagenes and exc.code in {400, 413, 422}:
+                raise RuntimeError(ultimo) from exc
             if exc.code in {400, 404} and "model" in body.lower() and modelo_try != candidatos[-1]:
                 continue
             raise RuntimeError(ultimo) from exc
@@ -656,7 +673,9 @@ def _llamar_llm(
         choices = data.get("choices") or []
         if not choices:
             continue
-        return str((choices[0].get("message") or {}).get("content") or "").strip()
+        texto_out = _texto_mensaje_llm(choices[0].get("message") or {})
+        if texto_out:
+            return texto_out
     if ultimo:
         raise RuntimeError(ultimo)
     return ""
@@ -668,7 +687,8 @@ Respondé como ChatGPT: conversación natural, de vos, en español. No armes PDF
 Cómo operás:
 1. Si piden un PROCESO: empezá con una frase tipo «El proceso es así» y listá pasos cortos (menú → pantalla → qué hacer). Nada de pegar un documento.
 2. Usá el contexto solo como memoria. Contestá con tus palabras.
-3. Si hay captura: qué pantalla/error se ve, y después la solución.
+3. Si hay captura: la pantalla manda. Decí qué menú/ventana se ve y cómo seguir desde AHÍ.
+   No copies una guía del contexto si no coincide con lo de la foto. No pegues artículos ni URLs de ayuda.
 4. Si piden FÓRMULA: 2 líneas de qué es, y bloques ``` para FormulaImporte y FormulaCantidad.
    Sintaxis Axoft: SI(cond;verdadero;falso), NOVCA, NOVCAG, USUELD, CANTIDAD, SUELDO, ABS, ACUCTA, MOVCTA.
 5. Asiento por comprobante ≠ determinación mensual DETIVA/DETIIBB/DETTISH.
@@ -692,6 +712,37 @@ Esta consulta es de FÓRMULA de Tango Sueldos. Obligatorio:
 - 2 a 4 líneas de explicación y después los bloques.
 - Si el usuario pide “en limpio” / copiar / pegar: únicamente los bloques, sin intro.
 """
+
+_SYSTEM_CAPTURA = _SYSTEM + """
+
+El usuario mandó una captura de Tango. Obligatorio:
+- Primero describí la pantalla (módulo, menú, grilla, error o botón).
+- Después los pasos para seguir DESDE esa pantalla.
+- El contexto de abajo es opcional. Si no coincide con la foto, ignoralo.
+- No vuelques una guía ni un PDF. Frases cortas, como en un chat.
+"""
+
+
+def _texto_mensaje_llm(message: dict[str, Any] | None) -> str:
+    """Grok a veces devuelve content como lista, no como texto."""
+    if not isinstance(message, dict):
+        return ""
+    content = message.get("content")
+    if isinstance(content, str) and content.strip():
+        return content.strip()
+    partes: list[str] = []
+    if isinstance(content, list):
+        for bloque in content:
+            if isinstance(bloque, str) and bloque.strip():
+                partes.append(bloque.strip())
+                continue
+            if not isinstance(bloque, dict):
+                continue
+            if bloque.get("type") in {"text", "output_text", None}:
+                t = str(bloque.get("text") or bloque.get("content") or "").strip()
+                if t:
+                    partes.append(t)
+    return "\n\n".join(partes).strip()
 
 
 def _es_doc_formula(doc: dict[str, str]) -> bool:
@@ -805,7 +856,17 @@ def _respuesta_proceso_arca() -> str:
     )
 
 
-def _fallback(pregunta: str, hits: list[dict[str, str]]) -> str:
+def _fallback(
+    pregunta: str,
+    hits: list[dict[str, str]],
+    imagenes: list[dict[str, str]] | None = None,
+) -> str:
+    if imagenes:
+        return (
+            "Vi la captura, pero esta vez no pude leerla. "
+            "Mandala de nuevo o decime el menú de arriba de Tango "
+            "(módulo y pantalla) y te digo el siguiente click."
+        )
     p = _sin_acento(pregunta or "").lower()
     if _es_consulta_proceso(pregunta) and re.search(r"arca|portal iva|importar", p):
         return _respuesta_proceso_arca()
@@ -838,19 +899,20 @@ def _fallback(pregunta: str, hits: list[dict[str, str]]) -> str:
 
 
 def preparar_imagen(raw: bytes, nombre: str = "captura.png") -> dict[str, str]:
-    """Comprime la captura para visión (JPEG). Devuelve data_url."""
-    mime = "image/jpeg"
+    """Comprime la captura a JPEG chico para visión. Devuelve data_url."""
     data = raw
     try:
-        if Image is not None:
-            im = Image.open(BytesIO(raw))
-            im = im.convert("RGB")
-            im.thumbnail((1600, 1600))
-            buf = BytesIO()
-            im.save(buf, format="JPEG", quality=85)
-            data = buf.getvalue()
-        else:
+        if Image is None:
             raise RuntimeError("sin Pillow")
+        im = Image.open(BytesIO(raw)).convert("RGB")
+        im.thumbnail((1280, 1280))
+        data = b""
+        for calidad in (80, 70, 58, 45):
+            buf = BytesIO()
+            im.save(buf, format="JPEG", quality=calidad, optimize=True)
+            data = buf.getvalue()
+            if len(data) <= 350_000:
+                break
     except Exception:
         data = raw
         lower = (nombre or "").lower()
@@ -860,8 +922,10 @@ def preparar_imagen(raw: bytes, nombre: str = "captura.png") -> dict[str, str]:
             mime = "image/webp"
         else:
             mime = "image/jpeg"
+        b64 = base64.b64encode(data).decode("ascii")
+        return {"data_url": f"data:{mime};base64,{b64}", "nombre": Path(nombre).name}
     b64 = base64.b64encode(data).decode("ascii")
-    return {"data_url": f"data:{mime};base64,{b64}", "nombre": Path(nombre).name}
+    return {"data_url": f"data:image/jpeg;base64,{b64}", "nombre": Path(nombre).name}
 
 
 def responder(
@@ -875,9 +939,11 @@ def responder(
     docs = cargar_indice()
     consulta = pregunta or ""
     if imagenes and not consulta.strip():
-        consulta = "Leé la captura de Tango: qué pantalla es, qué error o fórmula muestra, y cómo se resuelve."
-    busqueda = _texto_busqueda(consulta, historial)
-    hits = recuperar(busqueda if _pide_pegar(consulta) else consulta, docs, k=8)
+        consulta = "Leé la captura de Tango: qué pantalla es, y cómo sigo desde acá."
+    hay_foto = bool(imagenes)
+    seguimiento = hay_foto and _es_seguimiento_visual(consulta)
+    busqueda = consulta if hay_foto else _texto_busqueda(consulta, historial)
+    hits = recuperar(busqueda if _pide_pegar(consulta) else consulta, docs, k=4 if hay_foto else 8)
     formula_hit = None
     pide_formula = _pide_formula(busqueda) or _pide_formula(consulta)
     if pide_formula:
@@ -913,33 +979,40 @@ def responder(
             "### Fórmula del export Tango Sueldos (fuente de verdad)\n"
             + _explicar_formula(formula_hit)
         )
-    extra_hits = [h for h in hits if h is not formula_hit][:3]
+    extra_hits = [h for h in hits if h is not formula_hit]
+    if hay_foto:
+        extra_hits = [] if seguimiento else extra_hits[:1]
+    else:
+        extra_hits = extra_hits[:3]
     for h in extra_hits:
         texto_h = (h.get("text") or "").strip()
         if _es_doc_formula(h):
             texto_h = _explicar_formula(h)
         else:
-            texto_h = re.sub(r"\s+\|\s+", "\n", texto_h)[:700]
+            texto_h = re.sub(r"\s+\|\s+", "\n", texto_h)[:400 if hay_foto else 700]
         bloques_ctx.append(
             f"### {h.get('title')}\nFuente: {Path(str(h.get('source') or '')).name}\n{texto_h}"
         )
     contexto = "\n\n".join(bloques_ctx)
     msgs: list[dict[str, Any]] = []
-    for m in (historial or [])[-8:]:
+    hist_usar = (historial or [])[-2:] if hay_foto else (historial or [])[-8:]
+    for m in hist_usar:
         role = m.get("role") or "user"
         if role not in {"user", "assistant"}:
             continue
         content = str(m.get("content") or "").strip()
+        if hay_foto and role == "assistant":
+            content = content[:500]
         if content:
             msgs.append({"role": role, "content": content})
     extra_img = ""
     if imagenes:
         extra_img = (
-            f"\n\nEl usuario adjuntó {len(imagenes)} captura(s) de Tango. "
-            "Leelas y usalas para formular o corregir."
+            f"\n\nHay {len(imagenes)} captura(s) de Tango adjunta(s). "
+            "Describí esa pantalla y el siguiente paso. No copies una guía."
         )
     pedido_formula = ""
-    if pide_formula:
+    if pide_formula and not hay_foto:
         pedido_formula = (
             "\n\nPedí una fórmula de Tango Sueldos. Formulala y devolvé "
             "FormulaImporte y FormulaCantidad en bloques ``` listos para copiar y pegar."
@@ -948,13 +1021,19 @@ def responder(
             pedido_formula += " Solo los bloques, sin explicación."
     msgs.append({
         "role": "user",
-        "content": f"Pregunta:\n{consulta}{extra_img}{pedido_formula}\n\nContexto:\n{contexto}",
+        "content": f"Pregunta:\n{consulta}{extra_img}{pedido_formula}\n\nContexto:\n{contexto or '(sin contexto)'}",
     })
     ia = ""
     error = ""
+    if hay_foto:
+        sistema = _SYSTEM_CAPTURA
+    elif pide_formula:
+        sistema = _SYSTEM_FORMULA
+    else:
+        sistema = _SYSTEM
     try:
         ia = _llamar_llm(
-            _SYSTEM_FORMULA if pide_formula else _SYSTEM,
+            sistema,
             msgs,
             api_key=api_key,
             model=model,
@@ -964,10 +1043,10 @@ def responder(
         error = str(exc)
     if ia:
         texto = _completar_formula_copiable(ia, formula_hit, consulta)
-    elif formula_hit:
+    elif formula_hit and not hay_foto:
         texto = _formula_para_pegar(formula_hit)
     else:
-        texto = _fallback(consulta, hits)
+        texto = _fallback(consulta, hits, imagenes)
         aviso = _error_ia_amigable(error)
         if aviso and "incorrect api key" not in (error or "").lower():
             texto = f"{texto}\n\n_({aviso})_"
