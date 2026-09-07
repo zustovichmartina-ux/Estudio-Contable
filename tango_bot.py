@@ -220,12 +220,26 @@ def _tokens(texto: str) -> set[str]:
     return found | extra
 
 
-def _es_consulta_formula(pregunta: str) -> bool:
+def _es_consulta_proceso(pregunta: str) -> bool:
     p = _sin_acento(pregunta or "").lower()
     return bool(
         re.search(
-            r"formula|concepto\s*\d+|sueldo basico|sueldo proporcional|liquidacion|"
-            r"en limpio|copi[aeo]|pegar|para pegar",
+            r"importar|paso a paso|como (hago|puedo|se |hago)|proceso|"
+            r"portal iva|arca|mis comprobantes|libro (de )?iva|"
+            r"menu|pantalla|asistente",
+            p,
+        )
+    )
+
+
+def _es_consulta_formula(pregunta: str) -> bool:
+    p = _sin_acento(pregunta or "").lower()
+    if _es_consulta_proceso(p) and not re.search(r"formula|concepto\s*\d+|sueldo basico", p):
+        return False
+    return bool(
+        re.search(
+            r"formula|concepto\s*\d+|sueldo basico|sueldo proporcional|"
+            r"en limpio|solo la formula|solamente la formula",
             p,
         )
     )
@@ -269,8 +283,22 @@ def recuperar(pregunta: str, docs: list[dict[str, str]], k: int = 8) -> list[dic
         source = (doc.get("source") or "").lower()
         if any(w in title for w in q):
             score += 2.0
-        if "formulas_completo.csv" in source or "sueldos_formulas" in source:
-            score += 12.0
+        es_formula_csv = (
+            "formulas_completo.csv" in source
+            or "sueldos_formulas" in source
+            or "huerfanas" in source
+            or "huerfanas" in title
+        )
+        if es_formula_csv:
+            if _es_consulta_formula(pregunta):
+                score += 12.0
+            else:
+                score -= 25.0
+        if _es_consulta_proceso(pregunta):
+            if "portal iva" in source or "arca" in source or "importar" in source or "importacion" in _sin_acento(title):
+                score += 20.0
+            if "sueldos" in source and es_formula_csv:
+                score -= 15.0
         if nro and re.search(rf'codigo["\']?\s*:\s*["\']?{nro}\b', _sin_acento(blob).lower()):
             score += 25.0
         if nro and re.search(rf"^sueldos {nro} ", title):
@@ -668,7 +696,13 @@ Esta consulta es de FÓRMULA de Tango Sueldos. Obligatorio:
 
 def _es_doc_formula(doc: dict[str, str]) -> bool:
     source = (doc.get("source") or "").lower()
-    return "formulas_completo.csv" in source or "sueldos_formulas" in source
+    title = (doc.get("title") or "").lower()
+    return (
+        "formulas_completo.csv" in source
+        or "sueldos_formulas" in source
+        or "huerfanas" in source
+        or "huerfanas" in title
+    )
 
 
 def _docs_formula(docs: list[dict[str, str]]) -> list[dict[str, str]]:
@@ -756,19 +790,17 @@ def _fallback(pregunta: str, hits: list[dict[str, str]]) -> str:
         hit = _mejor_formula(pregunta, hits)
         if hit:
             return _formula_para_pegar(hit)
-    for h in hits:
-        if _es_doc_formula(h):
-            return _explicar_formula(h)
-    if not hits:
+    utiles = [h for h in hits if not _es_doc_formula(h)]
+    if not utiles:
         return (
-            "No lo tengo en las ayudas Tango del estudio. "
-            "Probá con el nombre de la pantalla (Asientos, Modelos, Sueldos, IVA)."
+            "No lo tengo como proceso en las ayudas Tango del estudio. "
+            "Si es una fórmula de sueldos, pedila por concepto (número o nombre)."
         )
     bloques = []
-    for h in hits[:2]:
+    for h in utiles[:3]:
         titulo = (h.get("title") or "Ayuda").strip()
         texto = (h.get("text") or "").strip()
-        texto = re.sub(r"\s+\|\s+", "\n", texto)[:600]
+        texto = re.sub(r"\s+\|\s+", "\n", texto)[:1200]
         bloques.append(f"**{titulo}**\n\n{texto}")
     return "Según las ayudas del estudio:\n\n" + "\n\n".join(bloques)
 
