@@ -629,7 +629,7 @@ def _llamar_llm(
         for img in imagenes[:4]:
             partes.append({
                 "type": "image_url",
-                "image_url": {"url": img["data_url"], "detail": "high"},
+                "image_url": {"url": img["data_url"]},
             })
         partes.append({"type": "text", "text": texto})
         messages = [*messages[:-1], {"role": "user", "content": partes}]
@@ -638,44 +638,62 @@ def _llamar_llm(
         for alt in _GROK_MODELOS:
             if alt not in candidatos:
                 candidatos.append(alt)
+    extras: list[dict[str, Any]] = [{}]
+    if "x.ai" in url:
+        extras = [{"reasoning_effort": "low"}, {}]
+    else:
+        extras = [{"max_tokens": 4096}]
     ultimo = ""
-    timeout = 180 if imagenes else 120
+    timeout = 90 if imagenes else 120
     for modelo_try in candidatos:
-        payload = {
-            "model": modelo_try,
-            "temperature": 0.5,
-            "max_tokens": 4096,
-            "messages": [{"role": "system", "content": system}, *messages],
-        }
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {key}",
-                "Content-Type": "application/json",
-                "User-Agent": "EstudioContable-TangoBot/1.0",
-            },
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="replace")[:400]
-            ultimo = f"IA HTTP {exc.code}: {body}"
-            if imagenes and exc.code in {400, 413, 422}:
+        salto_modelo = False
+        for extra in extras:
+            payload = {
+                "model": modelo_try,
+                "temperature": 0.5,
+                "messages": [{"role": "system", "content": system}, *messages],
+            }
+            payload.update(extra)
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={
+                    "Authorization": f"Bearer {key}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "EstudioContable-TangoBot/1.0",
+                },
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+            except urllib.error.HTTPError as exc:
+                body = exc.read().decode("utf-8", errors="replace")[:400]
+                ultimo = f"IA HTTP {exc.code}: {body}"
+                if exc.code == 413:
+                    raise RuntimeError(ultimo) from exc
+                if extra.get("reasoning_effort") and "reasoning" in body.lower():
+                    continue
+                if exc.code in {400, 404} and "model" in body.lower():
+                    salto_modelo = True
+                    break
+                if modelo_try != candidatos[-1] or extra != extras[-1]:
+                    continue
                 raise RuntimeError(ultimo) from exc
-            if exc.code in {400, 404} and "model" in body.lower() and modelo_try != candidatos[-1]:
+            except urllib.error.URLError as exc:
+                raise RuntimeError(f"No se llegó a la IA: {exc.reason}") from exc
+            choices = data.get("choices") or []
+            if not choices:
+                ultimo = "Grok no devolvió opciones"
                 continue
-            raise RuntimeError(ultimo) from exc
-        except urllib.error.URLError as exc:
-            raise RuntimeError(f"No se llegó a la IA: {exc.reason}") from exc
-        choices = data.get("choices") or []
-        if not choices:
+            choice = choices[0] if isinstance(choices[0], dict) else {}
+            texto_out = _texto_mensaje_llm(choice.get("message") or {})
+            if texto_out:
+                return texto_out
+            fr = str(choice.get("finish_reason") or "vacio")
+            ultimo = f"Grok no devolvió texto (finish_reason={fr})"
+        if salto_modelo:
             continue
-        texto_out = _texto_mensaje_llm(choices[0].get("message") or {})
-        if texto_out:
-            return texto_out
     if ultimo:
         raise RuntimeError(ultimo)
     return ""
@@ -730,6 +748,9 @@ def _texto_mensaje_llm(message: dict[str, Any] | None) -> str:
     content = message.get("content")
     if isinstance(content, str) and content.strip():
         return content.strip()
+    extra = message.get("output_text")
+    if isinstance(extra, str) and extra.strip():
+        return extra.strip()
     partes: list[str] = []
     if isinstance(content, list):
         for bloque in content:
