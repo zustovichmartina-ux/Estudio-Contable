@@ -129,12 +129,16 @@ def render_tango_bot() -> None:
         if val:
             os.environ[nombre] = val
     api_key = (
-        _secret("ANTHROPIC_API_KEY")
+        str(st.session_state.get("tango_api_key") or "").strip()
         or _secret("XAI_API_KEY")
+        or _secret("ANTHROPIC_API_KEY")
         or _secret("OPENAI_API_KEY")
         or _secret("GROQ_API_KEY")
-        or str(st.session_state.get("tango_api_key") or "").strip()
     )
+    if api_key.startswith("xai-"):
+        os.environ["XAI_API_KEY"] = api_key
+    elif api_key.startswith("sk-ant-"):
+        os.environ["ANTHROPIC_API_KEY"] = api_key
     model = _modelo_para_clave(api_key)
     hay_ia = bool(api_key)
     etiqueta = _etiqueta_ia(api_key, model)
@@ -143,6 +147,7 @@ def render_tango_bot() -> None:
     def _panel_ia() -> None:
         if hay_ia:
             st.success(f"{etiqueta} activo (`{model}`). Ya podés preguntar abajo.")
+            st.caption("Si aparece «Incorrect API key», pegá una clave nueva de console.x.ai y tocá Activar Grok.")
         st.info("Pegá acá la clave de Grok. No la pongas en el chat de abajo.")
         clave = st.text_input(
             "Clave Grok (xAI)",

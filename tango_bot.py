@@ -374,22 +374,42 @@ def _es_modelo_claude(model: str) -> bool:
 
 
 def _resolver_llm(*, api_key: str = "", model: str = "") -> tuple[str, str, str, str]:
-    """Devuelve (provider, api_key, url, model). Prioriza Claude (Anthropic)."""
+    """Devuelve (provider, api_key, url, model). La clave pegada pisa Secrets."""
     pasted = (api_key or "").strip()
     tipo = _proveedor_de_clave(pasted)
+    if tipo == "anthropic":
+        elegido = (
+            (model if _es_modelo_claude(model) else "")
+            or os.environ.get("ANTHROPIC_MODEL")
+            or "claude-sonnet-5"
+        ).strip() or "claude-sonnet-5"
+        return "anthropic", pasted, "https://api.anthropic.com/v1/messages", elegido
+    if tipo == "xai":
+        elegido = (
+            (model if str(model).startswith("grok") else "")
+            or os.environ.get("XAI_MODEL")
+            or "grok-4.6"
+        ).strip() or "grok-4.6"
+        return "xai", pasted, "https://api.x.ai/v1/chat/completions", elegido
+    if tipo == "openai":
+        return (
+            "openai",
+            pasted,
+            "https://api.openai.com/v1/chat/completions",
+            (os.environ.get("OPENAI_MODEL") or "gpt-4o-mini").strip(),
+        )
+    if tipo == "groq":
+        return (
+            "groq",
+            pasted,
+            "https://api.groq.com/openai/v1/chat/completions",
+            (os.environ.get("GROQ_MODEL") or "llama-3.3-70b-versatile").strip(),
+        )
     anthropic = (os.environ.get("ANTHROPIC_API_KEY") or "").strip()
     xai = (os.environ.get("XAI_API_KEY") or "").strip()
     openai = (os.environ.get("OPENAI_API_KEY") or "").strip()
     groq = (os.environ.get("GROQ_API_KEY") or "").strip()
-    if tipo == "anthropic":
-        anthropic = pasted
-    elif tipo == "xai":
-        xai = pasted
-    elif tipo == "openai":
-        openai = pasted
-    elif tipo == "groq":
-        groq = pasted
-    elif pasted:
+    if pasted:
         if _es_modelo_claude(model) or not xai:
             anthropic = pasted
         else:
