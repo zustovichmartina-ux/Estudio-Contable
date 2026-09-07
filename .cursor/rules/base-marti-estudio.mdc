@@ -1,0 +1,15 @@
+---
+description: Reglas operativas del estudio (Tango Sueldos, bancos, AFIP) desde la base Marti
+alwaysApply: true
+---
+
+# Base Marti / Estudio
+
+- Fórmulas Tango: `SI(cond;verdadero;falso)`, OR = `O`, `USUELD` (nunca USUELO), códigos entre comillas (`"099"`).
+- CTRATO `"099"` / `"048"` se excluyen envolviendo Importe: `SI(CTRATO="099";0;<original>)`. Cantidad no tocar salvo pedido.
+- Tiempo parcial `"001"` = 50% de IMPOR; completa `"008"` = 100%. El % va en Importe, no en Cantidad.
+- Concepto 1 sueldo básico: `USUELD/30*CANTIDAD`. Cambiar una fórmula afecta a todos los conceptos que la usan; refrescar el concepto y reliquidar.
+- Excel de RECEPCION: SI anidado, no IFS.
+- Papeles bancos: solo el primer mes toma saldo inicial del extracto; el resto arrastra; no forzar diferencia a 0; no inventar meses sin extracto.
+- Transferencias propias: una vez del lado que recibe. Monotributo: período = fecha desde/hasta, no emisión.
+- No pedir ni escribir claves fiscales, TANGO.INI ni passwords.
