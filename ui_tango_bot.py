@@ -9,7 +9,7 @@ import streamlit as st
 from tango_bot import INDEX_PATH, preparar_imagen, reconstruir_indice, responder
 
 _SUGERIDAS = [
-    ("Fórmula sueldo básico", "Armá y explicá la fórmula del concepto 1 Sueldo básico en Tango Sueldos"),
+    ("Fórmula sueldo básico", "Formulá el concepto 1 Sueldo básico y dame FormulaImporte y FormulaCantidad listas para copiar y pegar en Tango"),
     ("Asiento IVA al cargar factura", "¿Cómo se genera el asiento automático de IVA al cargar una factura?"),
     ("DETIVA mensual", "Diferencia entre asiento por comprobante y determinación mensual DETIVA"),
     ("IVA como VARIOS", "Por qué el estudio exporta IVA como VARIOS y no como tipo IVA"),
@@ -44,12 +44,17 @@ div[data-testid="stChatMessage"] {
 """
 
 
+_PLACEHOLDERS = {
+    "xai-...", "xai-", "...", "sk-ant-...", "sk-ant-", "sk-...", "PEGAR_CLAVE",
+}
+
+
 def _secret(nombre: str) -> str:
     try:
         val = st.secrets.get(nombre)
         if val:
             texto = str(val).strip().strip('"').strip("'")
-            if texto and texto not in {"xai-...", "xai-", "..."}:
+            if texto and texto not in _PLACEHOLDERS:
                 return texto
         ofi = st.secrets.get("oficina_usuarios")
         if ofi:
@@ -61,11 +66,35 @@ def _secret(nombre: str) -> str:
                     extra = None
                 if extra:
                     texto = str(extra).strip().strip('"').strip("'")
-                    if texto and texto not in {"xai-...", "xai-", "..."}:
+                    if texto and texto not in _PLACEHOLDERS:
                         return texto
     except Exception:
         return ""
     return ""
+
+
+def _modelo_para_clave(api_key: str) -> str:
+    if api_key.startswith("sk-ant-"):
+        return _secret("ANTHROPIC_MODEL") or "claude-sonnet-5"
+    if api_key.startswith("xai-"):
+        return _secret("XAI_MODEL") or "grok-4.6"
+    if api_key.startswith("gsk_"):
+        return _secret("GROQ_MODEL") or "llama-3.3-70b-versatile"
+    if api_key.startswith("sk-"):
+        return _secret("OPENAI_MODEL") or "gpt-4o-mini"
+    return _secret("ANTHROPIC_MODEL") or "claude-sonnet-5"
+
+
+def _etiqueta_ia(api_key: str, model: str) -> str:
+    if api_key.startswith("sk-ant-") or "claude" in model.lower():
+        return "Claude"
+    if api_key.startswith("xai-") or model.startswith("grok"):
+        return "Grok"
+    if api_key.startswith("gsk_"):
+        return "Groq"
+    if api_key.startswith("sk-"):
+        return "OpenAI"
+    return "IA"
 
 
 def _leer_chat_input(raw: object) -> tuple[str, list]:
@@ -84,45 +113,58 @@ def render_tango_bot() -> None:
     if "tango_chat" not in st.session_state:
         st.session_state.tango_chat = []
 
-    if "tango_xai_key" not in st.session_state:
-        st.session_state.tango_xai_key = ""
-    api_key = _secret("XAI_API_KEY") or str(st.session_state.get("tango_xai_key") or "").strip()
-    model = _secret("XAI_MODEL") or "grok-4.6"
-    for nombre in ("OPENAI_API_KEY", "OPENAI_MODEL", "GROQ_API_KEY", "GROQ_MODEL", "XAI_API_KEY", "XAI_MODEL"):
+    if "tango_api_key" not in st.session_state:
+        st.session_state.tango_api_key = str(st.session_state.get("tango_xai_key") or "")
+    for nombre in (
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_MODEL",
+        "OPENAI_API_KEY",
+        "OPENAI_MODEL",
+        "GROQ_API_KEY",
+        "GROQ_MODEL",
+        "XAI_API_KEY",
+        "XAI_MODEL",
+    ):
         val = _secret(nombre)
         if val:
             os.environ[nombre] = val
-    if api_key:
-        os.environ["XAI_API_KEY"] = api_key
-        os.environ.setdefault("XAI_MODEL", model)
+    api_key = (
+        _secret("ANTHROPIC_API_KEY")
+        or _secret("XAI_API_KEY")
+        or _secret("OPENAI_API_KEY")
+        or _secret("GROQ_API_KEY")
+        or str(st.session_state.get("tango_api_key") or "").strip()
+    )
+    model = _modelo_para_clave(api_key)
     hay_ia = bool(api_key)
+    etiqueta = _etiqueta_ia(api_key, model)
     chat = st.session_state.tango_chat
 
-    def _panel_grok() -> None:
+    def _panel_ia() -> None:
         if hay_ia:
-            st.caption(f"Grok activo (`{model}`). Razona, formula y lee capturas.")
-            return
-        st.caption("Sin Grok el chat solo pega ayudas. Pegá la clave xAI para activarlo.")
+            st.success(f"{etiqueta} activo (`{model}`). Ya podés preguntar abajo.")
+        st.info("Pegá acá la clave de Grok. No la pongas en el chat de abajo.")
         clave = st.text_input(
             "Clave Grok (xAI)",
             type="password",
-            key="tango_xai_input",
+            key="tango_api_input",
             placeholder="xai-...",
-            help="Creala en https://console.x.ai → API keys. Para que quede fija: Manage app → Secrets → XAI_API_KEY.",
+            help="Creala en https://console.x.ai → API keys. Empieza con xai-.",
         )
-        if st.button("Activar Grok", key="tango_activar_grok"):
-            if clave.strip().startswith("xai-"):
-                st.session_state.tango_xai_key = clave.strip()
+        if st.button("Activar Grok", type="primary", key="tango_activar_ia"):
+            texto = clave.strip()
+            if texto.startswith("xai-") or texto.startswith("sk-ant-") or texto.startswith("sk-"):
+                st.session_state.tango_api_key = texto
                 st.rerun()
             else:
-                st.warning("La clave tiene que empezar con xai- (console.x.ai).")
+                st.warning("La clave de Grok empieza con xai- (console.x.ai).")
 
     if chat:
         top_l, top_r = st.columns([4, 1])
         with top_l:
             with st.expander("Ajustes", expanded=not hay_ia):
-                st.caption("Agente Tango con Grok. Usa las ayudas y el export de sueldos del estudio.")
-                _panel_grok()
+                st.caption("Agente Tango con Grok o Claude. Usa las ayudas y el export de sueldos del estudio.")
+                _panel_ia()
                 if st.button("Reindexar ayudas Tango", key="tango_reindex"):
                     with st.spinner("Leyendo Desktop\\Tango y normativas…"):
                         docs = reconstruir_indice(guardar=True)
@@ -138,8 +180,7 @@ def render_tango_bot() -> None:
             "<p>Grok responde, formula y lee capturas de Tango.</p></div>",
             unsafe_allow_html=True,
         )
-        if not hay_ia:
-            _panel_grok()
+        _panel_ia()
         for i, (label, pregunta) in enumerate(_SUGERIDAS):
             if st.button(label, key=f"tango_sug_{i}", use_container_width=True):
                 with st.spinner("El agente está pensando…"):

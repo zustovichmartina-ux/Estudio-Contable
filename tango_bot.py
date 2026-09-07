@@ -349,21 +349,189 @@ def _explicar_formula(hit: dict[str, str]) -> str:
 
 
 _GROK_MODELOS = ("grok-4.6", "grok-4", "grok-3")
+_CLAUDE_MODELOS = ("claude-sonnet-5", "claude-sonnet-4-6", "claude-sonnet-4-5")
+_DATA_URL_IMG = re.compile(
+    r"^data:(image/(?:jpeg|png|gif|webp));base64,(.+)$",
+    re.I | re.S,
+)
 
 
-def _resolver_llm(*, api_key: str = "", model: str = "") -> tuple[str, str, str]:
-    """Devuelve (api_key, url, model). Prioriza Grok (xAI)."""
-    xai = (api_key or os.environ.get("XAI_API_KEY") or "").strip()
+def _proveedor_de_clave(key: str) -> str:
+    k = (key or "").strip()
+    if k.startswith("sk-ant-"):
+        return "anthropic"
+    if k.startswith("xai-"):
+        return "xai"
+    if k.startswith("gsk_"):
+        return "groq"
+    if k.startswith("sk-"):
+        return "openai"
+    return ""
+
+
+def _es_modelo_claude(model: str) -> bool:
+    return "claude" in (model or "").lower()
+
+
+def _resolver_llm(*, api_key: str = "", model: str = "") -> tuple[str, str, str, str]:
+    """Devuelve (provider, api_key, url, model). Prioriza Claude (Anthropic)."""
+    pasted = (api_key or "").strip()
+    tipo = _proveedor_de_clave(pasted)
+    anthropic = (os.environ.get("ANTHROPIC_API_KEY") or "").strip()
+    xai = (os.environ.get("XAI_API_KEY") or "").strip()
+    openai = (os.environ.get("OPENAI_API_KEY") or "").strip()
+    groq = (os.environ.get("GROQ_API_KEY") or "").strip()
+    if tipo == "anthropic":
+        anthropic = pasted
+    elif tipo == "xai":
+        xai = pasted
+    elif tipo == "openai":
+        openai = pasted
+    elif tipo == "groq":
+        groq = pasted
+    elif pasted:
+        if _es_modelo_claude(model) or not xai:
+            anthropic = pasted
+        else:
+            xai = pasted
+    if anthropic:
+        elegido = (
+            (model if _es_modelo_claude(model) else "")
+            or os.environ.get("ANTHROPIC_MODEL")
+            or "claude-sonnet-5"
+        ).strip() or "claude-sonnet-5"
+        return "anthropic", anthropic, "https://api.anthropic.com/v1/messages", elegido
     if xai:
         elegido = (model or os.environ.get("XAI_MODEL") or "grok-4.6").strip() or "grok-4.6"
-        return xai, "https://api.x.ai/v1/chat/completions", elegido
-    openai = (os.environ.get("OPENAI_API_KEY") or "").strip()
+        return "xai", xai, "https://api.x.ai/v1/chat/completions", elegido
     if openai:
-        return openai, "https://api.openai.com/v1/chat/completions", (os.environ.get("OPENAI_MODEL") or "gpt-4o-mini").strip()
-    groq = (os.environ.get("GROQ_API_KEY") or "").strip()
+        return (
+            "openai",
+            openai,
+            "https://api.openai.com/v1/chat/completions",
+            (os.environ.get("OPENAI_MODEL") or "gpt-4o-mini").strip(),
+        )
     if groq:
-        return groq, "https://api.groq.com/openai/v1/chat/completions", (os.environ.get("GROQ_MODEL") or "llama-3.3-70b-versatile").strip()
-    return "", "", ""
+        return (
+            "groq",
+            groq,
+            "https://api.groq.com/openai/v1/chat/completions",
+            (os.environ.get("GROQ_MODEL") or "llama-3.3-70b-versatile").strip(),
+        )
+    return "", "", "", ""
+
+
+def _texto_respuesta_claude(data: dict[str, Any]) -> str:
+    partes: list[str] = []
+    for bloque in data.get("content") or []:
+        if isinstance(bloque, dict) and bloque.get("type") == "text":
+            texto = str(bloque.get("text") or "").strip()
+            if texto:
+                partes.append(texto)
+    return "\n\n".join(partes).strip()
+
+
+def _bloques_imagen_claude(imagenes: list[dict[str, str]] | None) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for img in (imagenes or [])[:4]:
+        m = _DATA_URL_IMG.match(str(img.get("data_url") or ""))
+        if not m:
+            continue
+        out.append({
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": m.group(1).lower(),
+                "data": m.group(2),
+            },
+        })
+    return out
+
+
+def _mensajes_claude(
+    messages: list[dict[str, Any]],
+    imagenes: list[dict[str, str]] | None,
+) -> list[dict[str, Any]]:
+    limpios: list[dict[str, Any]] = []
+    for m in messages:
+        role = m.get("role")
+        if role not in {"user", "assistant"}:
+            continue
+        content = m.get("content")
+        if isinstance(content, str):
+            content = content.strip()
+            if not content:
+                continue
+        elif not content:
+            continue
+        if limpios and limpios[-1]["role"] == role and isinstance(limpios[-1]["content"], str) and isinstance(content, str):
+            limpios[-1]["content"] = limpios[-1]["content"] + "\n\n" + content
+        else:
+            limpios.append({"role": role, "content": content})
+    if limpios and limpios[0]["role"] != "user":
+        limpios.insert(0, {"role": "user", "content": "(inicio)"})
+    imgs = _bloques_imagen_claude(imagenes)
+    if imgs:
+        texto = "Leé la captura de Tango."
+        if limpios and limpios[-1]["role"] == "user" and isinstance(limpios[-1]["content"], str):
+            texto = limpios[-1]["content"] or texto
+            limpios[-1]["content"] = [*imgs, {"type": "text", "text": texto}]
+        else:
+            limpios.append({"role": "user", "content": [*imgs, {"type": "text", "text": texto}]})
+    if not limpios:
+        limpios.append({"role": "user", "content": "Respondé la consulta de Tango."})
+    return limpios
+
+
+def _llamar_anthropic(
+    system: str,
+    messages: list[dict[str, Any]],
+    *,
+    key: str,
+    modelo: str,
+    imagenes: list[dict[str, str]] | None,
+) -> str:
+    candidatos = [modelo] if modelo else []
+    for alt in _CLAUDE_MODELOS:
+        if alt not in candidatos:
+            candidatos.append(alt)
+    msgs = _mensajes_claude(messages, imagenes)
+    ultimo = ""
+    for modelo_try in candidatos:
+        payload = {
+            "model": modelo_try,
+            "max_tokens": 8192,
+            "system": system,
+            "messages": msgs,
+        }
+        req = urllib.request.Request(
+            "https://api.anthropic.com/v1/messages",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "x-api-key": key,
+                "anthropic-version": "2023-06-01",
+                "Content-Type": "application/json",
+                "User-Agent": "EstudioContable-TangoBot/1.0",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")[:400]
+            ultimo = f"IA HTTP {exc.code}: {body}"
+            if exc.code in {400, 404} and "model" in body.lower() and modelo_try != candidatos[-1]:
+                continue
+            raise RuntimeError(ultimo) from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"No se llegó a Claude (Anthropic): {exc.reason}") from exc
+        texto = _texto_respuesta_claude(data)
+        if texto:
+            return texto
+    if ultimo:
+        raise RuntimeError(ultimo)
+    return ""
 
 
 def _llamar_llm(
@@ -374,9 +542,17 @@ def _llamar_llm(
     model: str = "",
     imagenes: list[dict[str, str]] | None = None,
 ) -> str:
-    key, url, modelo = _resolver_llm(api_key=api_key, model=model)
+    provider, key, url, modelo = _resolver_llm(api_key=api_key, model=model)
     if not key or not url:
         return ""
+    if provider == "anthropic":
+        return _llamar_anthropic(
+            system,
+            messages,
+            key=key,
+            modelo=modelo,
+            imagenes=imagenes,
+        )
     if imagenes:
         if "x.ai" in url:
             modelo = (os.environ.get("XAI_VISION_MODEL") or modelo or "grok-4.6").strip()
@@ -428,7 +604,7 @@ def _llamar_llm(
                 continue
             raise RuntimeError(ultimo) from exc
         except urllib.error.URLError as exc:
-            raise RuntimeError(f"No se llegó a Grok (xAI): {exc.reason}") from exc
+            raise RuntimeError(f"No se llegó a la IA: {exc.reason}") from exc
         choices = data.get("choices") or []
         if not choices:
             continue
@@ -438,22 +614,35 @@ def _llamar_llm(
     return ""
 
 
-_SYSTEM = """Sos Grok, el agente de Tango Estudios (Axoft 26ar) del Estudio Contable.
+_SYSTEM = """Sos Claude, el agente de Tango Estudios (Axoft 26ar) del Estudio Contable.
 Respondé y formulá. No vuelques CSV ni pegues ayudas crudas.
 
 Cómo operás:
 1. Usá el contexto solo como fuente. Contestá con tus palabras, corto y útil.
 2. Si hay captura: qué pantalla/error se ve, y después la solución.
-3. Si piden fórmula: bloques listos para pegar (Importe y Cantidad). Sintaxis Axoft:
-   SI(), NOVCA, NOVCAG, USUELD, CANTIDAD, SUELDO, ABS, ACUCTA, MOVCTA.
+3. Si piden fórmula: formulala vos. Siempre bloques ``` listos para copiar y pegar
+   en FormulaImporte y FormulaCantidad. Sintaxis Axoft:
+   SI(cond;verdadero;falso), NOVCA, NOVCAG, USUELD, CANTIDAD, SUELDO, ABS, ACUCTA, MOVCTA.
 4. Asiento por comprobante (Liquidador de IVA) ≠ determinación mensual DETIVA/DETIIBB/DETTISH.
 5. No mezcles SIAp/SICOSS salvo que lo pidan.
-6. FormulaImporte / FormulaCantidad del export es la fuente de verdad.
+6. Si el export trae FormulaImporte / FormulaCantidad, esa es la fuente de verdad (no la reescribas).
+   Si no está, armala vos con la sintaxis de arriba.
 7. Concepto 1 = Sueldo básico `USUELD/30*CANTIDAD` (no el proporcional).
 8. Si no está en el contexto ni en la imagen, decilo. No inventes menús.
 9. Nunca pidas ni escribas claves SQL, TANGO.INI ni contraseñas.
-10. “En limpio” / copiar / pegar: SOLO las fórmulas en bloques de código.
+10. “En limpio” / copiar / pegar: SOLO las fórmulas en bloques de código, nada más.
 Respondé en español, como un compañero del estudio.
+"""
+
+_SYSTEM_FORMULA = _SYSTEM + """
+
+Esta consulta es de FÓRMULA de Tango Sueldos. Obligatorio:
+- Formulá. No describas el archivo ni copies el CSV.
+- Devolvé SIEMPRE dos bloques ``` listos para pegar en Tango:
+  **Importe** → FormulaImporte
+  **Cantidad** → FormulaCantidad
+- 2 a 4 líneas de explicación y después los bloques.
+- Si el usuario pide “en limpio” / copiar / pegar: únicamente los bloques, sin intro.
 """
 
 
@@ -493,14 +682,48 @@ def _mejor_formula(pregunta: str, hits: list[dict[str, str]]) -> dict[str, str] 
         for h in csv_hits:
             if _codigo_en_texto(h.get("text") or "", nro):
                 return h
-    return csv_hits[0]
+        return None
+    q = _tokens(pregunta)
+    mejor: tuple[float, dict[str, str]] | None = None
+    for h in csv_hits:
+        blob = f"{h.get('title', '')} {h.get('text', '')}"
+        score = float(len(q & _tokens(blob)))
+        if any(w in titulo(h) for w in q):
+            score += 3.0
+        if mejor is None or score > mejor[0]:
+            mejor = (score, h)
+    if mejor and mejor[0] >= 3.0:
+        return mejor[1]
+    return None
+
+
+def _pide_formula(pregunta: str) -> bool:
+    return _es_consulta_formula(pregunta) or _pide_pegar(pregunta)
+
+
+def _completar_formula_copiable(
+    texto: str,
+    formula_hit: dict[str, str] | None,
+    pregunta: str,
+) -> str:
+    """Si la IA formuló sin bloques ```, agrega Importe/Cantidad listos para pegar."""
+    if not _pide_formula(pregunta):
+        return texto
+    if "```" in (texto or ""):
+        return texto
+    if not formula_hit:
+        return texto
+    extra = _formula_para_pegar(formula_hit)
+    if (texto or "").strip():
+        return texto.rstrip() + "\n\n" + extra
+    return extra
 
 
 def _fallback(pregunta: str, hits: list[dict[str, str]]) -> str:
-    if _es_consulta_formula(pregunta) or _pide_pegar(pregunta):
+    if _pide_formula(pregunta):
         hit = _mejor_formula(pregunta, hits)
         if hit:
-            return _formula_para_pegar(hit) if _pide_pegar(pregunta) else _explicar_formula(hit)
+            return _formula_para_pegar(hit)
     for h in hits:
         if _es_doc_formula(h):
             return _explicar_formula(h)
@@ -560,32 +783,33 @@ def responder(
     busqueda = _texto_busqueda(consulta, historial)
     hits = recuperar(busqueda if _pide_pegar(consulta) else consulta, docs, k=8)
     formula_hit = None
-    if _es_consulta_formula(busqueda) or _pide_pegar(consulta):
+    pide_formula = _pide_formula(busqueda) or _pide_formula(consulta)
+    if pide_formula:
         formula_hit = _mejor_formula(busqueda, _docs_formula(docs) or hits)
         if formula_hit:
             hits = [formula_hit] + [h for h in hits if h is not formula_hit][:7]
-    key, _url, _modelo = _resolver_llm(api_key=api_key, model=model)
-    if formula_hit and (_pide_pegar(consulta) or not key):
-        return {
-            "texto": _formula_para_pegar(formula_hit) if _pide_pegar(consulta) else _explicar_formula(formula_hit),
-            "fuentes": [
-                {"title": formula_hit.get("title") or "", "source": Path(str(formula_hit.get("source") or "")).name}
-            ],
-            "docs": len(docs),
-            "uso_grok": False,
-        }
+    _provider, key, _url, _modelo = _resolver_llm(api_key=api_key, model=model)
     if not key:
+        extra = ""
+        if formula_hit:
+            extra = (
+                "\n\nMientras tanto, del export de sueldos (sin Claude):\n\n"
+                + _formula_para_pegar(formula_hit)
+            )
         return {
             "texto": (
-                "Este chat responde con **Grok**. Falta la clave xAI.\n\n"
-                "En **Tango → Ajustes** pegá `XAI_API_KEY` (empieza con `xai-`) "
+                "Este chat responde con **Claude**. Falta la clave de Anthropic.\n\n"
+                "En **Tango → Ajustes** pegá `ANTHROPIC_API_KEY` (empieza con `sk-ant-`) "
                 "o en Streamlit **Manage app → Secrets**:\n\n"
-                "`XAI_API_KEY = \"xai-...\"`\n\n"
-                "La clave se crea en https://console.x.ai"
+                "`ANTHROPIC_API_KEY = \"sk-ant-...\"`\n\n"
+                "La clave se crea en https://console.anthropic.com"
+                + extra
             ),
-            "fuentes": [],
+            "fuentes": [
+                {"title": formula_hit.get("title") or "", "source": Path(str(formula_hit.get("source") or "")).name}
+            ] if formula_hit else [],
             "docs": len(docs),
-            "uso_grok": False,
+            "uso_ia": False,
         }
     bloques_ctx: list[str] = []
     if formula_hit:
@@ -618,26 +842,23 @@ def responder(
             f"\n\nEl usuario adjuntó {len(imagenes)} captura(s) de Tango. "
             "Leelas y usalas para formular o corregir."
         )
+    pedido_formula = ""
+    if pide_formula:
+        pedido_formula = (
+            "\n\nPedí una fórmula de Tango Sueldos. Formulala y devolvé "
+            "FormulaImporte y FormulaCantidad en bloques ``` listos para copiar y pegar."
+        )
+        if _pide_pegar(consulta):
+            pedido_formula += " Solo los bloques, sin explicación."
     msgs.append({
         "role": "user",
-        "content": f"Pregunta:\n{consulta}{extra_img}\n\nContexto:\n{contexto}",
+        "content": f"Pregunta:\n{consulta}{extra_img}{pedido_formula}\n\nContexto:\n{contexto}",
     })
     ia = ""
     error = ""
-    if imagenes and not key:
-        return {
-            "texto": (
-                "Para leer capturas el agente necesita IA con visión. "
-                "En **Gestionar la aplicación → Secrets** pegá `XAI_API_KEY` o `OPENAI_API_KEY`. "
-                "Mientras, escribí qué dice la pantalla o pegá la fórmula en texto."
-            ),
-            "fuentes": [],
-            "docs": len(docs),
-            "uso_grok": False,
-        }
     try:
         ia = _llamar_llm(
-            _SYSTEM,
+            _SYSTEM_FORMULA if pide_formula else _SYSTEM,
             msgs,
             api_key=api_key,
             model=model,
@@ -646,14 +867,14 @@ def responder(
     except Exception as exc:
         error = str(exc)
     if ia:
-        texto = ia
+        texto = _completar_formula_copiable(ia, formula_hit, consulta)
     elif formula_hit:
-        texto = _explicar_formula(formula_hit)
+        texto = _formula_para_pegar(formula_hit)
         if error:
-            texto = f"{texto}\n\n_(Grok no respondió: {error[:180]})_"
+            texto = f"{texto}\n\n_(Claude no respondió: {error[:180]})_"
     else:
         texto = (
-            f"Grok no pudo responder: {error[:240]}"
+            f"Claude no pudo responder: {error[:240]}"
             if error
             else _fallback(consulta, hits)
         )
@@ -664,5 +885,5 @@ def responder(
             for h in hits[:6]
         ],
         "docs": len(docs),
-        "uso_grok": bool(ia),
+        "uso_ia": bool(ia),
     }

@@ -13060,6 +13060,10 @@ def _pantalla_login_oficina() -> None:
         "varios pueden trabajar a la vez sin pisarse."
     )
     if _es_entorno_cloud():
+        st.info(
+            "En la web, el administrador es el usuario **admin** con su PIN de Secrets. "
+            "Un PIN vacío no entra. Guada, Mauri o Tobi no son administradores."
+        )
         # Re-sincronizar usuarios desde Secrets en cada visita al login (Cloud)
         try:
             auth_oficina._aplicar_usuarios_desde_secrets()
@@ -13097,7 +13101,13 @@ def _pantalla_login_oficina() -> None:
             return
         ok = auth_oficina.verificar_login_oficina(elegido, pin)
         if not ok:
-            st.error("Usuario o PIN incorrecto.")
+            if str(elegido).lower() == "admin" and _es_entorno_cloud():
+                st.error(
+                    "PIN de administrador incorrecto. En la web hay que usar el PIN de "
+                    "**Manage app → Secrets → oficina_usuarios.admin**, no el de la PC."
+                )
+            else:
+                st.error("Usuario o PIN incorrecto.")
             return
         st.session_state.usuario_oficina = ok["usuario"]
         st.session_state.usuario_oficina_nombre = ok["nombre"]
