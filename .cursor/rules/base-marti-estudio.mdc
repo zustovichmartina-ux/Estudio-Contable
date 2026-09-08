@@ -9,6 +9,7 @@ alwaysApply: true
 - CTRATO `"099"` / `"048"` se excluyen envolviendo Importe: `SI(CTRATO="099";0;<original>)`. Cantidad no tocar salvo pedido.
 - Tiempo parcial `"001"` = 50% de IMPOR; completa `"008"` = 100%. El % va en Importe, no en Cantidad.
 - Concepto 1 sueldo básico: `USUELD/30*CANTIDAD`. Cambiar una fórmula afecta a todos los conceptos que la usan; refrescar el concepto y reliquidar.
+- Concepto en 0: no se borra como Excel. **Liquidaciones habilitadas** para no calcularlo; **no imprimir si el importe es cero** para el recibo. Si da 0 por CTRATO 099/048, está bien.
 - Excel de RECEPCION: SI anidado, no IFS.
 - Papeles bancos: solo el primer mes toma saldo inicial del extracto; el resto arrastra; no forzar diferencia a 0; no inventar meses sin extracto.
 - Transferencias propias: una vez del lado que recibe. Monotributo: período = fecha desde/hasta, no emisión.

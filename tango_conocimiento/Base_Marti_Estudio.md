@@ -73,6 +73,7 @@ Si el legajo tiene mal el CTRATO, la fórmula “parece” mal: corregir la moda
 - Separar Primera/Segunda quincena vs Mensual. Al emitir fin de mes: filtrar solo Mensual.
 - Remunerativo = TOTHAB. No remunerativo = TOTNR.
 - Adelanto 20005 si aparece sin querer: revisar Liquidaciones habilitadas / particulares (no solo el flag Anticipo).
+- Un concepto que liquida en **0** no se borra como en Excel. Para que no se calcule: en el concepto, **Liquidaciones habilitadas**, sacarlo de esa liquidación (mensual / quincena). Para que no se imprima en el recibo: marcar **no imprimir si el importe es cero**. Si da 0 por CTRATO 099/048, la fórmula está bien: no hace falta eliminarlo.
 
 ## Papeles de bancos / conciliación
 

@@ -236,7 +236,8 @@ def _es_consulta_proceso(pregunta: str) -> bool:
     p = _sin_acento(pregunta or "").lower()
     return bool(
         re.search(
-            r"importar|paso a paso|como (hago|puedo|se |hago)|proceso|"
+            r"importar|paso a paso|como (hago|puedo|se |elimino)|proceso|"
+            r"eliminar.{0,30}concepto|concepto.{0,40}(cero| 0\b)|"
             r"portal iva|arca|mis comprobantes|libro (de )?iva|"
             r"menu|pantalla|asistente",
             p,
@@ -642,12 +643,11 @@ def _llamar_llm(
                 candidatos.append(alt)
     extras: list[dict[str, Any]] = [{}]
     if "x.ai" in url:
-        esfuerzo = "low" if imagenes else "medium"
-        extras = [{"reasoning_effort": esfuerzo}, {}]
+        extras = [{"reasoning_effort": "low"}, {}]
     else:
         extras = [{"max_tokens": 4096}]
     ultimo = ""
-    timeout = 90 if imagenes else 150
+    timeout = 55
     for modelo_try in candidatos:
         salto_modelo = False
         for extra in extras:
@@ -699,7 +699,7 @@ def _llamar_llm(
             continue
     if ultimo:
         raise RuntimeError(ultimo)
-    return ""
+    raise RuntimeError("Grok no devolvió texto")
 
 
 _MEMORIA_ESTUDIO = """
@@ -707,6 +707,7 @@ Información del estudio. Formulá la respuesta con esto, con tus palabras. No l
 - Tango Sueldos: SI(cond;verdadero;falso), OR = O, USUELD (nunca USUELO), códigos entre comillas ("099").
 - CTRATO "099" y "048" se excluyen envolviendo Importe. "001" = 50% de IMPOR, "008" = 100%. El % va en Importe, no en Cantidad.
 - Concepto 1 sueldo básico = USUELD/30*CANTIDAD. Si cambia una fórmula, refrescar el concepto y reliquidar.
+- Concepto en 0 en la liquidación: no se “borra” como en Excel. Liquidaciones habilitadas para no calcularlo; no imprimir si importe es cero para que no salga en el recibo. Si da 0 por CTRATO 099/048, está bien.
 - Papeles de bancos: solo el primer mes toma el saldo inicial del extracto; el resto arrastra. No forzar la diferencia a 0. No inventar meses sin extracto. Transferencias propias: una vez del lado que recibe.
 - Monotributo: el período es fecha desde/hasta, no la fecha de emisión.
 """
@@ -863,6 +864,43 @@ def _respuesta_proceso_arca() -> str:
     )
 
 
+def _es_pregunta_concepto_cero(pregunta: str) -> bool:
+    p = _sin_acento(pregunta or "").lower()
+    return bool(
+        re.search(
+            r"concepto.{0,40}(cero| 0\b)|elimino un concepto|eliminar un concepto|concepto en 0",
+            p,
+        )
+    )
+
+
+def _respuesta_concepto_cero() -> str:
+    return (
+        "En Tango Sueldos un concepto en **0** no se borra como una fila de Excel. "
+        "Se deja de calcular o de imprimir.\n\n"
+        "**1.** Si no lo querés en esa liquidación: abrí el concepto, "
+        "**Liquidaciones habilitadas**, y sacalo de mensual / quincena / la que esté usando. "
+        "Después reliquidá.\n"
+        "**2.** Si el 0 está bien pero no querés verlo en el recibo: en el concepto, "
+        "marcá **no imprimir si el importe es cero**.\n"
+        "**3.** Si da 0 porque es CTRATO 099/048 (directivo), la fórmula está bien: "
+        "no hace falta eliminarlo.\n"
+        "**4.** Si es un adelanto de más (tipo 20005): mirá **Liquidaciones particulares**, "
+        "no solo el tilde de Anticipo.\n\n"
+        "Si me decís el número de concepto, te digo cuál de esas cuatro aplica."
+    )
+
+
+def _respuesta_estudio(pregunta: str) -> str:
+    """Respuesta del estudio aunque Grok falle o esté apagado."""
+    if _es_pregunta_concepto_cero(pregunta):
+        return _respuesta_concepto_cero()
+    p = _sin_acento(pregunta or "").lower()
+    if _es_consulta_proceso(pregunta) and re.search(r"arca|portal iva|importar", p):
+        return _respuesta_proceso_arca()
+    return ""
+
+
 def _fallback(
     pregunta: str,
     hits: list[dict[str, str]],
@@ -874,25 +912,19 @@ def _fallback(
             "Mandala de nuevo o decime el menú de arriba de Tango "
             "(módulo y pantalla) y te digo el siguiente click."
         )
-    p = _sin_acento(pregunta or "").lower()
-    if _es_consulta_proceso(pregunta) and re.search(r"arca|portal iva|importar", p):
-        return _respuesta_proceso_arca()
+    estudio = _respuesta_estudio(pregunta)
+    if estudio:
+        return estudio
     if _pide_formula(pregunta):
         hit = _mejor_formula(pregunta, hits)
         if hit:
             return (
-                "Esta es la fórmula, lista para pegar en Tango (no es un PDF):\n\n"
+                "Esta es la fórmula, lista para pegar en Tango:\n\n"
                 + _formula_para_pegar(hit)
             )
-    utiles = [h for h in hits if not _es_doc_formula(h)]
-    if not utiles:
-        return (
-            "No pude armar la respuesta con Grok ahora. "
-            "Preguntame de nuevo o decime el menú de Tango (IVA, Sueldos, Compras)."
-        )
     return (
-        "No pude armar la respuesta con Grok ahora. "
-        "Preguntame de nuevo con un poco más de detalle (pantalla o concepto)."
+        "No pude hablar con Grok en este intento. "
+        "Preguntame de nuevo: decime módulo (Sueldos, IVA, Compras) y qué pantalla ves."
     )
 
 
@@ -943,26 +975,31 @@ def responder(
     busqueda = consulta if hay_foto else _texto_busqueda(consulta, historial)
     hits = recuperar(busqueda if _pide_pegar(consulta) else consulta, docs, k=4 if hay_foto else 8)
     formula_hit = None
-    pide_formula = _pide_formula(busqueda) or _pide_formula(consulta)
+    pide_formula = (
+        (not _es_pregunta_concepto_cero(consulta))
+        and (_pide_formula(busqueda) or _pide_formula(consulta))
+    )
     if pide_formula:
         formula_hit = _mejor_formula(busqueda, _docs_formula(docs) or hits)
         if formula_hit:
             hits = [formula_hit] + [h for h in hits if h is not formula_hit][:7]
     _provider, key, _url, _modelo = _resolver_llm(api_key=api_key, model=model)
     if not key:
+        estudio = _respuesta_estudio(consulta)
         extra = ""
-        if formula_hit:
+        if formula_hit and not estudio:
             extra = (
                 "\n\nMientras tanto, del export de sueldos (sin Grok):\n\n"
                 + _formula_para_pegar(formula_hit)
             )
+        aviso = (
+            "Este chat **todavía no está usando Grok**. Falta la clave de xAI. "
+            "En **Tango**, pegá `XAI_API_KEY` (empieza con `xai-`) y tocá **Activar Grok**. "
+            "La clave se crea en https://console.x.ai"
+        )
+        texto = (estudio + "\n\n_(" + aviso + ")_") if estudio else (aviso + extra)
         return {
-            "texto": (
-                "Este chat **todavía no está usando Grok**. Falta la clave de xAI.\n\n"
-                "En **Tango**, pegá `XAI_API_KEY` (empieza con `xai-`) y tocá **Activar Grok**. "
-                "La clave se crea en https://console.x.ai"
-                + extra
-            ),
+            "texto": texto,
             "fuentes": [
                 {"title": formula_hit.get("title") or "", "source": Path(str(formula_hit.get("source") or "")).name}
             ] if formula_hit else [],
@@ -1036,10 +1073,7 @@ def responder(
     else:
         texto = _fallback(consulta, hits, imagenes)
         aviso = _error_ia_amigable(error)
-        err_l = (error or "").lower()
-        if aviso and ("incorrect api key" in err_l or "invalid api key" in err_l or "authentication" in err_l):
-            texto = aviso
-        elif aviso:
+        if aviso:
             texto = f"{texto}\n\n_({aviso})_"
     return {
         "texto": texto,
