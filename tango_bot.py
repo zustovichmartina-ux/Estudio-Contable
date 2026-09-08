@@ -320,6 +320,8 @@ def recuperar(pregunta: str, docs: list[dict[str, str]], k: int = 8) -> list[dic
         if "sicoss" in source or "siap" in source:
             if "sicoss" not in q and "siap" not in q:
                 score -= 8.0
+        if "base_marti" in source or "tango_conocimiento" in source:
+            score += 8.0
         scored.append((score, doc))
     scored.sort(key=lambda x: x[0], reverse=True)
     return [d for _, d in scored[:k]]
@@ -640,17 +642,18 @@ def _llamar_llm(
                 candidatos.append(alt)
     extras: list[dict[str, Any]] = [{}]
     if "x.ai" in url:
-        extras = [{"reasoning_effort": "low"}, {}]
+        esfuerzo = "low" if imagenes else "medium"
+        extras = [{"reasoning_effort": esfuerzo}, {}]
     else:
         extras = [{"max_tokens": 4096}]
     ultimo = ""
-    timeout = 90 if imagenes else 120
+    timeout = 90 if imagenes else 150
     for modelo_try in candidatos:
         salto_modelo = False
         for extra in extras:
             payload = {
                 "model": modelo_try,
-                "temperature": 0.5,
+                "temperature": 0.7,
                 "messages": [{"role": "system", "content": system}, *messages],
             }
             payload.update(extra)
@@ -699,45 +702,30 @@ def _llamar_llm(
     return ""
 
 
-_SYSTEM = """Sos el chat de Tango del Estudio Contable (Axoft 26ar).
-Respondé como ChatGPT: conversación natural, de vos, en español. No armes PDF ni informes.
+_SYSTEM = """Sos Grok, ayudando al Estudio Contable con Tango (Axoft 26ar) y trámites de la oficina.
 
-Cómo operás:
-1. Si piden un PROCESO: empezá con una frase tipo «El proceso es así» y listá pasos cortos (menú → pantalla → qué hacer). Nada de pegar un documento.
-2. Usá el contexto solo como memoria. Contestá con tus palabras.
-3. Si hay captura: la pantalla manda. Decí qué menú/ventana se ve y cómo seguir desde AHÍ.
-   No copies una guía del contexto si no coincide con lo de la foto. No pegues artículos ni URLs de ayuda.
-4. Si piden FÓRMULA: 2 líneas de qué es, y bloques ``` para FormulaImporte y FormulaCantidad.
-   Sintaxis Axoft: SI(cond;verdadero;falso), NOVCA, NOVCAG, USUELD, CANTIDAD, SUELDO, ABS, ACUCTA, MOVCTA.
-5. Asiento por comprobante ≠ determinación mensual DETIVA/DETIIBB/DETTISH.
-6. No mezcles SIAp/SICOSS salvo que lo pidan.
-7. Si el export trae FormulaImporte / FormulaCantidad, usá ESA (no la reescribas).
-8. Concepto 1 = Sueldo básico `USUELD/30*CANTIDAD` (no el proporcional).
-9. Si no está en el contexto ni en la imagen, decilo. No inventes menús.
-10. Nunca pidas ni escribas claves SQL, TANGO.INI ni contraseñas.
-11. “En limpio” / copiar / pegar: SOLO las fórmulas en bloques de código.
-No vuelques CSV ni ayudas crudas.
+Hablá como en grok.com: natural, en español, de vos. Pensá el caso y explicá. No copies manuales, PDFs ni URLs de ayuda.
+
+Reglas del estudio (aplicá, no recites):
+- Fórmulas: SI(cond;verdadero;falso), OR = O, USUELD (nunca USUELO), códigos entre comillas ("099").
+- Concepto 1 sueldo básico = USUELD/30*CANTIDAD.
+- CTRATO 099/048: excluir envolviendo Importe. 001 = 50% de IMPOR, 008 = 100%. El % va en Importe, no en Cantidad.
+- Procesos: menú → pantalla → qué hacer, en frases cortas.
+- Captura: qué se ve y el siguiente click.
+- Asiento por comprobante ≠ DETIVA/DETIIBB/DETTISH. IVA de la web se exporta como VARIOS.
+- No inventes menús. No pidas claves, TANGO.INI ni SQL.
+- Si piden fórmula para pegar: bloques ``` de FormulaImporte y FormulaCantidad.
+Si hay notas internas, usalas solo cuando calzan. Si no calzan, ignorá.
 """
 
 _SYSTEM_FORMULA = _SYSTEM + """
 
-Esta consulta es de FÓRMULA de Tango Sueldos. Obligatorio:
-- Contestá en el chat, no armes PDF.
-- Formulá. No describas el archivo ni copies el CSV.
-- Devolvé SIEMPRE dos bloques ``` listos para pegar en Tango:
-  **Importe** → FormulaImporte
-  **Cantidad** → FormulaCantidad
-- 2 a 4 líneas de explicación y después los bloques.
-- Si el usuario pide “en limpio” / copiar / pegar: únicamente los bloques, sin intro.
+Esta vez pidieron una fórmula de Tango Sueldos. Contestá como en el chat de Grok: 2 a 4 líneas de por qué, y después dos bloques ``` (Importe y Cantidad) listos para pegar. Si piden “en limpio”, solo los bloques.
 """
 
 _SYSTEM_CAPTURA = _SYSTEM + """
 
-El usuario mandó una captura de Tango. Obligatorio:
-- Primero describí la pantalla (módulo, menú, grilla, error o botón).
-- Después los pasos para seguir DESDE esa pantalla.
-- El contexto de abajo es opcional. Si no coincide con la foto, ignoralo.
-- No vuelques una guía ni un PDF. Frases cortas, como en un chat.
+Hay una captura. Describí la pantalla (módulo, menú, error o botón) y decí cómo seguir desde ahí. Si las notas no coinciden con la foto, ignorá las notas.
 """
 
 
@@ -901,21 +889,12 @@ def _fallback(
     utiles = [h for h in hits if not _es_doc_formula(h)]
     if not utiles:
         return (
-            "No tengo ese proceso armado. Decime la pantalla de Tango "
-            "(IVA, Sueldos, Compras) y te lo explico paso a paso acá en el chat."
+            "No pude armar la respuesta con Grok ahora. "
+            "Preguntame de nuevo o decime el menú de Tango (IVA, Sueldos, Compras)."
         )
-    prefer = [
-        h for h in utiles
-        if "guia" in _sin_acento(h.get("title") or "").lower()
-        or "tango_conocimiento" in (h.get("source") or "").lower()
-    ]
-    elegido = (prefer or utiles)[0]
-    texto = re.sub(r"\s+\|\s+", "\n", (elegido.get("text") or "").strip())
-    texto = re.sub(r"\n{3,}", "\n\n", texto).strip()[:1800]
     return (
-        "El proceso es así:\n\n"
-        + texto
-        + "\n\nSi querés, te lo bajo a pasos más cortos. No te mando PDF: queda acá en el chat."
+        "No pude armar la respuesta con Grok ahora. "
+        "Preguntame de nuevo con un poco más de detalle (pantalla o concepto)."
     )
 
 
@@ -1004,54 +983,41 @@ def responder(
     if hay_foto:
         extra_hits = [] if seguimiento else extra_hits[:1]
     else:
-        extra_hits = extra_hits[:3]
+        extra_hits = extra_hits[:2]
     for h in extra_hits:
         texto_h = (h.get("text") or "").strip()
         if _es_doc_formula(h):
             texto_h = _explicar_formula(h)
         else:
-            texto_h = re.sub(r"\s+\|\s+", "\n", texto_h)[:400 if hay_foto else 700]
+            texto_h = re.sub(r"\s+\|\s+", "\n", texto_h)[:450]
         bloques_ctx.append(
-            f"### {h.get('title')}\nFuente: {Path(str(h.get('source') or '')).name}\n{texto_h}"
+            f"### {h.get('title')}\n{texto_h}"
         )
     contexto = "\n\n".join(bloques_ctx)
     msgs: list[dict[str, Any]] = []
-    hist_usar = (historial or [])[-2:] if hay_foto else (historial or [])[-8:]
+    hist_usar = (historial or [])[-4:] if hay_foto else (historial or [])[-10:]
     for m in hist_usar:
         role = m.get("role") or "user"
         if role not in {"user", "assistant"}:
             continue
         content = str(m.get("content") or "").strip()
         if hay_foto and role == "assistant":
-            content = content[:500]
+            content = content[:800]
         if content:
             msgs.append({"role": role, "content": content})
-    extra_img = ""
-    if imagenes:
-        extra_img = (
-            f"\n\nHay {len(imagenes)} captura(s) de Tango adjunta(s). "
-            "Describí esa pantalla y el siguiente paso. No copies una guía."
-        )
-    pedido_formula = ""
-    if pide_formula and not hay_foto:
-        pedido_formula = (
-            "\n\nPedí una fórmula de Tango Sueldos. Formulala y devolvé "
-            "FormulaImporte y FormulaCantidad en bloques ``` listos para copiar y pegar."
-        )
-        if _pide_pegar(consulta):
-            pedido_formula += " Solo los bloques, sin explicación."
-    msgs.append({
-        "role": "user",
-        "content": f"Pregunta:\n{consulta}{extra_img}{pedido_formula}\n\nContexto:\n{contexto or '(sin contexto)'}",
-    })
-    ia = ""
-    error = ""
+    if imagenes and not consulta.strip():
+        consulta = "¿Qué pantalla es y cómo sigo desde acá?"
+    msgs.append({"role": "user", "content": consulta})
     if hay_foto:
         sistema = _SYSTEM_CAPTURA
     elif pide_formula:
         sistema = _SYSTEM_FORMULA
     else:
         sistema = _SYSTEM
+    if contexto:
+        sistema = sistema + "\n\nNotas internas (opcionales):\n" + contexto
+    ia = ""
+    error = ""
     try:
         ia = _llamar_llm(
             sistema,

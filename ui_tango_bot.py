@@ -283,7 +283,7 @@ def render_tango_bot() -> None:
     if not chat:
         st.markdown(
             '<div class="tango-hero"><h1>Agente Tango</h1>'
-            "<p>Grok responde, formula y lee capturas de Tango.</p></div>",
+            "<p>Como el chat de Grok, con las reglas del estudio.</p></div>",
             unsafe_allow_html=True,
         )
         if not web:
