@@ -832,16 +832,23 @@ def _completar_formula_copiable(
     return extra
 
 
-def _error_ia_amigable(error: str) -> str:
+def _ocultar_rutas_api(texto: str) -> str:
+    """No mostrar URLs ni paths de API en el chat."""
+    limpio = re.sub(r"https?://\S+", "", texto or "")
+    limpio = re.sub(r"\b(?:api|console)\.x\.ai\S*", "", limpio, flags=re.I)
+    limpio = re.sub(r"/v1/\S+", "", limpio)
+    limpio = re.sub(r"\bXAI_API_KEY\b", "la clave", limpio)
+    return re.sub(r"[ \t]{2,}", " ", limpio).strip()
+
+
+def _es_error_clave(error: str) -> bool:
     e = (error or "").lower()
-    if "incorrect api key" in e or "invalid api key" in e or "authentication" in e:
-        return (
-            "Grok no arrancó: la clave de xAI no vale o no está. "
-            "En Tango, pegá una clave nueva de https://console.x.ai (empieza con xai-) y tocá Activar Grok."
-        )
-    if error:
-        return f"La IA no respondió: {error[:160]}"
-    return ""
+    return bool(
+        "incorrect api key" in e
+        or "invalid api key" in e
+        or "authentication" in e
+        or ("401" in e and "auth" in e)
+    )
 
 
 def _respuesta_proceso_arca() -> str:
@@ -993,18 +1000,18 @@ def responder(
                 + _formula_para_pegar(formula_hit)
             )
         aviso = (
-            "Este chat **todavía no está usando Grok**. Falta la clave de xAI. "
-            "En **Tango**, pegá `XAI_API_KEY` (empieza con `xai-`) y tocá **Activar Grok**. "
-            "La clave se crea en https://console.x.ai"
+            "Este chat todavía no está usando Grok. "
+            "En Tango, pegá la clave y tocá Activar Grok."
         )
-        texto = (estudio + "\n\n_(" + aviso + ")_") if estudio else (aviso + extra)
+        texto = estudio if estudio else (aviso + extra)
         return {
-            "texto": texto,
+            "texto": _ocultar_rutas_api(texto),
             "fuentes": [
                 {"title": formula_hit.get("title") or "", "source": Path(str(formula_hit.get("source") or "")).name}
             ] if formula_hit else [],
             "docs": len(docs),
             "uso_ia": False,
+            "clave_invalida": False,
         }
     bloques_ctx: list[str] = []
     if formula_hit:
@@ -1072,15 +1079,13 @@ def responder(
         texto = _formula_para_pegar(formula_hit)
     else:
         texto = _fallback(consulta, hits, imagenes)
-        aviso = _error_ia_amigable(error)
-        if aviso:
-            texto = f"{texto}\n\n_({aviso})_"
     return {
-        "texto": texto,
+        "texto": _ocultar_rutas_api(texto),
         "fuentes": [
             {"title": h.get("title") or "", "source": Path(str(h.get("source") or "")).name}
             for h in hits[:6]
         ],
         "docs": len(docs),
         "uso_ia": bool(ia),
+        "clave_invalida": _es_error_clave(error),
     }

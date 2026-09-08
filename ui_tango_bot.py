@@ -207,7 +207,13 @@ def render_tango_bot() -> None:
 
     if "tango_api_key" not in st.session_state:
         st.session_state.tango_api_key = str(st.session_state.get("tango_xai_key") or "")
+    if "tango_clave_invalida" not in st.session_state:
+        st.session_state.tango_clave_invalida = False
     web = _es_web_publica()
+    pasted = str(st.session_state.get("tango_api_key") or "").strip()
+    if pasted in _PLACEHOLDERS:
+        pasted = ""
+    secret_muerto = bool(st.session_state.get("tango_clave_invalida")) and not pasted
     for nombre in (
         "ANTHROPIC_API_KEY",
         "ANTHROPIC_MODEL",
@@ -218,49 +224,57 @@ def render_tango_bot() -> None:
         "XAI_API_KEY",
         "XAI_MODEL",
     ):
+        if nombre == "XAI_API_KEY" and secret_muerto:
+            os.environ.pop("XAI_API_KEY", None)
+            continue
         val = _secret(nombre)
         if val:
             os.environ[nombre] = val
     # Clave pegada en Tango (esta sesión) pisa Secrets, también en la web.
-    pasted = str(st.session_state.get("tango_api_key") or "").strip()
-    if pasted in _PLACEHOLDERS:
-        pasted = ""
-    api_key = (
-        pasted
-        or _secret("XAI_API_KEY")
-        or _secret("ANTHROPIC_API_KEY")
-        or _secret("OPENAI_API_KEY")
-        or _secret("GROQ_API_KEY")
-    )
+    api_key = pasted
+    if not api_key and not secret_muerto:
+        api_key = _secret("XAI_API_KEY")
+    if not api_key:
+        api_key = (
+            _secret("ANTHROPIC_API_KEY")
+            or _secret("OPENAI_API_KEY")
+            or _secret("GROQ_API_KEY")
+        )
     if api_key.startswith("xai-"):
         os.environ["XAI_API_KEY"] = api_key
     elif api_key.startswith("sk-ant-"):
         os.environ["ANTHROPIC_API_KEY"] = api_key
     model = _modelo_para_clave(api_key)
-    hay_ia = bool(api_key)
+    hay_ia = bool(api_key) and not st.session_state.get("tango_clave_invalida")
     etiqueta = _etiqueta_ia(api_key, model)
     chat = st.session_state.tango_chat
 
     def _panel_ia() -> None:
-        if hay_ia:
+        if hay_ia and not st.session_state.get("tango_clave_invalida"):
             st.success(f"**Grok activo** (`{model}`). Ya podés preguntar como en el chat de Grok.")
+        elif st.session_state.get("tango_clave_invalida"):
+            st.error(
+                "**Grok está apagado.** La clave de xAI de la nube no vale. "
+                "Pegá una nueva abajo y tocá Activar Grok."
+            )
         else:
-            st.error("**Grok está apagado.** Sin clave de xAI este chat no tiene IA: solo arma respuestas de archivo.")
-        st.caption("Pegá acá la clave de Grok (console.x.ai). No la escribas en el chat de abajo. Queda en tu sesión.")
+            st.error("**Grok está apagado.** Sin clave de xAI este chat responde con lo del estudio.")
+        st.caption("Pegá acá la clave de Grok. No la escribas en el chat de abajo. Queda en tu sesión.")
         clave = st.text_input(
             "Clave Grok (xAI)",
             type="password",
             key="tango_api_input",
             placeholder="xai-...",
-            help="Creala en https://console.x.ai → API keys. Empieza con xai-.",
+            help="Empieza con xai-. No la pegues en el chat.",
         )
         if st.button("Activar Grok", type="primary", key="tango_activar_ia"):
             texto = clave.strip()
             if texto.startswith("xai-") or texto.startswith("sk-ant-") or texto.startswith("sk-"):
                 st.session_state.tango_api_key = texto
+                st.session_state.tango_clave_invalida = False
                 st.rerun()
             else:
-                st.warning("La clave de Grok empieza con xai- (console.x.ai).")
+                st.warning("La clave de Grok empieza con xai-.")
 
     if chat:
         top_l, top_r = st.columns([4, 1])
@@ -343,6 +357,9 @@ def _enviar(prompt: str, api_key: str, model: str, imagenes: list[dict[str, str]
         model=model,
         imagenes=imagenes,
     )
+    if out.get("clave_invalida"):
+        st.session_state.tango_clave_invalida = True
+        st.session_state.tango_api_key = ""
     st.session_state.tango_chat.append({
         "role": "assistant",
         "content": out["texto"],
