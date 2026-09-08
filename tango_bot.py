@@ -702,30 +702,28 @@ def _llamar_llm(
     return ""
 
 
-_SYSTEM = """Sos Grok, ayudando al Estudio Contable con Tango (Axoft 26ar) y trámites de la oficina.
-
-Hablá como en grok.com: natural, en español, de vos. Pensá el caso y explicá. No copies manuales, PDFs ni URLs de ayuda.
-
-Reglas del estudio (aplicá, no recites):
-- Fórmulas: SI(cond;verdadero;falso), OR = O, USUELD (nunca USUELO), códigos entre comillas ("099").
-- Concepto 1 sueldo básico = USUELD/30*CANTIDAD.
-- CTRATO 099/048: excluir envolviendo Importe. 001 = 50% de IMPOR, 008 = 100%. El % va en Importe, no en Cantidad.
-- Procesos: menú → pantalla → qué hacer, en frases cortas.
-- Captura: qué se ve y el siguiente click.
-- Asiento por comprobante ≠ DETIVA/DETIIBB/DETTISH. IVA de la web se exporta como VARIOS.
-- No inventes menús. No pidas claves, TANGO.INI ni SQL.
-- Si piden fórmula para pegar: bloques ``` de FormulaImporte y FormulaCantidad.
-Si hay notas internas, usalas solo cuando calzan. Si no calzan, ignorá.
+_MEMORIA_ESTUDIO = """
+Información del estudio. Formulá la respuesta con esto, con tus palabras. No lo copies de corrido:
+- Tango Sueldos: SI(cond;verdadero;falso), OR = O, USUELD (nunca USUELO), códigos entre comillas ("099").
+- CTRATO "099" y "048" se excluyen envolviendo Importe. "001" = 50% de IMPOR, "008" = 100%. El % va en Importe, no en Cantidad.
+- Concepto 1 sueldo básico = USUELD/30*CANTIDAD. Si cambia una fórmula, refrescar el concepto y reliquidar.
+- Papeles de bancos: solo el primer mes toma el saldo inicial del extracto; el resto arrastra. No forzar la diferencia a 0. No inventar meses sin extracto. Transferencias propias: una vez del lado que recibe.
+- Monotributo: el período es fecha desde/hasta, no la fecha de emisión.
 """
 
-_SYSTEM_FORMULA = _SYSTEM + """
+_SYSTEM = """Sos Grok en el chat del Estudio Contable.
 
-Esta vez pidieron una fórmula de Tango Sueldos. Contestá como en el chat de Grok: 2 a 4 líneas de por qué, y después dos bloques ``` (Importe y Cantidad) listos para pegar. Si piden “en limpio”, solo los bloques.
+Tenés IA: pensá y explicá como en grok.com, en español. La respuesta la ARMÁS vos usando la información del estudio y el material que te pasamos. No inventes menús ni fórmulas si ya está en ese material. No pegues manuales ni URLs.
+
+No pidas ni escribas claves, TANGO.INI ni contraseñas.
+""" + _MEMORIA_ESTUDIO
+
+_SYSTEM_FORMULA = _SYSTEM + """
+Si piden fórmula de sueldos, devolvé FormulaImporte y FormulaCantidad en bloques ``` listos para pegar, usando el material (no reescribas una fórmula del export si ya viene).
 """
 
 _SYSTEM_CAPTURA = _SYSTEM + """
-
-Hay una captura. Describí la pantalla (módulo, menú, error o botón) y decí cómo seguir desde ahí. Si las notas no coinciden con la foto, ignorá las notas.
+Hay una captura: mirala y formulá cómo seguir desde esa pantalla, con la información del estudio.
 """
 
 
@@ -837,8 +835,8 @@ def _error_ia_amigable(error: str) -> str:
     e = (error or "").lower()
     if "incorrect api key" in e or "invalid api key" in e or "authentication" in e:
         return (
-            "Grok no está configurado en esta web: la clave de Secrets no vale. "
-            "En la PC del estudio (localhost), Tango → Ajustes, pegá una clave nueva de console.x.ai."
+            "Grok no arrancó: la clave de xAI no vale o no está. "
+            "En Tango, pegá una clave nueva de https://console.x.ai (empieza con xai-) y tocá Activar Grok."
         )
     if error:
         return f"La IA no respondió: {error[:160]}"
@@ -960,10 +958,8 @@ def responder(
             )
         return {
             "texto": (
-                "Este chat responde con **Grok**. Falta la clave de xAI.\n\n"
-                "En **Tango → Ajustes** (solo en la PC del estudio) pegá `XAI_API_KEY` "
-                "(empieza con `xai-`) o en Streamlit **Manage app → Secrets**:\n\n"
-                "`XAI_API_KEY = \"xai-...\"`\n\n"
+                "Este chat **todavía no está usando Grok**. Falta la clave de xAI.\n\n"
+                "En **Tango**, pegá `XAI_API_KEY` (empieza con `xai-`) y tocá **Activar Grok**. "
                 "La clave se crea en https://console.x.ai"
                 + extra
             ),
@@ -983,13 +979,13 @@ def responder(
     if hay_foto:
         extra_hits = [] if seguimiento else extra_hits[:1]
     else:
-        extra_hits = extra_hits[:2]
+        extra_hits = extra_hits[:3]
     for h in extra_hits:
         texto_h = (h.get("text") or "").strip()
         if _es_doc_formula(h):
             texto_h = _explicar_formula(h)
         else:
-            texto_h = re.sub(r"\s+\|\s+", "\n", texto_h)[:450]
+            texto_h = re.sub(r"\s+\|\s+", "\n", texto_h)[:600]
         bloques_ctx.append(
             f"### {h.get('title')}\n{texto_h}"
         )
@@ -1015,7 +1011,12 @@ def responder(
     else:
         sistema = _SYSTEM
     if contexto:
-        sistema = sistema + "\n\nNotas internas (opcionales):\n" + contexto
+        sistema = (
+            sistema
+            + "\n\nMaterial del estudio para FORMULAR la respuesta "
+            "(no lo pegues literal; usalo):\n"
+            + contexto
+        )
     ia = ""
     error = ""
     try:
@@ -1035,10 +1036,11 @@ def responder(
     else:
         texto = _fallback(consulta, hits, imagenes)
         aviso = _error_ia_amigable(error)
-        if aviso and "incorrect api key" not in (error or "").lower():
-            texto = f"{texto}\n\n_({aviso})_"
-        elif aviso and texto.startswith("No lo tengo"):
+        err_l = (error or "").lower()
+        if aviso and ("incorrect api key" in err_l or "invalid api key" in err_l or "authentication" in err_l):
             texto = aviso
+        elif aviso:
+            texto = f"{texto}\n\n_({aviso})_"
     return {
         "texto": texto,
         "fuentes": [

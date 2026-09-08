@@ -221,9 +221,12 @@ def render_tango_bot() -> None:
         val = _secret(nombre)
         if val:
             os.environ[nombre] = val
-    # En la web pública solo Secrets. En la PC, la clave pegada en Ajustes.
+    # Clave pegada en Tango (esta sesión) pisa Secrets, también en la web.
+    pasted = str(st.session_state.get("tango_api_key") or "").strip()
+    if pasted in _PLACEHOLDERS:
+        pasted = ""
     api_key = (
-        ("" if web else str(st.session_state.get("tango_api_key") or "").strip())
+        pasted
         or _secret("XAI_API_KEY")
         or _secret("ANTHROPIC_API_KEY")
         or _secret("OPENAI_API_KEY")
@@ -240,9 +243,10 @@ def render_tango_bot() -> None:
 
     def _panel_ia() -> None:
         if hay_ia:
-            st.success(f"{etiqueta} activo (`{model}`). Ya podés preguntar abajo.")
-            st.caption("Si aparece «Incorrect API key», pegá una clave nueva de console.x.ai y tocá Activar Grok.")
-        st.info("Pegá acá la clave de Grok. No la pongas en el chat de abajo.")
+            st.success(f"**Grok activo** (`{model}`). Ya podés preguntar como en el chat de Grok.")
+        else:
+            st.error("**Grok está apagado.** Sin clave de xAI este chat no tiene IA: solo arma respuestas de archivo.")
+        st.caption("Pegá acá la clave de Grok (console.x.ai). No la escribas en el chat de abajo. Queda en tu sesión.")
         clave = st.text_input(
             "Clave Grok (xAI)",
             type="password",
@@ -259,35 +263,27 @@ def render_tango_bot() -> None:
                 st.warning("La clave de Grok empieza con xai- (console.x.ai).")
 
     if chat:
-        if web:
-            _, top_r = st.columns([4, 1])
-            with top_r:
-                if st.button("Nueva charla", key="tango_clear", use_container_width=True):
-                    st.session_state.tango_chat = []
-                    st.rerun()
-        else:
-            top_l, top_r = st.columns([4, 1])
-            with top_l:
-                with st.expander("Ajustes", expanded=not hay_ia):
-                    st.caption("Solo visible en esta PC. La web pública no muestra la clave.")
-                    _panel_ia()
+        top_l, top_r = st.columns([4, 1])
+        with top_l:
+            with st.expander("Grok", expanded=not hay_ia):
+                _panel_ia()
+                if not web:
                     if st.button("Reindexar ayudas Tango", key="tango_reindex"):
                         with st.spinner("Leyendo Desktop\\Tango y normativas…"):
                             docs = reconstruir_indice(guardar=True)
                         st.success(f"Listo: {len(docs)} fragmentos")
-            with top_r:
-                if st.button("Nueva charla", key="tango_clear", use_container_width=True):
-                    st.session_state.tango_chat = []
-                    st.rerun()
+        with top_r:
+            if st.button("Nueva charla", key="tango_clear", use_container_width=True):
+                st.session_state.tango_chat = []
+                st.rerun()
 
     if not chat:
         st.markdown(
             '<div class="tango-hero"><h1>Agente Tango</h1>'
-            "<p>Como el chat de Grok, con las reglas del estudio.</p></div>",
+            "<p>Grok formula la respuesta con lo del estudio.</p></div>",
             unsafe_allow_html=True,
         )
-        if not web:
-            _panel_ia()
+        _panel_ia()
         st.markdown(
             '<p class="tango-sug-label">Consultas frecuentes</p>',
             unsafe_allow_html=True,
