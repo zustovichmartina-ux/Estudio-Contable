@@ -1068,7 +1068,7 @@ def _render_titulo_estudio(ventana: str | None = None) -> None:
         st.markdown(
             """
             <div class="ec-hero">
-              <p class="ec-hero-hola">Hola Estudio Trujillo!</p>
+              <p class="ec-hero-hola">¡Hola Estudio Trujillo!</p>
               <p class="ec-hero-sub">Elegí tu usuario para empezar</p>
             </div>
             """,
@@ -1077,7 +1077,7 @@ def _render_titulo_estudio(ventana: str | None = None) -> None:
         return
     titulo, sub = _VENTANA_HEADER.get(clave, (clave, "Estudio Contable"))
     hola = _nombre_saludo()
-    linea_hola = f"Hola {hola}!" if hola else "Hola Estudio Trujillo!"
+    linea_hola = f"¡Hola {hola}!" if hola else "¡Hola Estudio Trujillo!"
     kicker = ""
     sid = st.session_state.get(_SOCiedad_KEY)
     if sid:
