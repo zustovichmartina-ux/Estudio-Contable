@@ -502,7 +502,9 @@ st.markdown(
         width: 7rem !important;
         min-height: 0 !important;
         overflow: hidden !important;
+        clip-path: inset(0 0 3px 0) !important;
         margin: 0 !important;
+        padding: 0 !important;
         background: transparent !important;
         border: 0 !important;
         box-shadow: none !important;
@@ -512,21 +514,23 @@ st.markdown(
     .stMarkdown img.ec-saludo-avatar,
     [data-testid="stMarkdownContainer"] img.ec-saludo-avatar {
         position: absolute !important;
-        top: 0 !important;
         left: 50% !important;
+        bottom: 0 !important;
+        top: auto !important;
         transform: translateX(-50%) !important;
         width: auto !important;
         height: 100% !important;
         max-width: 7rem !important;
         max-height: 100% !important;
         object-fit: contain !important;
-        object-position: top center !important;
+        object-position: bottom center !important;
         display: block !important;
         border-radius: 0 !important;
         background: transparent !important;
         box-shadow: none !important;
         border: 0 !important;
         outline: none !important;
+        filter: none !important;
     }
     .ec-pagehead-hola,
     .stMarkdown p.ec-pagehead-hola {
