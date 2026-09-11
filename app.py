@@ -476,34 +476,63 @@ st.markdown(
     }
 
     /* Cabecera de pantalla: en el flujo (no fixed). El overlay se recortaba. */
+    [data-testid="stMarkdownContainer"] .ec-pagehead,
     .ec-pagehead {
-        margin: 0 0 1.25rem 0;
-        padding: 0.15rem 0 1.05rem 0;
-        border-bottom: 1px solid var(--ec-line);
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        align-items: stretch !important;
+        justify-content: flex-start !important;
+        gap: 0.7rem !important;
+        margin: 0 0 1.15rem 0 !important;
+        padding: 0 !important;
+        border-bottom: 1px solid var(--ec-line) !important;
+        overflow: hidden !important;
+        background: transparent !important;
     }
-    .ec-saludo-fila {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
+    .ec-pagehead-copy {
+        flex: 1 1 auto !important;
+        min-width: 0 !important;
+        padding: 0 0 0.7rem 0 !important;
+        background: transparent !important;
     }
     .ec-saludo-wrap {
-        width: 88px;
-        height: 88px;
-        flex-shrink: 0;
+        position: relative !important;
+        flex: 0 0 7rem !important;
+        width: 7rem !important;
+        min-height: 0 !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+        align-self: stretch !important;
     }
-    .ec-saludo-avatar {
-        width: 88px;
-        height: 88px;
-        object-fit: cover;
-        border-radius: 50%;
-        background: #EEF2FF;
-        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
+    .ec-saludo-avatar,
+    .stMarkdown img.ec-saludo-avatar,
+    [data-testid="stMarkdownContainer"] img.ec-saludo-avatar {
+        position: absolute !important;
+        top: 0 !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        width: auto !important;
+        height: 100% !important;
+        max-width: 7rem !important;
+        max-height: 100% !important;
+        object-fit: contain !important;
+        object-position: top center !important;
+        display: block !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        border: 0 !important;
+        outline: none !important;
     }
     .ec-pagehead-hola,
     .stMarkdown p.ec-pagehead-hola {
         margin: 0 0 0.45rem 0 !important;
         font-family: var(--ec-display) !important;
-        font-size: 1.25rem !important;
+        font-size: 1.55rem !important;
         font-weight: 650 !important;
         letter-spacing: -0.02em !important;
         text-transform: none !important;
@@ -543,7 +572,12 @@ st.markdown(
         border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     }
     [data-testid="stSidebar"] .ec-brand img,
+    [data-testid="stSidebar"] [data-testid="stImage"],
+    [data-testid="stSidebar"] [data-testid="stImage"] > div,
     [data-testid="stSidebar"] [data-testid="stImage"] img {
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
         border-radius: 0 !important;
     }
 
@@ -1113,21 +1147,16 @@ def _render_titulo_estudio(ventana: str | None = None) -> None:
         str(st.session_state.get("usuario_oficina") or ""),
         str(st.session_state.get("usuario_oficina_nombre") or ""),
     )
-    saludo_html = (
-        f'<div class="ec-saludo-fila">{avatar}<div>'
-        if avatar
-        else "<div>"
-    )
-    cierre = "</div></div>" if avatar else "</div>"
     st.markdown(
         f"""
         <div class="ec-pagehead">
-          {saludo_html}
-          <p class="ec-pagehead-hola">{html.escape(linea_hola)}</p>
-          {kicker_html}
-          <p class="ec-pagehead-title">{html.escape(titulo)}</p>
-          <p class="ec-pagehead-sub">{html.escape(sub)}</p>
-          {cierre}
+          {avatar}
+          <div class="ec-pagehead-copy">
+            <p class="ec-pagehead-hola">{html.escape(linea_hola)}</p>
+            {kicker_html}
+            <p class="ec-pagehead-title">{html.escape(titulo)}</p>
+            <p class="ec-pagehead-sub">{html.escape(sub)}</p>
+          </div>
         </div>
         """,
         unsafe_allow_html=True,
