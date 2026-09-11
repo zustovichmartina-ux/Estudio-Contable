@@ -768,9 +768,14 @@ def _llamar_llm(
         partes.append({"type": "text", "text": texto})
         messages = [*messages[:-1], {"role": "user", "content": partes}]
     candidatos = [modelo]
-    extras: list[dict[str, Any]] = [{"max_tokens": 1800}]
+    extras: list[dict[str, Any]] = [{"max_tokens": 4096}]
+    if provider == "xai" or str(modelo).startswith("grok"):
+        extras = [
+            {"max_tokens": 4096, "reasoning_effort": "low"},
+            {"max_tokens": 4096},
+        ]
     ultimo = ""
-    timeout = 40 if imagenes else 22
+    timeout = 90 if imagenes else 60
     for modelo_try in candidatos:
         salto_modelo = False
         for extra in extras:
@@ -864,6 +869,9 @@ def _texto_mensaje_llm(message: dict[str, Any] | None) -> str:
     extra = message.get("output_text")
     if isinstance(extra, str) and extra.strip():
         return extra.strip()
+    razon = message.get("reasoning_content")
+    if isinstance(razon, str) and razon.strip():
+        return razon.strip()
     partes: list[str] = []
     if isinstance(content, list):
         for bloque in content:
@@ -1038,13 +1046,18 @@ def _fallback(
     pregunta: str,
     hits: list[dict[str, str]],
     imagenes: list[dict[str, str]] | None = None,
+    error: str = "",
 ) -> str:
+    detalle = _ocultar_rutas_api(error)[:220] if error else ""
     if imagenes:
-        return (
+        texto = (
             "Vi la captura, pero esta vez no pude leerla. "
             "Mandala de nuevo o decime el menú de arriba de Tango "
             "(módulo y pantalla) y te digo el siguiente click."
         )
+        if detalle:
+            return texto + f"\n\n_{detalle}_"
+        return texto
     estudio = _respuesta_estudio(pregunta)
     if estudio:
         return estudio
@@ -1055,10 +1068,13 @@ def _fallback(
                 "Esta es la fórmula, lista para pegar en Tango:\n\n"
                 + _formula_para_pegar(hit)
             )
-    return (
+    texto = (
         "No pude hablar con Grok en este intento. "
         "Preguntame de nuevo: decime módulo (Sueldos, IVA, Compras) y qué pantalla ves."
     )
+    if detalle:
+        return texto + f"\n\n_{detalle}_"
+    return texto
 
 
 def preparar_imagen(raw: bytes, nombre: str = "captura.png") -> dict[str, str]:
@@ -1208,7 +1224,7 @@ def responder(
     elif formula_hit and not hay_foto:
         texto = _formula_para_pegar(formula_hit)
     else:
-        texto = _fallback(consulta, hits, imagenes)
+        texto = _fallback(consulta, hits, imagenes, error)
     return {
         "texto": _ocultar_rutas_api(texto),
         "fuentes": [

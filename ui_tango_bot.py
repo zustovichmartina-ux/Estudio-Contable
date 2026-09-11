@@ -266,7 +266,6 @@ def _leer_chat_input(raw: object) -> tuple[str, list]:
     return texto, archivos
 
 
-@st.fragment
 def render_tango_bot() -> None:
     st.markdown(_CSS, unsafe_allow_html=True)
     cargar_indice()
@@ -413,9 +412,10 @@ def render_tango_bot() -> None:
             "Escribí o adjuntá una captura de Tango…",
             accept_file=True,
             file_type=["png", "jpg", "jpeg", "webp"],
+            key="tango_chat_input",
         )
     except TypeError:
-        raw = st.chat_input("Escribí tu consulta de Tango…")
+        raw = st.chat_input("Escribí tu consulta de Tango…", key="tango_chat_input")
     texto, archivos = _leer_chat_input(raw)
     if texto or archivos:
         imagenes = []
@@ -427,10 +427,7 @@ def render_tango_bot() -> None:
 
 
 def _rerun_chat() -> None:
-    try:
-        st.rerun(scope="fragment")
-    except TypeError:
-        st.rerun()
+    st.rerun()
 
 
 def _enviar(prompt: str, api_key: str, model: str, imagenes: list[dict[str, str]]) -> None:
@@ -444,13 +441,26 @@ def _enviar(prompt: str, api_key: str, model: str, imagenes: list[dict[str, str]
         for m in st.session_state.tango_chat
         if m["role"] in {"user", "assistant"}
     ][:-1]
-    out = responder(
-        prompt,
-        historial,
-        api_key=api_key,
-        model=model,
-        imagenes=imagenes,
-    )
+    try:
+        out = responder(
+            prompt,
+            historial,
+            api_key=api_key,
+            model=model,
+            imagenes=imagenes,
+        )
+    except Exception as exc:
+        out = {
+            "texto": (
+                "No pude responder esa consulta. "
+                f"Probá de nuevo en un momento.\n\n_{exc}_"
+            ),
+            "fuentes": [],
+            "pide_formula": False,
+            "formula_encontrada": False,
+            "uso_ia": False,
+            "clave_invalida": False,
+        }
     if out.get("clave_invalida"):
         st.session_state.tango_clave_invalida = True
         st.session_state.tango_api_key = ""
