@@ -476,18 +476,21 @@ st.markdown(
     }
 
     /* Cabecera de pantalla: en el flujo (no fixed). El overlay se recortaba. */
+    [data-testid="stMarkdownContainer"]:has(.ec-pagehead) {
+        overflow: visible !important;
+    }
     [data-testid="stMarkdownContainer"] .ec-pagehead,
     .ec-pagehead {
         display: flex !important;
         flex-direction: row !important;
         flex-wrap: nowrap !important;
-        align-items: stretch !important;
+        align-items: flex-end !important;
         justify-content: flex-start !important;
         gap: 0.7rem !important;
         margin: 0 0 1.15rem 0 !important;
-        padding: 0 !important;
+        padding: 0.15rem 0 0 0 !important;
         border-bottom: 1px solid var(--ec-line) !important;
-        overflow: hidden !important;
+        overflow: visible !important;
         background: transparent !important;
     }
     .ec-pagehead-copy {
@@ -500,27 +503,28 @@ st.markdown(
         position: relative !important;
         flex: 0 0 7rem !important;
         width: 7rem !important;
-        min-height: 0 !important;
-        overflow: hidden !important;
-        clip-path: inset(0 0 3px 0) !important;
+        align-self: stretch !important;
+        min-height: 8.6rem !important;
+        overflow: visible !important;
+        clip-path: none !important;
         margin: 0 !important;
         padding: 0 !important;
         background: transparent !important;
         border: 0 !important;
         box-shadow: none !important;
-        align-self: stretch !important;
     }
     .ec-saludo-avatar,
     .stMarkdown img.ec-saludo-avatar,
     [data-testid="stMarkdownContainer"] img.ec-saludo-avatar {
         position: absolute !important;
-        left: 50% !important;
+        left: 0 !important;
+        right: 0 !important;
+        top: 0 !important;
         bottom: 0 !important;
-        top: auto !important;
-        transform: translateX(-50%) !important;
-        width: auto !important;
+        transform: none !important;
+        width: 100% !important;
         height: 100% !important;
-        max-width: 7rem !important;
+        max-width: 100% !important;
         max-height: 100% !important;
         object-fit: contain !important;
         object-position: bottom center !important;
