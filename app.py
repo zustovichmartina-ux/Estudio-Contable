@@ -152,6 +152,7 @@ from completar_cuadro_bancario import (
 )
 
 BASE_DIR = Path(__file__).resolve().parent
+LOGO_ESTUDIO_PATH = BASE_DIR / "assets" / "estudio-zona-guemes-wordmark-oscuro.png"
 DATA_PLANES_DIR = BASE_DIR / "data" / "planes_cuentas"
 # Canónico compartido en la red del estudio (mismo T: que biblioteca/borradores).
 PLANES_RED_DIR = Path(r"T:\Estudio Contable") / "planes_cuentas"
@@ -182,7 +183,7 @@ def _es_entorno_cloud() -> bool:
     return False
 
 st.set_page_config(
-    page_title="Estudio Contable",
+    page_title="Estudio Zona Güemes",
     page_icon="📋",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -517,43 +518,13 @@ st.markdown(
         line-height: 1.4 !important;
     }
     .ec-brand {
-        display: flex;
-        align-items: center;
-        gap: 0.7rem;
-        padding: 0.1rem 0.1rem 1rem 0.1rem;
-        margin-bottom: 0.55rem;
+        padding: 0 0 0.85rem 0;
+        margin: 0 0 0.55rem 0;
         border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     }
-    .ec-brand-mark {
-        width: 2rem;
-        height: 2rem;
-        border-radius: 0.5rem;
-        background: var(--ec-lagoon);
-        color: #FFFFFF;
-        font-size: 0.68rem;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-shrink: 0;
-    }
-    .ec-brand-name {
-        font-size: 0.98rem;
-        font-weight: 650;
-        color: #FFFFFF;
-        line-height: 1.15;
-        letter-spacing: -0.02em;
-        text-transform: none;
-    }
-    .ec-brand-sub {
-        margin-top: 0.12rem;
-        font-size: 0.72rem;
-        font-weight: 500;
-        color: #94A3B8;
-        line-height: 1.2;
-        letter-spacing: 0;
-        text-transform: none;
+    [data-testid="stSidebar"] .ec-brand img,
+    [data-testid="stSidebar"] [data-testid="stImage"] img {
+        border-radius: 0 !important;
     }
 
     /* Chips Biblioteca/Menú: fijos arriba a la derecha (CSS only).
@@ -1263,16 +1234,10 @@ def _render_barra_superior_cuenta() -> None:
 def _render_sidebar_sociedad_y_biblioteca(cliente: dict | None) -> None:
     """Barra lateral: solo sociedad activa (biblioteca va al toolbar superior)."""
     st.session_state["_sidebar_unificada"] = True
+    if LOGO_ESTUDIO_PATH.is_file():
+        st.sidebar.image(str(LOGO_ESTUDIO_PATH), use_container_width=True)
     st.sidebar.markdown(
-        """
-        <div class="ec-brand">
-          <div class="ec-brand-mark">EC</div>
-          <div>
-            <div class="ec-brand-name">Estudio Contable</div>
-            <div class="ec-brand-sub">Mar del Plata</div>
-          </div>
-        </div>
-        """,
+        '<div class="ec-brand"></div>',
         unsafe_allow_html=True,
     )
     _render_nav_ventanas_principales()
