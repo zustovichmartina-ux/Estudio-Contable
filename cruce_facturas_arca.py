@@ -256,14 +256,30 @@ def _cuit_compatible_receptor(cuit_r: str, cuit_esp: str) -> bool:
     return False
 
 
+def _proveedor_desde_stem(stem: str) -> str:
+    """'FC 00005-00054280 - Pagani SA' → 'Pagani SA'."""
+    if " - " not in stem:
+        return ""
+    prov = stem.split(" - ", 1)[1].strip()
+    prov = re.sub(r"\s*\(\d+\)\s*$", "", prov).strip()
+    return prov
+
+
 def _inferir_desde_nombre_archivo(nombre: str) -> dict[str, str]:
     """
     Inferencia desde nombres frecuentes AFIP / estudio:
       20179646235_001_00004_00001983.pdf
       FCA0011-01353251.pdf
+      FC 00005-00054280 - Pagani SA.pdf
+      NC 4280-00000486 - Speed Business SA.pdf
+      FC C 0002-00000034 - Lopez.pdf
+      FC 0101-A00018503 - Via Cargo SA.pdf
+      FC-REMITO 0004-00013824 - Metales.pdf
       Fact A - 14194 - ....pdf
     """
-    stem = Path(str(nombre or "")).stem
+    # Si viene de ZIP: carpeta.zip::archivo.pdf → usar solo el interno
+    base = str(nombre or "").split("::")[-1]
+    stem = Path(base).stem
     out: dict[str, str] = {}
 
     m = re.match(
@@ -278,15 +294,53 @@ def _inferir_desde_nombre_archivo(nombre: str) -> dict[str, str]:
         if tipo_letra in {"A", "B", "C", "M"}:
             out["Tipo"] = f"Factura {tipo_letra}"
         elif tipo_letra.startswith("NC"):
-            out["Tipo"] = f"Nota de Crédito {tipo_letra[-1]}" if len(tipo_letra) > 2 else "Nota de Crédito"
-        pv, nro, cmpte = m.group("pv"), m.group("nro"), formatear_comprobante(m.group("pv"), m.group("nro"))
+            out["Tipo"] = (
+                f"Nota de Crédito {tipo_letra[-1]}"
+                if len(tipo_letra) > 2
+                else "Nota de Crédito"
+            )
+        pv, nro = m.group("pv"), m.group("nro")
         out["Punto Venta"] = pv
         out["Número"] = nro
-        out["Nº Comprobante"] = cmpte
+        out["Nº Comprobante"] = formatear_comprobante(pv, nro)
+        out["Origen datos"] = "nombre_archivo"
         return out
 
+    # Estudio / Aurora: FC|NC|REC [C] PV-[A]NRO - Proveedor
+    m_est = re.match(
+        r"^(?P<pref>FC(?:-REMITO)?|NC|ND|REC)\s*(?P<letra>[A-C])?\s+"
+        r"(?P<pv>\d{1,5})\s*[-_]\s*[A-Z]?(?P<nro>\d{1,14})"
+        r"(?:\s*-\s*(?P<prov>.+))?$",
+        stem,
+        flags=re.IGNORECASE,
+    )
+    if m_est:
+        pref = m_est.group("pref").upper()
+        letra = (m_est.group("letra") or "").upper()
+        pv, nro = m_est.group("pv"), m_est.group("nro")
+        if pref.startswith("FC"):
+            out["Tipo"] = f"Factura {letra}".strip() if letra else "Factura"
+            if "REMITO" in pref:
+                out["Tipo"] = "Factura / Remito"
+        elif pref == "NC":
+            out["Tipo"] = f"Nota de Crédito {letra}".strip() if letra else "Nota de Crédito"
+        elif pref == "ND":
+            out["Tipo"] = f"Nota de Débito {letra}".strip() if letra else "Nota de Débito"
+        elif pref == "REC":
+            out["Tipo"] = "Recibo"
+        out["Punto Venta"] = pv
+        out["Número"] = nro
+        out["Nº Comprobante"] = formatear_comprobante(pv, nro)
+        prov = (m_est.group("prov") or "").strip() or _proveedor_desde_stem(stem)
+        if prov:
+            out["Proveedor"] = re.sub(r"\s*\(\d+\)\s*$", "", prov).strip()
+        out["Origen datos"] = "nombre_archivo"
+        return out
+
+    # PV-NRO al inicio aunque no haya prefijo FC (permite basura después)
     m2 = re.match(
-        r"^(?:FC|FCA|FB|FC B|FA)?\s*A?(?P<pv>\d{4,5})\s*[-_ ]\s*(?P<nro>\d{6,8})$",
+        r"^(?:FC|FCA|FB|FC\s*B|FA|NC|ND)?\s*[A-C]?\s*"
+        r"(?P<pv>\d{1,5})\s*[-_ ]\s*[A-Z]?(?P<nro>\d{4,14})\b",
         stem,
         flags=re.IGNORECASE,
     )
@@ -294,11 +348,32 @@ def _inferir_desde_nombre_archivo(nombre: str) -> dict[str, str]:
         out["Nº Comprobante"] = formatear_comprobante(m2.group("pv"), m2.group("nro"))
         out["Punto Venta"] = m2.group("pv")
         out["Número"] = m2.group("nro")
+        prov = _proveedor_desde_stem(stem)
+        if prov:
+            out["Proveedor"] = prov
+        out["Origen datos"] = "nombre_archivo"
+        return out
+
+    # Búsqueda libre de PV-NRO en cualquier parte del nombre
+    m_free = re.search(
+        r"(?<!\d)(\d{1,5})\s*[-_/]\s*[A-Z]?(\d{4,14})(?!\d)",
+        stem,
+        flags=re.IGNORECASE,
+    )
+    if m_free:
+        out["Punto Venta"] = m_free.group(1)
+        out["Número"] = m_free.group(2)
+        out["Nº Comprobante"] = formatear_comprobante(m_free.group(1), m_free.group(2))
+        prov = _proveedor_desde_stem(stem)
+        if prov:
+            out["Proveedor"] = prov
+        out["Origen datos"] = "nombre_archivo"
         return out
 
     m3 = re.search(r"Fact\s*A?\s*[-_]?\s*(\d{3,8})", stem, flags=re.IGNORECASE)
     if m3:
         out["Número"] = m3.group(1)
+        out["Origen datos"] = "nombre_archivo"
     return out
 
 
@@ -372,18 +447,41 @@ def leer_listado_arca(
 
     if suf == ".csv":
         raw = None
-        for sep in (";", ",", "\t"):
-            bio.seek(0)
-            try:
-                candidate = pd.read_csv(bio, header=None, dtype=object, sep=sep, engine="python")
-                if candidate.shape[1] >= 5:
-                    raw = candidate
-                    break
-            except Exception:
-                continue
+        last_err: Exception | None = None
+        for enc in ("utf-8-sig", "latin-1", "cp1252"):
+            for sep in (";", ",", "\t"):
+                bio.seek(0)
+                try:
+                    candidate = pd.read_csv(
+                        bio,
+                        header=None,
+                        dtype=object,
+                        sep=sep,
+                        engine="python",
+                        encoding=enc,
+                    )
+                    if candidate.shape[1] >= 5:
+                        raw = candidate
+                        break
+                except Exception as exc:
+                    last_err = exc
+                    continue
+            if raw is not None:
+                break
         if raw is None:
             bio.seek(0)
-            raw = pd.read_csv(bio, header=None, dtype=object, engine="python")
+            try:
+                raw = pd.read_csv(
+                    bio,
+                    header=None,
+                    dtype=object,
+                    engine="python",
+                    encoding="latin-1",
+                )
+            except Exception:
+                if last_err:
+                    raise last_err
+                raise
     else:
         bio.seek(0)
         try:
@@ -871,40 +969,66 @@ def iter_archivos_factura(uploads: Sequence[Any]) -> list[tuple[str, bytes]]:
     return salida
 
 
+def _fila_desde_nombre(nombre: str, *, cuit_esp: str = "") -> dict[str, Any] | None:
+    """Arma fila mínima solo con el nombre de archivo (modo rápido)."""
+    inferido = _inferir_desde_nombre_archivo(nombre)
+    if not inferido.get("Nº Comprobante") and not inferido.get("CUIT Emisor"):
+        return None
+    return {
+        "Proveedor": inferido.get("Proveedor") or "",
+        "Tipo": inferido.get("Tipo") or "",
+        "Código AFIP": inferido.get("Código AFIP") or "",
+        "Nº Comprobante": inferido.get("Nº Comprobante") or "",
+        "Fecha": "",
+        "Total": 0.0,
+        "CAE": "",
+        "CUIT Emisor": inferido.get("CUIT Emisor") or "",
+        "CUIT Receptor": cuit_esp,
+        "Receptor Nombre": "",
+        "Punto Venta": inferido.get("Punto Venta") or "",
+        "Número": inferido.get("Número") or "",
+        "Archivo": nombre,
+        "Metodo": "nombre_archivo",
+        "Origen datos": "nombre_archivo",
+    }
+
+
 def extraer_facturas(
     uploads: Sequence[Any],
     *,
     usar_ocr: bool = True,
     cuit_contribuyente: str = "",
+    solo_nombre: bool = False,
 ) -> tuple[pd.DataFrame, list[dict]]:
-    """Extrae comprobantes desde PDF/fotos. Retorna (df, errores)."""
+    """Extrae comprobantes desde PDF/fotos. Retorna (df, errores).
+
+    solo_nombre=True: no abre PDF ni OCR; cruza solo por PV-Nro del nombre
+    (recomendado cuando los archivos ya están renombrados tipo estudio).
+    """
     filas: list[dict] = []
     errores: list[dict] = []
     cuit_esp = normalizar_cuit(cuit_contribuyente)
 
     for nombre, data in iter_archivos_factura(uploads):
         try:
+            if solo_nombre:
+                parsed = _fila_desde_nombre(nombre, cuit_esp=cuit_esp)
+                if not parsed:
+                    errores.append({
+                        "archivo": nombre,
+                        "motivo": "No se pudo leer PV-Nro del nombre de archivo.",
+                    })
+                    continue
+                filas.append(parsed)
+                continue
+
             inferido = _inferir_desde_nombre_archivo(nombre)
             texto, metodo = extraer_texto_comprobante(nombre, data, usar_ocr=usar_ocr)
             if not texto.strip():
                 # Si el nombre trae CUIT+PV+nro, igual armamos fila mínima
                 if inferido.get("Nº Comprobante") or inferido.get("CUIT Emisor"):
-                    parsed = {
-                        "Proveedor": "",
-                        "Tipo": inferido.get("Tipo") or "",
-                        "Código AFIP": inferido.get("Código AFIP") or "",
-                        "Nº Comprobante": inferido.get("Nº Comprobante") or "",
-                        "Fecha": "",
-                        "Total": 0.0,
-                        "CAE": "",
-                        "CUIT Emisor": inferido.get("CUIT Emisor") or "",
-                        "CUIT Receptor": cuit_esp,
-                        "Receptor Nombre": "",
-                        "Punto Venta": inferido.get("Punto Venta") or "",
-                        "Número": inferido.get("Número") or "",
-                        "Archivo": nombre,
-                        "Metodo": f"nombre_archivo:{metodo}",
-                    }
+                    parsed = _fila_desde_nombre(nombre, cuit_esp=cuit_esp) or {}
+                    parsed["Metodo"] = f"nombre_archivo:{metodo}"
                     filas.append(parsed)
                     errores.append({
                         "archivo": nombre,
@@ -921,8 +1045,20 @@ def extraer_facturas(
             for k, v in inferido.items():
                 if v and not parsed.get(k):
                     parsed[k] = v
-            if inferido.get("Nº Comprobante") and not parsed.get("Nº Comprobante"):
-                parsed["Nº Comprobante"] = inferido["Nº Comprobante"]
+            # El PV-Nro del nombre manda si el OCR trajo basura o vacío
+            if inferido.get("Nº Comprobante"):
+                if not parsed.get("Nº Comprobante") or inferido.get("Origen datos") == "nombre_archivo":
+                    # Preferir nombre cuando el patrón estudio es claro
+                    if re.search(
+                        r"(?i)\b(FC|NC|ND|REC)\b",
+                        Path(str(nombre).split("::")[-1]).stem,
+                    ):
+                        parsed["Nº Comprobante"] = inferido["Nº Comprobante"]
+                        parsed["Punto Venta"] = inferido.get("Punto Venta") or parsed.get("Punto Venta")
+                        parsed["Número"] = inferido.get("Número") or parsed.get("Número")
+                        parsed["Origen datos"] = "nombre_archivo"
+                    elif not parsed.get("Nº Comprobante"):
+                        parsed["Nº Comprobante"] = inferido["Nº Comprobante"]
             if (
                 inferido.get("CUIT Emisor")
                 and parsed.get("CUIT Emisor")
@@ -932,6 +1068,8 @@ def extraer_facturas(
                 # El parser tomó el CUIT del contribuyente como emisor; preferir el del nombre
                 parsed["CUIT Receptor"] = parsed.get("CUIT Receptor") or parsed.get("CUIT Emisor")
                 parsed["CUIT Emisor"] = inferido["CUIT Emisor"]
+            if inferido.get("Proveedor") and not parsed.get("Proveedor"):
+                parsed["Proveedor"] = inferido["Proveedor"]
             parsed["Archivo"] = nombre
             parsed["Metodo"] = metodo
             if not parsed.get("Nº Comprobante") and not parsed.get("CAE") and not parsed.get("Total"):
@@ -958,11 +1096,17 @@ def cruzar_facturas_vs_arca(
     *,
     cuit_contribuyente: str = "",
     tol_importe: float = TOL_IMPORTE,
+    priorizar_nombre: bool = True,
 ) -> dict[str, pd.DataFrame]:
     """
     Cruza facturas extraídas vs listado ARCA.
 
-    Retorna dict con DataFrames: matcheadas, a_revisar, faltantes, diferencias.
+    Retorna dict con DataFrames: matcheadas, a_revisar, faltantes, diferencias,
+    duplicados (varios archivos con mismo PV-Nro).
+
+    priorizar_nombre=True: el match principal es PV+número (como el cruce manual
+    del estudio). No manda a "a revisar" por CUIT receptor vacío/OCR si el
+    comprobante del nombre ya está en ARCA.
     """
     cuit_esp = normalizar_cuit(cuit_contribuyente)
     fact = df_facturas.copy() if df_facturas is not None else pd.DataFrame()
@@ -1008,6 +1152,29 @@ def cruzar_facturas_vs_arca(
     matcheadas: list[dict] = []
     a_revisar: list[dict] = []
     diferencias: list[dict] = []
+    duplicados: list[dict] = []
+
+    # Detectar varios archivos con el mismo comprobante
+    cmp_a_archivos: dict[str, list[str]] = {}
+    if not fact.empty and "Nº Comprobante" in fact.columns:
+        for _, f0 in fact.iterrows():
+            c0 = str(f0.get("Nº Comprobante") or "").strip()
+            if not c0:
+                continue
+            cmp_a_archivos.setdefault(c0, []).append(str(f0.get("Archivo") or ""))
+    for cmpte_d, archivos_d in cmp_a_archivos.items():
+        unicos = []
+        for a in archivos_d:
+            if a and a not in unicos:
+                unicos.append(a)
+        if len(unicos) > 1:
+            for a in unicos:
+                duplicados.append({
+                    "Nº Comprobante": cmpte_d,
+                    "Archivo": a,
+                    "Cantidad archivos": len(unicos),
+                    "Observación": "Mismo PV-Nro en varios archivos (duplicado en carpeta).",
+                })
 
     for _, f in fact.iterrows() if not fact.empty else []:
         proveedor = str(f.get("Proveedor") or "").strip()
@@ -1024,9 +1191,38 @@ def cruzar_facturas_vs_arca(
         cuit_r = normalizar_cuit(f.get("CUIT Receptor"))
         archivo = str(f.get("Archivo") or "")
         tipo_n = _norm_tipo_match(tipo) or _norm_tipo_match(f.get("Código AFIP"))
+        origen_nombre = (
+            str(f.get("Origen datos") or "") == "nombre_archivo"
+            or str(f.get("Metodo") or "").startswith("nombre_archivo")
+            or priorizar_nombre
+        )
+        tipo_upper = tipo.upper()
 
-        # Receptor distinto al contribuyente del listado (tolerar OCR near-miss)
-        if cuit_esp and cuit_r and not _cuit_compatible_receptor(cuit_r, cuit_esp):
+        # Recibos / no fiscales: no se esperan en Portal IVA
+        if tipo_upper.startswith("RECIBO") or re.search(r"(?i)\bREC\b", Path(archivo.split("::")[-1]).stem):
+            a_revisar.append({
+                "Proveedor": proveedor,
+                "Comprobante": f"{tipo} {cmpte}".strip(),
+                "Fecha": fecha,
+                "Total": total_f,
+                "Motivo / Observación": (
+                    "Recibo / documento no fiscal. No se espera en Mis Comprobantes "
+                    "del Portal IVA (queda solo en la carpeta)."
+                ),
+                "CUIT Emisor": cuit_e,
+                "CUIT Receptor": cuit_r,
+                "Archivo": archivo,
+            })
+            continue
+
+        # Receptor distinto: solo bloquear si hay evidencia fuerte de otro CUIT
+        # y NO estamos en cruce por nombre con PV-Nro claro.
+        if (
+            cuit_esp
+            and cuit_r
+            and not _cuit_compatible_receptor(cuit_r, cuit_esp)
+            and not (origen_nombre and cmpte)
+        ):
             a_revisar.append({
                 "Proveedor": proveedor,
                 "Comprobante": f"{tipo} {cmpte}".strip(),
@@ -1045,17 +1241,26 @@ def cruzar_facturas_vs_arca(
             continue
 
         candidatos_idx: list[int] = []
-        for k in (
-            _clave_match(cae=cae, cuit_emisor=cuit_e, comprobante=cmpte, tipo=tipo),
-            f"cae:{cae}" if cae else "",
-            f"cuit+tipo+cmp:{cuit_e}|{tipo_n}|{cmpte}" if (cuit_e and tipo_n and cmpte) else "",
-            f"cuit+cmp:{cuit_e}|{cmpte}" if (cuit_e and cmpte) else "",
-            f"cmp:{cmpte}" if cmpte else "",
-            f"cuit+fecha+imp:{cuit_e}|{fecha}|{total_f:.2f}" if (cuit_e and fecha and total_f) else "",
-            f"cuit+imp:{cuit_e}|{total_f:.2f}" if (cuit_e and total_f) else "",
-        ):
-            if not k:
+        # Orden: con priorizar_nombre, PV-Nro primero (método Aurora / estudio)
+        claves_orden: list[str] = []
+        if priorizar_nombre and cmpte:
+            claves_orden.append(f"cmp:{cmpte}")
+        claves_orden.extend(
+            [
+                _clave_match(cae=cae, cuit_emisor=cuit_e, comprobante=cmpte, tipo=tipo),
+                f"cae:{cae}" if cae else "",
+                f"cuit+tipo+cmp:{cuit_e}|{tipo_n}|{cmpte}" if (cuit_e and tipo_n and cmpte) else "",
+                f"cuit+cmp:{cuit_e}|{cmpte}" if (cuit_e and cmpte) else "",
+                f"cmp:{cmpte}" if cmpte else "",
+                f"cuit+fecha+imp:{cuit_e}|{fecha}|{total_f:.2f}" if (cuit_e and fecha and total_f) else "",
+                f"cuit+imp:{cuit_e}|{total_f:.2f}" if (cuit_e and total_f) else "",
+            ]
+        )
+        vistos_k: set[str] = set()
+        for k in claves_orden:
+            if not k or k in vistos_k:
                 continue
+            vistos_k.add(k)
             for idx in indice.get(k, []):
                 if idx not in usados_arca and idx not in candidatos_idx:
                     candidatos_idx.append(idx)
@@ -1096,8 +1301,30 @@ def cruzar_facturas_vs_arca(
                 candidatos_idx.append(mismos[0])
 
         if not candidatos_idx:
-            motivo = "Factura subida que NO figura en el listado ARCA. Revisar: puede faltar en ARCA o ser documento no fiscal / otro CUIT."
-            if not cuit_r and cuit_esp:
+            # Mismo PV-Nro ya matcheado por otro archivo → duplicado, no "falta en ARCA"
+            ya_en_arca = [
+                i for i, row in enumerate(arca_rows)
+                if str(row.get("Comprobante") or "") == cmpte
+            ] if cmpte else []
+            if ya_en_arca:
+                arow = arca_rows[ya_en_arca[0]]
+                matcheadas.append({
+                    "Proveedor": proveedor or str(arow.get("Proveedor") or ""),
+                    "Tipo": tipo or str(arow.get("Tipo") or ""),
+                    "Nº Comprobante": cmpte or str(arow.get("Comprobante") or ""),
+                    "Fecha": fecha or _fmt_fecha(arow.get("Fecha")),
+                    "Total": round(abs(float(arow.get("Total") or 0)), 2),
+                    "CAE": cae or normalizar_cae(arow.get("CAE")) or "-",
+                    "CUIT Emisor": cuit_e or normalizar_cuit(arow.get("CUIT Emisor")),
+                    "Archivo": archivo,
+                    "Estado": "OK (archivo duplicado)",
+                })
+                continue
+            motivo = (
+                "Archivo en carpeta que NO figura en el listado ARCA/Portal IVA. "
+                "Revisar: puede faltar en el CSV, ser REC/no fiscal, u otro CUIT."
+            )
+            if not cuit_r and cuit_esp and not (origen_nombre and cmpte):
                 motivo = (
                     "Campo cliente/CUIT receptor vacío o no legible. "
                     "No se puede confirmar que sea del contribuyente. No figura en ARCA."
@@ -1130,6 +1357,10 @@ def cruzar_facturas_vs_arca(
         cmpte_out = cmpte or str(arow.get("Comprobante") or "")
         fecha_out = fecha or _fmt_fecha(arow.get("Fecha"))
         cae_out = cae or normalizar_cae(arow.get("CAE")) or "-"
+
+        # Con cruce por nombre no comparamos importes (PDF no leído)
+        if origen_nombre and float(f.get("Total") or 0) <= 0:
+            dif = 0.0
 
         if abs(dif) > tol_importe:
             diferencias.append({
@@ -1179,11 +1410,13 @@ def cruzar_facturas_vs_arca(
                 df[c] = ""
         return df[cols]
 
+    cols_dup = ["Nº Comprobante", "Archivo", "Cantidad archivos", "Observación"]
     return {
         "matcheadas": _df(COLUMNAS_MATCH, matcheadas),
         "a_revisar": _df(COLUMNAS_REVISAR, a_revisar),
         "faltantes": _df(COLUMNAS_FALTANTES, faltantes),
         "diferencias": _df(COLUMNAS_DIF, diferencias),
+        "duplicados": _df(cols_dup, duplicados),
     }
 
 
@@ -1203,6 +1436,7 @@ def exportar_cruce_excel(
     r = resultado.get("a_revisar")
     f = resultado.get("faltantes")
     d = resultado.get("diferencias")
+    dup = resultado.get("duplicados")
     if m is None:
         m = pd.DataFrame(columns=COLUMNAS_MATCH)
     if r is None:
@@ -1211,19 +1445,44 @@ def exportar_cruce_excel(
         f = pd.DataFrame(columns=COLUMNAS_FALTANTES)
     if d is None:
         d = pd.DataFrame(columns=COLUMNAS_DIF)
+    if dup is None:
+        dup = pd.DataFrame(
+            columns=["Nº Comprobante", "Archivo", "Cantidad archivos", "Observación"]
+        )
 
     resumen = pd.DataFrame(
         [
             {"Concepto": "Matcheadas (OK)", "Cantidad": len(m), "Importe": round(float(pd.to_numeric(m["Total"], errors="coerce").fillna(0).sum()) if not m.empty else 0, 2)},
-            {"Concepto": "A revisar (en factura, no en ARCA)", "Cantidad": len(r), "Importe": round(float(pd.to_numeric(r["Total"], errors="coerce").fillna(0).sum()) if not r.empty else 0, 2)},
+            {"Concepto": "Solo en carpeta / a revisar", "Cantidad": len(r), "Importe": round(float(pd.to_numeric(r["Total"], errors="coerce").fillna(0).sum()) if not r.empty else 0, 2)},
             {"Concepto": "Faltantes (en ARCA, sin factura)", "Cantidad": len(f), "Importe": round(float(pd.to_numeric(f["Total"], errors="coerce").fillna(0).sum()) if not f.empty else 0, 2)},
             {"Concepto": "Diferencias de importe", "Cantidad": len(d), "Importe": round(float(pd.to_numeric(d.get("Diferencia", pd.Series(dtype=float)), errors="coerce").fillna(0).abs().sum()) if not d.empty else 0, 2)},
         ]
     )
 
+    # Faltantes por proveedor (como el Excel Aurora)
+    if not f.empty and "Proveedor" in f.columns:
+        por_prov = (
+            f.groupby("Proveedor", as_index=False)
+            .agg(
+                Cantidad=("Comprobante", "count"),
+                Importe=("Total", lambda s: round(float(pd.to_numeric(s, errors="coerce").fillna(0).sum()), 2)),
+            )
+            .sort_values("Importe", ascending=False)
+        )
+    else:
+        por_prov = pd.DataFrame(columns=["Proveedor", "Cantidad", "Importe"])
+
     sub = subtitulo
     if cuit:
         sub = f"{subtitulo} · CUIT {cuit}"
+
+    hojas_extra = [
+        ("Solo en carpeta", r),
+        ("Faltantes en carpeta", f),
+        ("Diferencias", d),
+    ]
+    if not dup.empty:
+        hojas_extra.append(("Duplicados carpeta", dup))
 
     return exportar_informe_excel(
         titulo=titulo,
@@ -1231,22 +1490,22 @@ def exportar_cruce_excel(
         periodo=periodo,
         kpis=[
             ("Matcheadas", len(m), "int"),
-            ("A revisar", len(r), "int"),
+            ("Solo en carpeta", len(r), "int"),
             ("Faltantes", len(f), "int"),
             ("Diferencias", len(d), "int"),
         ],
-        resumenes=[("Resumen del cruce", resumen)],
+        resumenes=[
+            ("Resumen del cruce", resumen),
+            ("Faltantes por proveedor", por_prov),
+        ],
         detalle=m,
         hoja_detalle="Matcheadas",
-        hojas_adicionales=[
-            ("A revisar", r),
-            ("Faltantes", f),
-            ("Diferencias", d),
-        ],
+        hojas_adicionales=hojas_extra,
         col_moneda=[
             "Total", "Importe", "Total Factura", "Total ARCA", "Diferencia",
         ],
         col_fecha=["Fecha"],
+        col_texto=["Nº Comprobante", "Comprobante", "Punto de venta", "Tipo"],
         total_col="Total",
     )
 
@@ -1262,19 +1521,28 @@ def guardar_cruce_excel(
     r = resultado.get("a_revisar", pd.DataFrame())
     f = resultado.get("faltantes", pd.DataFrame())
     d = resultado.get("diferencias", pd.DataFrame())
+    dup = resultado.get("duplicados", pd.DataFrame())
 
     resumen = pd.DataFrame(
         [
             {"Concepto": "Matcheadas (OK)", "Cantidad": len(m), "Importe": round(float(pd.to_numeric(m["Total"], errors="coerce").fillna(0).sum()) if not m.empty and "Total" in m.columns else 0, 2)},
-            {"Concepto": "A revisar", "Cantidad": len(r), "Importe": round(float(pd.to_numeric(r["Total"], errors="coerce").fillna(0).sum()) if not r.empty and "Total" in r.columns else 0, 2)},
+            {"Concepto": "Solo en carpeta", "Cantidad": len(r), "Importe": round(float(pd.to_numeric(r["Total"], errors="coerce").fillna(0).sum()) if not r.empty and "Total" in r.columns else 0, 2)},
             {"Concepto": "Faltantes", "Cantidad": len(f), "Importe": round(float(pd.to_numeric(f["Total"], errors="coerce").fillna(0).sum()) if not f.empty and "Total" in f.columns else 0, 2)},
-            {"Concepto": "Diferencias", "Cantidad": len(d), "Importe": 0.0},
+            {"Concepto": "Diferencias", "Cantidad": len(d) if d is not None else 0, "Importe": 0.0},
         ]
     )
     cuit = str(kwargs.get("cuit") or "")
     subtitulo = str(kwargs.get("subtitulo") or "Mis Comprobantes · Estudio Contable")
     if cuit:
         subtitulo = f"{subtitulo} · CUIT {cuit}"
+
+    hojas_extra = [
+        ("Solo en carpeta", r if r is not None else pd.DataFrame()),
+        ("Faltantes en carpeta", f if f is not None else pd.DataFrame()),
+        ("Diferencias", d if d is not None else pd.DataFrame()),
+    ]
+    if dup is not None and not dup.empty:
+        hojas_extra.append(("Duplicados carpeta", dup))
 
     return guardar_informe_excel(
         ruta,
@@ -1283,18 +1551,14 @@ def guardar_cruce_excel(
         periodo=str(kwargs.get("periodo") or ""),
         kpis=[
             ("Matcheadas", len(m), "int"),
-            ("A revisar", len(r), "int"),
-            ("Faltantes", len(f), "int"),
-            ("Diferencias", len(d), "int"),
+            ("Solo en carpeta", len(r) if r is not None else 0, "int"),
+            ("Faltantes", len(f) if f is not None else 0, "int"),
+            ("Diferencias", len(d) if d is not None else 0, "int"),
         ],
         resumenes=[("Resumen del cruce", resumen)],
         detalle=m if m is not None else pd.DataFrame(),
         hoja_detalle="Matcheadas",
-        hojas_adicionales=[
-            ("A revisar", r if r is not None else pd.DataFrame()),
-            ("Faltantes", f if f is not None else pd.DataFrame()),
-            ("Diferencias", d if d is not None else pd.DataFrame()),
-        ],
+        hojas_adicionales=hojas_extra,
         col_moneda=["Total", "Importe", "Total Factura", "Total ARCA", "Diferencia"],
         col_fecha=["Fecha"],
         total_col="Total",
@@ -1308,9 +1572,13 @@ def procesar_cruce_facturas_arca(
     usar_ocr: bool = True,
     cuit_contribuyente: str = "",
     nombre_arca: str | None = None,
+    solo_nombre: bool = True,
 ) -> tuple[dict[str, pd.DataFrame], list[dict], str, bytes]:
     """
     Pipeline completo para Streamlit.
+
+    solo_nombre=True (default): cruza por PV-Nro del nombre de archivo,
+    sin OCR — mismo criterio que el cruce manual del estudio.
 
     Retorna (resultado_dfs, errores_facturas, cuit_detectado, excel_bytes).
     """
@@ -1328,9 +1596,20 @@ def procesar_cruce_facturas_arca(
 
     df_fact, errores = extraer_facturas(
         facturas_uploads,
-        usar_ocr=usar_ocr,
+        usar_ocr=usar_ocr and not solo_nombre,
         cuit_contribuyente=cuit,
+        solo_nombre=solo_nombre,
     )
-    resultado = cruzar_facturas_vs_arca(df_fact, df_arca, cuit_contribuyente=cuit)
-    xlsx = exportar_cruce_excel(resultado, cuit=cuit)
+    resultado = cruzar_facturas_vs_arca(
+        df_fact,
+        df_arca,
+        cuit_contribuyente=cuit,
+        priorizar_nombre=True,
+    )
+    modo = "por nombre de archivo (PV-Nro)" if solo_nombre else "con lectura PDF/OCR"
+    xlsx = exportar_cruce_excel(
+        resultado,
+        cuit=cuit,
+        subtitulo=f"Mis Comprobantes · Cruce {modo}",
+    )
     return resultado, errores, cuit, xlsx

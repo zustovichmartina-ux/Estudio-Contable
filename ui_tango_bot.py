@@ -7,89 +7,101 @@ from pathlib import Path
 
 import streamlit as st
 
-from tango_bot import INDEX_PATH, preparar_imagen, reconstruir_indice, responder
+from tango_bot import cargar_indice, preparar_imagen, reconstruir_indice, responder
 
 _SUGERIDAS = [
     ("Fórmula sueldo básico", "Formulá el concepto 1 Sueldo básico y dame FormulaImporte y FormulaCantidad listas para copiar y pegar en Tango"),
     ("Asiento IVA al cargar factura", "¿Cómo se genera el asiento automático de IVA al cargar una factura?"),
     ("DETIVA mensual", "Diferencia entre asiento por comprobante y determinación mensual DETIVA"),
     ("IVA como VARIOS", "Por qué el estudio exporta IVA como VARIOS y no como tipo IVA"),
+    ("Mis Retenciones", "En la DDJJ de IVA, ¿qué fecha e importe se toman de Mis Retenciones?"),
 ]
 
 _CSS = """
 <style>
 div[data-testid="stChatMessage"] {
-    background: #fff;
-    border: 1px solid #B8C7D9;
+    background: var(--ec-card, #FFFFFF);
+    border: none;
     border-radius: 16px;
-    padding: 0.45rem 0.35rem;
+    padding: 0.55rem 0.7rem;
     margin-bottom: 0.55rem;
-    box-shadow: 0 2px 8px rgba(31, 78, 121, 0.06);
+    box-shadow: none;
+    color: var(--ec-night, #0B0D10);
+}
+div[data-testid="stChatMessage"] p,
+div[data-testid="stChatMessage"] li,
+div[data-testid="stChatMessage"] span {
+    color: var(--ec-night, #0B0D10) !important;
 }
 .tango-hero {
-    text-align: center;
-    padding: 2.4rem 0.75rem 1.1rem;
+    text-align: left;
+    padding: 0.15rem 0 0.55rem;
 }
 .tango-hero h1 {
-    font-size: 1.85rem;
-    font-weight: 700;
-    color: #1F4E79;
+    font-family: var(--ec-display, Outfit, sans-serif);
+    font-size: 1.45rem;
+    font-weight: 650;
+    color: var(--ec-ink, #0F172A);
     letter-spacing: -0.03em;
-    margin: 0 0 0.45rem 0;
+    margin: 0 0 0.3rem 0;
+    text-transform: none;
 }
 .tango-hero p {
-    color: #3D4F63;
-    font-size: 1.05rem;
+    color: var(--ec-muted, #64748B);
+    font-size: 0.95rem;
     margin: 0;
 }
 .tango-sug-label {
-    color: #1F4E79;
-    font-weight: 700;
-    font-size: 0.95rem;
-    letter-spacing: 0.02em;
-    margin: 0.35rem 0 0.65rem 0;
-    text-align: center;
+    color: var(--ec-muted, #64748B);
+    font-weight: 600;
+    font-size: 0.7rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    margin: 0.2rem 0 0.45rem 0;
+    text-align: left;
 }
 [class*="st-key-tango_sug_box"],
 div.stMarkdown:has(.tango-sug-label) + div [data-testid="stVerticalBlockBorderWrapper"] {
-    background: #FFFFFF !important;
-    border: 2px solid #1F4E79 !important;
-    border-radius: 14px !important;
-    box-shadow: 0 4px 16px rgba(31, 78, 121, 0.12) !important;
+    background: var(--ec-card, #FFFFFF) !important;
+    border: none !important;
+    border-radius: 16px !important;
+    box-shadow: none !important;
 }
 [class*="st-key-tango_sug_box"] .stButton > button,
 [class*="st-key-tango_sug_box"] button[kind="secondary"],
 [class*="st-key-tango_sug_"] .stButton > button,
 [class*="st-key-tango_sug_"] button[kind="secondary"] {
-    background: #F4F8FC !important;
-    color: #1F4E79 !important;
-    border: 2px solid #1F4E79 !important;
-    font-weight: 600 !important;
-    font-size: 0.98rem !important;
-    min-height: 3.05rem !important;
-    box-shadow: 0 2px 10px rgba(31, 78, 121, 0.12) !important;
+    background: transparent !important;
+    color: var(--ec-night, #0B0D10) !important;
+    border: 1px solid rgba(11, 13, 16, 0.16) !important;
+    font-weight: 500 !important;
+    font-size: 0.85rem !important;
+    min-height: 2.35rem !important;
+    border-radius: 10px !important;
+    box-shadow: none !important;
 }
 [class*="st-key-tango_sug_box"] .stButton > button:hover,
 [class*="st-key-tango_sug_box"] button[kind="secondary"]:hover,
 [class*="st-key-tango_sug_"] .stButton > button:hover,
 [class*="st-key-tango_sug_"] button[kind="secondary"]:hover {
-    background: #1F4E79 !important;
+    background: var(--ec-lagoon, #2563EB) !important;
     color: #FFFFFF !important;
+    border-color: var(--ec-lagoon, #2563EB) !important;
     opacity: 1 !important;
 }
 [data-testid="stBottomBlockContainer"] {
-    background: linear-gradient(to top, #E8EEF5 70%, rgba(247, 249, 252, 0)) !important;
-    padding-bottom: 1.15rem !important;
+    background: var(--ec-night, #0B0D10) !important;
+    padding-bottom: 0.85rem !important;
 }
 [data-testid="stChatInput"] {
-    background: #FFFFFF !important;
-    border: 2px solid #1F4E79 !important;
-    border-radius: 18px !important;
-    box-shadow: 0 6px 22px rgba(31, 78, 121, 0.18) !important;
+    background: #14161A !important;
+    border: 1px solid var(--ec-charcoal, #1C1E22) !important;
+    border-radius: 16px !important;
+    box-shadow: none !important;
 }
 [data-testid="stChatInput"] > div,
 [data-testid="stChatInput"] .stChatInputContainer {
-    background: #FFFFFF !important;
+    background: transparent !important;
     border: none !important;
     box-shadow: none !important;
     border-radius: 16px !important;
@@ -98,17 +110,17 @@ div.stMarkdown:has(.tango-sug-label) + div [data-testid="stVerticalBlockBorderWr
 [data-testid="stChatInput"] [data-testid="stChatInputTextArea"],
 [data-testid="stChatInput"] input,
 [data-testid="stChatInput"] [data-baseweb="textarea"] textarea {
-    color: #1A1A1A !important;
-    font-size: 1.05rem !important;
-    caret-color: #1F4E79 !important;
+    color: var(--ec-ink, #F4F4F5) !important;
+    font-size: 0.95rem !important;
+    caret-color: var(--ec-lagoon, #2563EB) !important;
 }
 [data-testid="stChatInput"] textarea::placeholder,
 [data-testid="stChatInput"] [data-baseweb="textarea"] textarea::placeholder {
-    color: #4A5D73 !important;
+    color: var(--ec-muted, #9CA3AF) !important;
     opacity: 1 !important;
 }
 [data-testid="stChatInput"] button {
-    background: #1F4E79 !important;
+    background: var(--ec-lagoon, #2563EB) !important;
     color: #FFFFFF !important;
     border: none !important;
     border-radius: 10px !important;
@@ -199,8 +211,10 @@ def _leer_chat_input(raw: object) -> tuple[str, list]:
     return texto, archivos
 
 
+@st.fragment
 def render_tango_bot() -> None:
     st.markdown(_CSS, unsafe_allow_html=True)
+    cargar_indice()
 
     if "tango_chat" not in st.session_state:
         st.session_state.tango_chat = []
@@ -283,18 +297,18 @@ def render_tango_bot() -> None:
                 _panel_ia()
                 if not web:
                     if st.button("Reindexar ayudas Tango", key="tango_reindex"):
-                        with st.spinner("Leyendo Desktop\\Tango y normativas…"):
+                        with st.spinner("Leyendo el manual HTML de Tango…"):
                             docs = reconstruir_indice(guardar=True)
-                        st.success(f"Listo: {len(docs)} fragmentos")
+                        st.success(f"Listo: {len(docs)} fragmentos HTML (sin PDF)")
         with top_r:
             if st.button("Nueva charla", key="tango_clear", use_container_width=True):
                 st.session_state.tango_chat = []
-                st.rerun()
+                _rerun_chat()
 
     if not chat:
         st.markdown(
             '<div class="tango-hero"><h1>Agente Tango</h1>'
-            "<p>Grok formula la respuesta con lo del estudio.</p></div>",
+            "<p>Preguntá por una fórmula o adjuntá una captura.</p></div>",
             unsafe_allow_html=True,
         )
         _panel_ia()
@@ -311,13 +325,28 @@ def render_tango_bot() -> None:
                 if st.button(label, key=f"tango_sug_{i}", use_container_width=True):
                     with st.spinner("El agente está pensando…"):
                         _enviar(pregunta, api_key, model, [])
-                    st.rerun()
+                    _rerun_chat()
     else:
         for msg in chat:
             with st.chat_message(msg["role"]):
                 for data_url in msg.get("imagenes") or []:
                     st.image(data_url, width=480, caption="Captura de Tango")
                 st.markdown(msg["content"])
+                if msg.get("role") == "assistant":
+                    if msg.get("pide_formula") and not msg.get("formula_encontrada"):
+                        st.warning(
+                            "No encontré esa fórmula en el export de Tango Sueldos. "
+                            "Verificá en Tango antes de pegar nada."
+                        )
+                    fuentes = msg.get("fuentes") or []
+                    if fuentes:
+                        with st.expander("De dónde salió"):
+                            for fte in fuentes:
+                                titulo = str(fte.get("title") or "").strip() or "(sin título)"
+                                origen = str(fte.get("source") or "").strip()
+                                st.caption(f"• {titulo}" + (f" — {origen}" if origen else ""))
+                    if msg.get("uso_ia") is False:
+                        st.caption("Sin Grok en esta respuesta: solo material del estudio.")
 
     try:
         raw = st.chat_input(
@@ -334,6 +363,13 @@ def render_tango_bot() -> None:
             imagenes.append(preparar_imagen(f.getvalue(), getattr(f, "name", "captura.png")))
         with st.spinner("El agente está leyendo y formulando…"):
             _enviar(texto, api_key, model, imagenes)
+        _rerun_chat()
+
+
+def _rerun_chat() -> None:
+    try:
+        st.rerun(scope="fragment")
+    except TypeError:
         st.rerun()
 
 
@@ -348,8 +384,6 @@ def _enviar(prompt: str, api_key: str, model: str, imagenes: list[dict[str, str]
         for m in st.session_state.tango_chat
         if m["role"] in {"user", "assistant"}
     ][:-1]
-    if not INDEX_PATH.exists():
-        reconstruir_indice(guardar=True)
     out = responder(
         prompt,
         historial,
@@ -364,4 +398,7 @@ def _enviar(prompt: str, api_key: str, model: str, imagenes: list[dict[str, str]
         "role": "assistant",
         "content": out["texto"],
         "fuentes": out.get("fuentes") or [],
+        "pide_formula": bool(out.get("pide_formula")),
+        "formula_encontrada": bool(out.get("formula_encontrada")),
+        "uso_ia": bool(out.get("uso_ia")),
     })

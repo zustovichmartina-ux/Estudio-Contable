@@ -89,7 +89,7 @@ Si el legajo tiene mal el CTRATO, la fórmula “parece” mal: corregir la moda
 
 ## Conceptos Bancos (asiento a Tango)
 
-Instructivo: `\\TANGOSRV\Compartido\CLIENTES\zzInstrucciones\Conceptos Bancos.xlsx`.
+Instructivo: `\\TANGOSRV\Compartido\CLIENTES\zzInstrucciones\Conceptos Bancos 2.xlsx`.
 
 - Verificación: saldo inicial + créditos − débitos = saldo final del extracto.
 - Dos bloques: ASIENTO A IMPORTAR A TANGO / NO VA AL ASIENTO DE TANGO.
@@ -101,6 +101,18 @@ Instructivo: `\\TANGOSRV\Compartido\CLIENTES\zzInstrucciones\Conceptos Bancos.xl
 ## AFIP / monotributo (web y facturación)
 
 - Control: el mes del monto = período facturado (fecha desde/hasta), NUNCA la fecha de emisión.
+- Si el PDF no trae "Período Facturado" (venta de bienes), se usa la emisión y se marca como supuesto.
+- Recibos se cargan igual que facturas. No se descartan porque el texto cite "por la factura nro X".
+- Correlatividad: Facturas, NC y Recibos son series independientes (y por punto de venta).
+- NC siempre restan. Recibos entran en positivo.
+- Factura en USD: Imp. Total = Importe Dólares × Tipo de Cambio (fórmula, no valor pegado).
+- Si el CUIT emisor del PDF no coincide con el cliente, no se carga.
 - PDFs nominados: Cliente + número de factura.
 - Emitir rápido si la planilla ya está revisada; no reconfirmar CAE por CAE.
 - No pedir ni guardar claves fiscales en Excel ni en el chat.
+
+## IVA — Mis Retenciones (web)
+
+- Agrupar por Fecha Ret./Perc., nunca por Fecha Comprobante.
+- Crédito = Importe Ret./Perc. (no Importe Total ni Excedente).
+- Estado Pendiente no suma hasta Tomada.

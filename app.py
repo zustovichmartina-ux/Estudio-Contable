@@ -1,6 +1,7 @@
 """Aplicación Streamlit — Estudio Contable."""
 
 import copy
+import html
 import json
 import calendar
 import re
@@ -100,6 +101,7 @@ from procesador import (
     parsear_fecha_export_tango,
     procesar_facturas_monotributo,
     exportar_monotributo_excel,
+    parsear_mis_retenciones_afip,
     procesar_extractos_santander_pdfs,
     procesar_extractos_bancarios_pdfs,
     exportar_extracto_santander_excel,
@@ -127,6 +129,8 @@ from procesador import (
     PERFILES_BANCO,
 )
 
+from capa_revision import gate_asiento
+from monotributo_proyeccion import cargar_topes_categorias, proyectar_monotributo
 from ui_tango_bot import render_tango_bot
 from motor_fci_fifo import (
     cuadro_cobertura_meses,
@@ -187,21 +191,32 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
 
     :root {
-        --ec-navy: #1F4E79;
-        --ec-navy-soft: #2E5F8A;
-        --ec-slate: #334155;
+        --ec-night: #0B1220;
+        --ec-topbar: #0B1C33;
+        --ec-charcoal: #1E293B;
+        --ec-cream: #FFFFFF;
+        --ec-sand: #64748B;
+        --ec-lagoon: #2563EB;
+        --ec-sky: #2563EB;
+        --ec-amber: #2563EB;
+        --ec-navy: #0B1C33;
+        --ec-navy-soft: #3B82F6;
+        --ec-ink: #0F172A;
+        --ec-slate: #E2E8F0;
         --ec-muted: #64748B;
         --ec-line: #E2E8F0;
-        --ec-bg: #F7F9FC;
+        --ec-track: #F4F6FA;
+        --ec-bg: #F4F6FA;
         --ec-card: #FFFFFF;
-        --ec-accent-soft: rgba(31, 78, 121, 0.08);
-        --ec-radius: 8px;
-        --ec-radius-sm: 6px;
-        --ec-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-        --ec-font: "Source Sans 3", "Segoe UI", "Calibri", system-ui, sans-serif;
+        --ec-accent-soft: rgba(37, 99, 235, 0.12);
+        --ec-radius: 14px;
+        --ec-radius-sm: 10px;
+        --ec-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+        --ec-font: Inter, "Segoe UI", system-ui, sans-serif;
+        --ec-display: Outfit, Inter, sans-serif;
     }
 
     html, body, [data-testid="stAppViewContainer"], [data-testid="stHeader"],
@@ -213,62 +228,83 @@ st.markdown(
 
     .stApp {
         background: var(--ec-bg) !important;
+        color: var(--ec-ink) !important;
     }
 
     [data-testid="stHeader"] {
-        background: rgba(247, 249, 252, 0.92) !important;
-        border-bottom: 1px solid var(--ec-line);
+        background: var(--ec-topbar) !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    header[data-testid="stHeader"] {
+        background: var(--ec-topbar) !important;
+        height: 3.5rem !important;
     }
 
     [data-testid="stAppViewContainer"] > .main {
         opacity: 1 !important;
+        background: var(--ec-bg) !important;
     }
 
     .main .block-container {
-        padding-top: 1.1rem !important;
-        padding-bottom: 2.5rem !important;
-        max-width: 1400px;
+        padding-top: 0.7rem !important;
+        padding-bottom: 2.4rem !important;
+        max-width: 1440px;
         opacity: 1 !important;
     }
 
     /* Selectboxes: no CSS agresivo de BaseWeb (anti removeChild). */
 
-    .stMarkdown p, [data-testid="stCaptionContainer"] {
-        font-size: 15px !important;
-        color: var(--ec-slate) !important;
+    .main .stMarkdown p,
+    .main [data-testid="stCaptionContainer"] {
+        font-size: 0.95rem !important;
+        color: var(--ec-ink) !important;
         line-height: 1.5 !important;
     }
-    h1 {
-        font-size: 1.75rem !important;
-        font-weight: 700 !important;
-        letter-spacing: -0.02em !important;
-        color: var(--ec-navy) !important;
-        margin-bottom: 0.35rem !important;
+    .main h1 {
+        font-family: var(--ec-display) !important;
+        font-size: 1.7rem !important;
+        font-weight: 650 !important;
+        letter-spacing: -0.03em !important;
+        color: var(--ec-ink) !important;
+        margin-bottom: 0.25rem !important;
     }
-    h2 {
-        font-size: 1.25rem !important;
-        font-weight: 600 !important;
-        color: var(--ec-navy) !important;
+    .main h2 {
+        font-size: 1.12rem !important;
+        font-weight: 650 !important;
+        color: var(--ec-ink) !important;
     }
-    h3, h4 {
-        font-size: 1.05rem !important;
-        font-weight: 600 !important;
-        color: var(--ec-slate) !important;
+    .main h3, .main h4 {
+        font-size: 1rem !important;
+        font-weight: 650 !important;
+        color: var(--ec-ink) !important;
     }
-    small, [data-testid="stCaptionContainer"] {
-        color: var(--ec-muted) !important;
+    .main small,
+    .main [data-testid="stCaptionContainer"] {
+        color: var(--ec-sand) !important;
     }
 
     [data-testid="stSidebar"] {
-        background: #FFFFFF !important;
-        border-right: 1px solid var(--ec-line) !important;
+        background: var(--ec-night) !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
     }
     [data-testid="stSidebar"] > div:first-child {
         padding-top: 0.85rem;
     }
     [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
-    [data-testid="stSidebar"] label {
-        font-size: 14px !important;
+    [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {
+        font-size: 13px !important;
+        color: #F8FAFC !important;
+    }
+    .ec-side-label,
+    [data-testid="stSidebar"] .ec-side-label,
+    [data-testid="stSidebar"] p.ec-side-label {
+        margin: 0.85rem 0 0.35rem 0.15rem !important;
+        font-size: 0.68rem !important;
+        font-weight: 650 !important;
+        letter-spacing: 0.14em !important;
+        text-transform: uppercase !important;
+        color: #94A3B8 !important;
     }
 
     div[data-testid="stExpander"],
@@ -277,94 +313,126 @@ st.markdown(
     div[data-testid="stMetric"],
     .stDataFrame,
     [data-testid="stFileUploader"] {
-        border-radius: var(--ec-radius) !important;
+        border-radius: var(--ec-radius-sm) !important;
     }
-    div[data-testid="stExpander"] {
+    .main div[data-testid="stExpander"] {
         background: var(--ec-card) !important;
         border: 1px solid var(--ec-line) !important;
         box-shadow: var(--ec-shadow);
     }
 
-    .stTextInput input, .stNumberInput input, .stTextArea textarea {
+    .main .stTextInput input,
+    .main .stNumberInput input,
+    .main .stTextArea textarea {
         border-radius: var(--ec-radius-sm) !important;
         border: 1px solid var(--ec-line) !important;
         background: #FFFFFF !important;
-        color: var(--ec-slate) !important;
-        font-size: 15px !important;
+        color: var(--ec-ink) !important;
+        font-size: 0.95rem !important;
         box-shadow: none !important;
+        min-height: 2.35rem !important;
     }
-    .stTextInput input:focus, .stNumberInput input:focus, .stTextArea textarea:focus {
-        border-color: rgba(31, 78, 121, 0.45) !important;
+    .main .stTextInput input:focus,
+    .main .stNumberInput input:focus,
+    .main .stTextArea textarea:focus {
+        border-color: var(--ec-lagoon) !important;
         box-shadow: 0 0 0 3px var(--ec-accent-soft) !important;
     }
 
     .stButton > button,
     .stDownloadButton > button,
     .stFormSubmitButton > button {
-        border-radius: var(--ec-radius-sm) !important;
+        border-radius: 10px !important;
         font-weight: 600 !important;
-        font-size: 14px !important;
-        padding: 0.45rem 1rem !important;
-        transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease !important;
+        font-size: 0.9rem !important;
+        padding: 0.42rem 1rem !important;
+        min-height: 2.35rem !important;
+        transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease !important;
         box-shadow: none !important;
     }
     .stButton > button[kind="primary"],
     .stFormSubmitButton > button[kind="primary"],
     .stDownloadButton > button {
-        background: var(--ec-navy) !important;
+        background: var(--ec-lagoon) !important;
         color: #FFFFFF !important;
-        border: 1px solid var(--ec-navy) !important;
+        border: 1px solid var(--ec-lagoon) !important;
     }
-    .stButton > button[kind="secondary"] {
+    .main .stButton > button[kind="secondary"] {
         background: #FFFFFF !important;
-        color: var(--ec-navy) !important;
+        color: var(--ec-ink) !important;
         border: 1px solid var(--ec-line) !important;
+    }
+    .main .stButton > button[kind="secondary"]:hover {
+        background: #EEF2FF !important;
+        color: var(--ec-lagoon) !important;
+        border-color: #BFDBFE !important;
+        opacity: 1 !important;
     }
     .stButton > button:hover,
     .stDownloadButton > button:hover,
     .stFormSubmitButton > button:hover {
-        opacity: 0.92;
+        opacity: 0.94;
     }
 
-    div[data-testid="stAlert"] {
+    .main div[data-testid="stAlert"] {
         border: 1px solid var(--ec-line) !important;
+        background: #FFFFFF !important;
         box-shadow: var(--ec-shadow);
+        border-radius: var(--ec-radius-sm) !important;
+        color: var(--ec-ink) !important;
     }
 
-    .stDataFrame, [data-testid="stDataFrame"] {
+    .main .stDataFrame,
+    .main [data-testid="stDataFrame"] {
         border: 1px solid var(--ec-line) !important;
         box-shadow: var(--ec-shadow);
         overflow: hidden;
-        background: var(--ec-card) !important;
+        background: #FFFFFF !important;
+        border-radius: var(--ec-radius-sm) !important;
     }
-    th, td {
-        font-size: 14px !important;
-        color: var(--ec-slate) !important;
+    .main th, .main td {
+        font-size: 0.875rem !important;
+        color: var(--ec-ink) !important;
     }
 
-    [data-testid="stFileUploader"] section {
+    .main [data-testid="stFileUploader"] section {
         border-radius: var(--ec-radius) !important;
-        border: 1px dashed rgba(31, 78, 121, 0.35) !important;
-        background: var(--ec-accent-soft) !important;
+        border: 1px dashed #CBD5E1 !important;
+        background: #FFFFFF !important;
     }
-    [data-testid="stFileUploader"] section:hover {
-        border-color: var(--ec-navy) !important;
+    .main [data-testid="stFileUploader"] section:hover {
+        border-color: var(--ec-lagoon) !important;
+        background: #EFF6FF !important;
     }
 
-    [data-testid="stMetric"] {
+    .main [data-testid="stMetric"] {
         background: var(--ec-card);
         border: 1px solid var(--ec-line);
         border-radius: var(--ec-radius);
-        padding: 0.75rem 0.9rem;
+        padding: 0.95rem 1.1rem;
         box-shadow: var(--ec-shadow);
     }
     [data-testid="stMetricValue"] {
-        font-weight: 700 !important;
-        color: var(--ec-navy) !important;
+        font-family: var(--ec-display) !important;
+        font-weight: 650 !important;
+        font-size: 1.55rem !important;
+        color: var(--ec-ink) !important;
+        letter-spacing: -0.03em !important;
+    }
+    [data-testid="stMetricLabel"] {
+        font-size: 11px !important;
+        font-weight: 650 !important;
+        color: var(--ec-sand) !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.08em !important;
+    }
+
+    .main hr {
+        border-color: var(--ec-line) !important;
     }
 
     .stProgress > div > div > div > div {
-        background: var(--ec-navy) !important;
+        background: var(--ec-lagoon) !important;
         border-radius: 4px !important;
     }
 
@@ -379,9 +447,9 @@ st.markdown(
 
     #MainMenu { visibility: hidden; }
     footer { visibility: hidden; }
-    header[data-testid="stHeader"] { height: 2.4rem; }
+    header[data-testid="stHeader"] { height: 3.5rem !important; }
 
-    a { color: var(--ec-navy-soft) !important; text-decoration: none !important; }
+    a { color: var(--ec-sky) !important; text-decoration: none !important; }
     a:hover { text-decoration: underline !important; }
 
     code, pre {
@@ -404,22 +472,95 @@ st.markdown(
         pointer-events: none !important;
     }
 
+    /* Cabecera de pantalla: en el flujo (no fixed). El overlay se recortaba. */
+    .ec-pagehead {
+        margin: 0 0 1.25rem 0;
+        padding: 0.15rem 0 1.05rem 0;
+        border-bottom: 1px solid var(--ec-line);
+    }
+    .ec-pagehead-kicker,
+    .stMarkdown p.ec-pagehead-kicker {
+        margin: 0 0 0.28rem 0 !important;
+        font-size: 0.72rem !important;
+        font-weight: 650 !important;
+        letter-spacing: 0.12em !important;
+        text-transform: uppercase !important;
+        color: var(--ec-lagoon) !important;
+        line-height: 1.2 !important;
+    }
+    .ec-pagehead-title,
+    .stMarkdown p.ec-pagehead-title {
+        margin: 0 !important;
+        font-family: var(--ec-display) !important;
+        font-size: 1.7rem !important;
+        font-weight: 650 !important;
+        letter-spacing: -0.03em !important;
+        color: var(--ec-ink) !important;
+        line-height: 1.15 !important;
+    }
+    .ec-pagehead-sub,
+    .stMarkdown p.ec-pagehead-sub {
+        margin: 0.35rem 0 0 0 !important;
+        font-size: 0.95rem !important;
+        color: var(--ec-sand) !important;
+        line-height: 1.4 !important;
+    }
+    .ec-brand {
+        display: flex;
+        align-items: center;
+        gap: 0.7rem;
+        padding: 0.1rem 0.1rem 1rem 0.1rem;
+        margin-bottom: 0.55rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .ec-brand-mark {
+        width: 2rem;
+        height: 2rem;
+        border-radius: 0.5rem;
+        background: var(--ec-lagoon);
+        color: #FFFFFF;
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+    .ec-brand-name {
+        font-size: 0.98rem;
+        font-weight: 650;
+        color: #FFFFFF;
+        line-height: 1.15;
+        letter-spacing: -0.02em;
+        text-transform: none;
+    }
+    .ec-brand-sub {
+        margin-top: 0.12rem;
+        font-size: 0.72rem;
+        font-weight: 500;
+        color: #94A3B8;
+        line-height: 1.2;
+        letter-spacing: 0;
+        text-transform: none;
+    }
+
     /* Chips Biblioteca/Menú: fijos arriba a la derecha (CSS only).
        No reparentar nodos con JS (insertBefore/appendChild): React de Streamlit
        dispara NotFoundError removeChild. Tampoco absolute+size 0 en wrappers
        (interceptaba clicks del nav segmented_control). */
     div[data-testid="stHorizontalBlock"]:has(.st-key-ec_toolbar_bib):has(.st-key-ec_toolbar_menu) {
         position: fixed !important;
-        top: 0.35rem !important;
-        right: 2.75rem !important;
+        top: 0 !important;
+        right: 2.6rem !important;
         z-index: 999990 !important;
         width: max-content !important;
         max-width: none !important;
-        height: auto !important;
+        height: 3.5rem !important;
         margin: 0 !important;
         padding: 0 !important;
-        gap: 0.85rem !important;
-        column-gap: 0.85rem !important;
+        gap: 0.5rem !important;
+        column-gap: 0.5rem !important;
         row-gap: 0 !important;
         align-items: center !important;
         justify-content: flex-end !important;
@@ -473,11 +614,11 @@ st.markdown(
         font-weight: 500 !important;
         letter-spacing: 0.01em !important;
         line-height: 1 !important;
-        border-radius: 0.5rem !important;
-        background: #FFFFFF !important;
-        color: #1F4E79 !important;
-        border: 1px solid #D0D7DE !important;
-        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+        border-radius: 999px !important;
+        background: var(--ec-charcoal) !important;
+        color: var(--ec-cream) !important;
+        border: 1px solid var(--ec-charcoal) !important;
+        box-shadow: none !important;
         white-space: nowrap !important;
         transition: background 0.12s ease, border-color 0.12s ease !important;
     }
@@ -485,77 +626,93 @@ st.markdown(
     .st-key-ec_toolbar_menu button:hover,
     .st-key-ec_toolbar_bib [data-testid="stPopoverButton"] button:hover,
     .st-key-ec_toolbar_menu [data-testid="stPopoverButton"] button:hover {
-        background: #F8FAFC !important;
-        border-color: #94A3B8 !important;
+        background: var(--ec-lagoon) !important;
+        border-color: var(--ec-lagoon) !important;
+        color: #FFFFFF !important;
     }
-    /* Nav principal (ventanas): pills espaciadas, coherente con chips Biblioteca/Menú */
-    .st-key-ventana_principal_v3,
-    div[data-testid="stElementContainer"]:has(.st-key-ventana_principal_v3),
-    div[data-testid="element-container"]:has(.st-key-ventana_principal_v3) {
-        margin: 0.15rem 0 0.35rem 0 !important;
+    /* Nav principal: en la sidebar, formato Samsara */
+    [data-testid="stSidebar"] .st-key-ventana_principal_v4 {
+        margin: 0.15rem 0 0.85rem 0 !important;
     }
-    .st-key-ventana_principal_v3 [data-testid="stSegmentedControl"],
-    .st-key-ventana_principal_v3 [data-baseweb="button-group"],
-    .st-key-ventana_principal_v3 [role="radiogroup"] {
+    [data-testid="stSidebar"] .st-key-ventana_principal_v4 [data-testid="stRadio"],
+    [data-testid="stSidebar"] .st-key-ventana_principal_v4 [role="radiogroup"] {
         display: flex !important;
-        flex-wrap: wrap !important;
-        gap: 0.45rem !important;
-        column-gap: 0.45rem !important;
-        row-gap: 0.45rem !important;
+        flex-direction: column !important;
+        gap: 4px !important;
         background: transparent !important;
         border: none !important;
-        box-shadow: none !important;
-        padding: 0 !important;
     }
-    .st-key-ventana_principal_v3 [data-testid="stSegmentedControl"] label,
-    .st-key-ventana_principal_v3 [data-testid="stSegmentedControl"] button,
-    .st-key-ventana_principal_v3 [data-baseweb="button-group"] button,
-    .st-key-ventana_principal_v3 [role="radiogroup"] label,
-    .st-key-ventana_principal_v3 [role="radiogroup"] button {
-        display: inline-flex !important;
+    [data-testid="stSidebar"] .st-key-ventana_principal_v4 label,
+    [data-testid="stSidebar"] .st-key-ventana_principal_v4 [role="radiogroup"] label {
+        display: flex !important;
         align-items: center !important;
-        justify-content: center !important;
-        box-sizing: border-box !important;
-        min-height: 2.15rem !important;
-        height: auto !important;
-        padding: 0.45rem 1.05rem !important;
+        border-radius: 10px !important;
+        padding: 0.45rem 0.75rem !important;
         margin: 0 !important;
+        background: transparent !important;
+        color: rgba(244, 244, 245, 0.78) !important;
         font-size: 0.875rem !important;
         font-weight: 500 !important;
-        letter-spacing: 0.01em !important;
-        line-height: 1.15 !important;
-        white-space: nowrap !important;
-        border-radius: 0.55rem !important;
-        background: #FFFFFF !important;
-        color: #1F4E79 !important;
-        border: 1px solid #D0D7DE !important;
-        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
-        transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease !important;
+        border: none !important;
     }
-    .st-key-ventana_principal_v3 [data-testid="stSegmentedControl"] label:hover,
-    .st-key-ventana_principal_v3 [data-testid="stSegmentedControl"] button:hover,
-    .st-key-ventana_principal_v3 [data-baseweb="button-group"] button:hover,
-    .st-key-ventana_principal_v3 [role="radiogroup"] label:hover,
-    .st-key-ventana_principal_v3 [role="radiogroup"] button:hover {
-        background: #F8FAFC !important;
-        border-color: #94A3B8 !important;
-    }
-    .st-key-ventana_principal_v3 [data-testid="stSegmentedControl"] label[data-checked="true"],
-    .st-key-ventana_principal_v3 [data-testid="stSegmentedControl"] label[aria-checked="true"],
-    .st-key-ventana_principal_v3 [data-testid="stSegmentedControl"] button[aria-checked="true"],
-    .st-key-ventana_principal_v3 [data-testid="stSegmentedControl"] button[aria-pressed="true"],
-    .st-key-ventana_principal_v3 [data-baseweb="button-group"] button[aria-checked="true"],
-    .st-key-ventana_principal_v3 [role="radiogroup"] label[aria-checked="true"],
-    .st-key-ventana_principal_v3 [role="radiogroup"] button[aria-checked="true"],
-    .st-key-ventana_principal_v3 [role="radiogroup"] [data-checked="true"] {
-        background: #1F4E79 !important;
+    [data-testid="stSidebar"] .st-key-ventana_principal_v4 label:hover {
+        background: var(--ec-charcoal) !important;
         color: #FFFFFF !important;
-        border-color: #1F4E79 !important;
-        box-shadow: 0 1px 3px rgba(31, 78, 121, 0.28) !important;
+    }
+    [data-testid="stSidebar"] .st-key-ventana_principal_v4 label:has(input:checked),
+    [data-testid="stSidebar"] .st-key-ventana_principal_v4 label[data-checked="true"],
+    [data-testid="stSidebar"] .st-key-ventana_principal_v4 [aria-checked="true"] {
+        background: var(--ec-lagoon) !important;
+        color: #FFFFFF !important;
         font-weight: 600 !important;
     }
+    [data-testid="stSidebar"] .st-key-ventana_principal_v4 [data-baseweb="radio"] > div:first-child {
+        display: none !important;
+    }
+    .stTabs [data-baseweb="tab-list"] {
+        background: transparent !important;
+        border: none !important;
+        border-bottom: 1px solid var(--ec-line) !important;
+        border-radius: 0 !important;
+        padding: 0 !important;
+        gap: 4px !important;
+    }
+    .stTabs [data-baseweb="tab"] {
+        background: transparent !important;
+        border: none !important;
+        border-radius: 10px 10px 0 0 !important;
+        color: var(--ec-sand) !important;
+        font-size: 0.9rem !important;
+        font-weight: 550 !important;
+        padding: 0.4rem 0.9rem !important;
+    }
+    .stTabs [data-baseweb="tab"][aria-selected="true"] {
+        background: var(--ec-lagoon) !important;
+        color: #FFFFFF !important;
+    }
+    .stTabs [data-baseweb="tab-highlight"],
+    .stTabs [data-baseweb="tab-border"] {
+        display: none !important;
+    }
     .main .block-container {
-        padding-top: 0.85rem !important;
+        padding-top: 0.7rem !important;
+    }
+    .ec-hero {
+        margin: 0 0 1.15rem 0;
+        padding: 1.4rem 1.5rem;
+        border-radius: 16px;
+        background: linear-gradient(120deg, #0B1C33 0%, #1E3A8A 55%, #2563EB 100%);
+        color: #FFFFFF;
+    }
+    .ec-titulo {
+        margin: 0.05rem 0 0.85rem 0;
+        font-family: var(--ec-display);
+        font-size: 1.55rem;
+        font-weight: 650;
+        color: var(--ec-ink);
+        letter-spacing: -0.03em;
+        line-height: 1.15;
+        text-transform: none;
     }
     </style>
     """,
@@ -568,7 +725,6 @@ st.markdown(
 # NotFoundError removeChild en Cloud. Deploy se oculta solo con CSS arriba;
 # chips Biblioteca/Menú van con position:fixed CSS-only (sin reparent).
 
-db.inicializar_bd()
 NUEVOS_MONOTRIBUTISTAS: list[dict[str, str]] = [
     {"nombre": "PERNAS ROSARIO", "cuit": "27274162282", "tipo": "Monotributista"},
     {"nombre": "SELVA, MAXIMILIANO", "cuit": "20253936755", "tipo": "Monotributista"},
@@ -631,21 +787,29 @@ NUEVOS_MONOTRIBUTISTAS: list[dict[str, str]] = [
     {"nombre": "PAL YAMILA", "cuit": "27326686153", "tipo": "Monotributista"},
     {"nombre": "DOMINGUEZ MARCELO", "cuit": "20168259779", "tipo": "Monotributista"},
 ]
-db.sincronizar_clientes_catalogo(NUEVOS_MONOTRIBUTISTAS)
-# Cloud / repo limpio: siembra PJ + planes desde data/seed y data/planes_cuentas
-_cargar_seed_pj = getattr(db, "cargar_seed_sociedades_pj", None)
-if callable(_cargar_seed_pj):
-    _cargar_seed_pj()
-else:
-    # Fallback si Cloud sirve database.py viejo sin el método (redeploy a medias)
-    _seed_pj = Path(__file__).resolve().parent / "data" / "seed" / "sociedades_pj.json"
-    if _seed_pj.is_file():
-        try:
-            _data_pj = json.loads(_seed_pj.read_text(encoding="utf-8"))
-            if isinstance(_data_pj, list):
-                db.sincronizar_clientes_catalogo(_data_pj)
-        except (OSError, json.JSONDecodeError):
-            pass
+
+
+@st.cache_resource
+def _arrancar_estudio() -> bool:
+    """Tablas, seeds y catálogo: una vez por proceso, no en cada click."""
+    db.inicializar_bd()
+    db.sincronizar_clientes_catalogo(NUEVOS_MONOTRIBUTISTAS)
+    _cargar_seed_pj = getattr(db, "cargar_seed_sociedades_pj", None)
+    if callable(_cargar_seed_pj):
+        _cargar_seed_pj()
+    else:
+        _seed_pj = Path(__file__).resolve().parent / "data" / "seed" / "sociedades_pj.json"
+        if _seed_pj.is_file():
+            try:
+                _data_pj = json.loads(_seed_pj.read_text(encoding="utf-8"))
+                if isinstance(_data_pj, list):
+                    db.sincronizar_clientes_catalogo(_data_pj)
+            except (OSError, json.JSONDecodeError):
+                pass
+    return True
+
+
+_arrancar_estudio()
 
 _SOCiedad_KEY = "sociedad_activa"
 _IMPUESTO_KEY = "selector_impuesto"
@@ -662,9 +826,40 @@ _VENTANAS_PRINCIPALES = (
     "Tango",
     "ARCA",
 )
-# v3: botones con keys fijas (el radio + CSS absolute del toolbar desincronizaba UI↔módulo)
-_VENTANA_KEY = "ventana_principal_v3"
+# v4: radio vertical en sidebar (formato Samsara). v3 era segmented top.
+_VENTANA_KEY = "ventana_principal_v4"
 _VENTANA_KEY_LEGACY = "ventana_principal_activa"
+_VENTANA_KEY_V3 = "ventana_principal_v3"
+_VENTANA_HEADER = {
+    "Devengamiento de Impuestos": (
+        "Devengamiento",
+        "Armá el asiento de impuestos y exportalo a Tango",
+    ),
+    "Conciliación Bancaria": (
+        "Conciliación",
+        "Cruzá el extracto con Tango y bajá la planilla",
+    ),
+    "Préstamos Financieros": (
+        "Préstamos",
+        "Armá la auditoría de cuotas desde los PDF",
+    ),
+    "Herramientas": (
+        "Herramientas",
+        "Monotributo, extractos, FCI y utilidades",
+    ),
+    "Tango": (
+        "Tango",
+        "Consultá fórmulas y el manual de Tango",
+    ),
+    "ARCA": (
+        "ARCA",
+        "Encolá comprobantes, FCC y VEPs",
+    ),
+    "clientes": ("Clientes", "Altas, CUITs y fichas"),
+    "usuarios_oficina": ("Usuarios", "Accesos de la oficina"),
+    "acerca": ("Acerca", "Qué hace cada módulo"),
+    "login": ("Ingreso", "Elegí tu usuario para empezar"),
+}
 _VENTANA_NAV_LABELS = {
     "Devengamiento de Impuestos": "Devengamiento",
     "Conciliación Bancaria": "Conciliación",
@@ -680,8 +875,10 @@ def _es_ventana_herramientas(nombre: str | None) -> bool:
 
 
 def _migrar_ventana_principal_session() -> None:
-    """Normaliza labels viejos / key legacy hacia ventana_principal_v3."""
+    """Normaliza labels viejos / key legacy hacia ventana_principal_v4."""
     actual = st.session_state.get(_VENTANA_KEY)
+    if not actual and st.session_state.get(_VENTANA_KEY_V3):
+        actual = st.session_state.get(_VENTANA_KEY_V3)
     if not actual and st.session_state.get(_VENTANA_KEY_LEGACY):
         actual = st.session_state.get(_VENTANA_KEY_LEGACY)
     actual = str(actual or "")
@@ -696,12 +893,12 @@ def _migrar_ventana_principal_session() -> None:
     if actual not in _VENTANAS_PRINCIPALES:
         actual = _VENTANAS_PRINCIPALES[0]
     st.session_state[_VENTANA_KEY] = actual
-    # Evitar que un radio legacy (si queda en session) pelee con los botones
     st.session_state.pop(_VENTANA_KEY_LEGACY, None)
+    st.session_state.pop(_VENTANA_KEY_V3, None)
 
 
 def _render_nav_ventanas_principales() -> str:
-    """Un solo segmented_control keyed al nombre canónico del módulo (sin mapeo intermedio)."""
+    """Menú vertical en la sidebar (mismo formato que Samsara)."""
     _migrar_ventana_principal_session()
     opciones = list(_VENTANAS_PRINCIPALES)
     actual = str(st.session_state.get(_VENTANA_KEY, opciones[0]))
@@ -709,16 +906,15 @@ def _render_nav_ventanas_principales() -> str:
         actual = opciones[0]
         st.session_state[_VENTANA_KEY] = actual
 
-    # Limpiar key intermedia de intentos previos (label corto) que desincronizaba.
     st.session_state.pop("nav_ventana_segmented_v1", None)
+    st.sidebar.markdown('<p class="ec-side-label">Trabajo</p>', unsafe_allow_html=True)
 
-    elegido = st.segmented_control(
+    elegido = st.sidebar.radio(
         "Módulo",
         options=opciones,
         format_func=lambda x: _VENTANA_NAV_LABELS.get(x, x),
         key=_VENTANA_KEY,
         label_visibility="collapsed",
-        required=True,
     )
     if elegido not in opciones:
         elegido = actual
@@ -800,10 +996,35 @@ def _resumen_biblioteca_sociedad_activa() -> tuple[int, dict[str, list], int, di
     return total_asi, por_imp, total_bco, por_banco
 
 
-def _render_titulo_estudio() -> None:
+def _nombre_saludo() -> str:
+    nombre = str(
+        st.session_state.get("usuario_oficina_nombre")
+        or st.session_state.get("usuario_oficina")
+        or ""
+    ).strip()
+    if not nombre:
+        return "estudio"
+    return nombre.split()[0]
+
+
+def _render_titulo_estudio(ventana: str | None = None) -> None:
+    """Título de pantalla: cliente + qué se hace acá."""
+    clave = str(ventana or "").strip() or "login"
+    titulo, sub = _VENTANA_HEADER.get(clave, (clave, "Estudio Contable"))
+    kicker = "Estudio Contable"
+    sid = st.session_state.get(_SOCiedad_KEY)
+    if sid:
+        cli = db.obtener_cliente(sid)
+        if cli and cli.get("nombre"):
+            kicker = str(cli.get("nombre"))
     st.markdown(
-        '<p style="margin:0.1rem 0 1.05rem 0;font-size:1.55rem;font-weight:700;color:#1F4E79;'
-        'letter-spacing:-0.02em;line-height:1.2;">Estudio Contable</p>',
+        f"""
+        <div class="ec-pagehead">
+          <p class="ec-pagehead-kicker">{html.escape(kicker)}</p>
+          <p class="ec-pagehead-title">{html.escape(titulo)}</p>
+          <p class="ec-pagehead-sub">{html.escape(sub)}</p>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
 
@@ -969,30 +1190,48 @@ def _render_barra_superior_cuenta() -> None:
 def _render_sidebar_sociedad_y_biblioteca(cliente: dict | None) -> None:
     """Barra lateral: solo sociedad activa (biblioteca va al toolbar superior)."""
     st.session_state["_sidebar_unificada"] = True
-    st.sidebar.markdown("### Sociedad de trabajo")
+    st.sidebar.markdown(
+        """
+        <div class="ec-brand">
+          <div class="ec-brand-mark">EC</div>
+          <div>
+            <div class="ec-brand-name">Estudio Contable</div>
+            <div class="ec-brand-sub">Mar del Plata</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    _render_nav_ventanas_principales()
+    st.sidebar.markdown('<p class="ec-side-label">Sociedad</p>', unsafe_allow_html=True)
 
     clientes = db.listar_clientes()
     if clientes:
-        opciones = {f"{c['nombre']} ({c['cuit']})": c["id"] for c in clientes}
-        ids = list(opciones.values())
-        labels = list(opciones.keys())
+        st.session_state.pop("sidebar_sociedad_select_v2", None)
+        opciones = {c["id"]: f"{c['nombre']} ({c['cuit']})" for c in clientes}
+        ids = list(opciones)
         actual = st.session_state.get(_SOCiedad_KEY)
-        idx = ids.index(actual) if actual in ids else 0
-        # Mantener el selectbox del sidebar alineado con sociedad_activa
-        # (si no, el key viejo pisa al selector del módulo y aparece "sin plan").
-        label_deseado = labels[idx]
-        if st.session_state.get("sidebar_sociedad_select_v2") != label_deseado:
-            st.session_state["sidebar_sociedad_select_v2"] = label_deseado
-        elegido_label = st.sidebar.selectbox(
-            "Sociedad activa",
-            labels,
-            key="sidebar_sociedad_select_v2",
-        )
-        elegido_id = opciones[elegido_label]
-        if elegido_id != st.session_state.get(_SOCiedad_KEY):
-            st.session_state[_SOCiedad_KEY] = elegido_id
+        widget = st.session_state.get("sidebar_sociedad_id")
+        if actual not in ids:
+            actual = ids[0]
+            st.session_state[_SOCiedad_KEY] = actual
+            st.session_state["sidebar_sociedad_id"] = actual
             actualizar_sociedad_activa()
-            st.rerun()
+        elif widget not in ids:
+            st.session_state["sidebar_sociedad_id"] = actual
+        st.sidebar.selectbox(
+            "Sociedad activa",
+            options=ids,
+            format_func=lambda i: opciones.get(i, str(i)),
+            key="sidebar_sociedad_id",
+            on_change=_on_cambiar_sociedad_sidebar,
+            label_visibility="collapsed",
+        )
+        elegido_id = st.session_state.get("sidebar_sociedad_id")
+        if elegido_id is not None and st.session_state.get(_SOCiedad_KEY) != elegido_id:
+            st.session_state[_SOCiedad_KEY] = elegido_id
+            st.session_state.cliente_id_seleccionado = elegido_id
+            actualizar_sociedad_activa()
         cli = db.obtener_cliente(elegido_id) or cliente
     else:
         cli = cliente
@@ -1000,32 +1239,15 @@ def _render_sidebar_sociedad_y_biblioteca(cliente: dict | None) -> None:
 
     if cli:
         st.sidebar.caption(
-            f"**{cli.get('nombre') or '—'}** · CUIT `{cli.get('cuit') or '—'}` · "
-            f"{cli.get('tipo_persona') or '—'}"
+            f"{cli.get('cuit') or '—'} · {cli.get('tipo_persona') or '—'}"
         )
     else:
         st.sidebar.warning("Sin sociedad seleccionada")
 
-    st.sidebar.caption("Usá **Biblioteca** y **Menú** en la barra superior.")
-
 
 
 def _dbg_log(hypothesis_id: str, location: str, message: str, data: dict | None = None) -> None:
-    # #region agent log
-    try:
-        payload = {
-            "sessionId": "46b61e",
-            "hypothesisId": hypothesis_id,
-            "location": location,
-            "message": message,
-            "data": data or {},
-            "timestamp": int(time.time() * 1000),
-        }
-        with open(_DEBUG_LOG_PATH, "a", encoding="utf-8") as fh:
-            fh.write(json.dumps(payload, ensure_ascii=False) + "\n")
-    except OSError:
-        pass
-    # #endregion
+    return
 
 
 def _init_session_state() -> None:
@@ -1286,7 +1508,7 @@ def _render_descarga_excel_tango_diferida(
                 key=gen_key,
                 use_container_width=True,
                 disabled=True,
-                help="Completá las cuentas 99999 de la grilla para habilitar.",
+                help="El asiento tiene que cerrar y todas las cuentas tienen que ser del plan (nada de 99999).",
             )
         elif st.button(label_generar, key=gen_key, use_container_width=True):
             try:
@@ -1683,6 +1905,12 @@ def _limpiar_resultados_cambio_sociedad() -> None:
     _flush_estado_cm_al_cambiar_sociedad()
     _flush_estado_sueldos_al_cambiar_sociedad()
     _flush_estado_tish_al_cambiar_sociedad()
+    vistos: set[str] = set()
+    for ficha in BANK_REGISTRY.values():
+        slug = str(ficha.get("slug") or "").strip()
+        if slug and slug not in vistos:
+            vistos.add(slug)
+            _flush_estado_modulo_por_slug(slug)
 
 
 def _limpiar_estado_devengamientos_desincronizado() -> None:
@@ -2781,6 +3009,41 @@ def _sincronizar_plan_cuentas_session(cliente_id: int, forzar: bool = False) -> 
     return not es_default
 
 
+def _slugs_trabajo_activos() -> list[str]:
+    slugs = [_slug_impuesto(nombre) for nombre in _impuestos_devengamientos()]
+    for ficha in BANK_REGISTRY.values():
+        slug = str(ficha.get("slug") or "").strip()
+        if slug and slug not in slugs:
+            slugs.append(slug)
+    return slugs
+
+
+def _preservar_borrador_antes_cambio_contexto() -> None:
+    """Guarda la grilla en disco antes de un flush (cambio de sociedad)."""
+    hubo = False
+    for slug in _slugs_trabajo_activos():
+        if st.session_state.get(f"{slug}_grilla_preview"):
+            _autosalvar_borrador_grilla(slug)
+            hubo = True
+    if hubo:
+        st.session_state["_aviso_cambio_sociedad"] = (
+            "Se guardó el borrador de la grilla anterior y se limpió la pantalla "
+            "para no mezclar sociedades. Recuperalo con el aviso de borrador, si aplica."
+        )
+
+
+def _on_cambiar_sociedad_sidebar() -> None:
+    """El combo de la izquierda manda: misma sociedad en todos los módulos."""
+    elegido = st.session_state.get("sidebar_sociedad_id")
+    if elegido is None:
+        return
+    anterior = st.session_state.get(_SOCiedad_KEY)
+    st.session_state[_SOCiedad_KEY] = elegido
+    st.session_state.cliente_id_seleccionado = elegido
+    if anterior != elegido:
+        actualizar_sociedad_activa()
+
+
 def actualizar_sociedad_activa() -> None:
     """Callback on_change: actualiza cuit, nombre y plan Excel en un solo viaje."""
     sociedad_id = st.session_state.get(_SOCiedad_KEY)
@@ -2789,6 +3052,7 @@ def actualizar_sociedad_activa() -> None:
     cliente = db.obtener_cliente(sociedad_id)
     if not cliente:
         return
+    _preservar_borrador_antes_cambio_contexto()
     st.session_state.cuit_activo = str(cliente.get("cuit", "")).strip()
     st.session_state.nombre_activo = cliente["nombre"]
     st.session_state.cliente_id_seleccionado = sociedad_id
@@ -2834,33 +3098,36 @@ def _verificar_sincronizacion_devengamientos(indice: dict[int, dict]) -> None:
         actualizar_sociedad_activa()
 
 
-def _selector_sociedad_devengamientos(clientes: list[dict]) -> None:
-    """Selectbox único con key permanente sociedad_activa; persiste entre reruns."""
+def _selector_sociedad_devengamientos(clientes: list[dict]) -> bool:
+    """Muestra la sociedad del menú izquierdo. No hay otro combo por módulo."""
     if not clientes:
-        return
+        st.warning("No hay sociedades cargadas.")
+        return False
 
-    opciones = {c["id"]: f"{c['nombre']} — {c['tipo_persona']}" for c in clientes}
-    ids = list(opciones.keys())
+    ids = {c["id"] for c in clientes}
+    sid = st.session_state.get(_SOCiedad_KEY)
+    if sid not in ids:
+        st.warning(
+            "Esta pantalla no aplica a la sociedad del menú. "
+            "Elegí otra en **Sociedad**, a la izquierda."
+        )
+        return False
 
-    if st.session_state.get(_SOCiedad_KEY) not in ids:
-        st.session_state[_SOCiedad_KEY] = ids[0]
-        st.session_state.cliente_id_seleccionado = ids[0]
+    if (
+        not st.session_state.get("cuit_activo")
+        or not st.session_state.get("nombre_activo")
+        or st.session_state.get("plan_cuentas_cliente_id") != sid
+    ):
+        actualizar_sociedad_activa()
 
-    st.selectbox(
-        "Sociedad",
-        options=ids,
-        format_func=lambda x: opciones[x],
-        key=_SOCiedad_KEY,
-        on_change=actualizar_sociedad_activa,
-    )
-
-    sociedad_id = st.session_state[_SOCiedad_KEY]
-    st.session_state.cliente_id_seleccionado = sociedad_id
-    # #region agent log
-    _dbg_log("I", "_selector_sociedad_devengamientos", "after_selectbox", {
-        "sociedad_id": sociedad_id,
-    })
-    # #endregion
+    st.session_state.cliente_id_seleccionado = sid
+    cli = next((c for c in clientes if c["id"] == sid), None)
+    if cli:
+        st.markdown(
+            f"**{cli.get('nombre') or '—'}**  \n"
+            f"`{cli.get('cuit') or '—'}` · {cli.get('tipo_persona') or '—'}"
+        )
+    return True
 
 
 def _resolver_plan_cuentas_cliente(cliente: dict) -> pd.DataFrame:
@@ -4877,6 +5144,9 @@ def _guardar_asiento_en_biblioteca(
     _inicializar_sesion_iva()
     if not asientos or not rows:
         raise ValueError("No hay asiento generado para guardar.")
+    g = _gate_asiento_ui(rows, asientos)
+    if not g["ok"]:
+        raise ValueError(" ".join(g["bloqueantes"]))
 
     periodo = getattr(asientos[0], "periodo", "") or rows[0].get("Período", "")
     if not periodo:
@@ -5395,6 +5665,9 @@ def _guardar_asiento_en_biblioteca_banco(
 ) -> str:
     if not asientos or not rows:
         raise ValueError("No hay asiento bancario generado para guardar.")
+    g = _gate_asiento_ui(rows, asientos)
+    if not g["ok"]:
+        raise ValueError(" ".join(g["bloqueantes"]))
     periodo = getattr(asientos[0], "periodo", "") or rows[0].get("Período", "")
     if not periodo:
         raise ValueError("No se pudo determinar el período del asiento bancario.")
@@ -9510,11 +9783,11 @@ def _render_barra_fija_export_tango(
             z-index: 999980 !important;
             width: 100% !important;
             max-width: 100% !important;
-            background: #F8FAFC !important;
-            border-top: 1px solid #CBD5E1 !important;
-            padding: 0.65rem 1.25rem 0.75rem 1.25rem !important;
+            background: #0B0D10 !important;
+            border-top: 1px solid #1C1E22 !important;
+            padding: 0.55rem 1.15rem 0.65rem 1.15rem !important;
             margin: 0 !important;
-            box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.08) !important;
+            box-shadow: none !important;
             align-items: center !important;
         }}
         </style>
@@ -9822,8 +10095,40 @@ def _aplicar_loop_review_filas_grilla_por_ficha(rows: list[dict], ficha: dict) -
     return rows
 
 
-def _puede_exportar_asiento_generico(rows: list[dict]) -> bool:
-    return all(str(r.get("Código", "")).strip() not in ("", "99999") for r in rows)
+def _gate_asiento_ui(rows: list[dict], asientos: list | None = None) -> dict:
+    """Une partida doble + 99999 + auditoría Tango del plan de esta sociedad."""
+    plan_df = st.session_state.get("plan_cuentas_df")
+    plan_vacio = plan_df is None or getattr(plan_df, "empty", True)
+    bloqueantes_tango: list = []
+    if asientos and not plan_vacio:
+        informe = auditar_exportacion_tango(asientos, plan_df)
+        bloqueantes_tango = list(informe.get("bloqueantes") or [])
+        st.session_state["_informe_tango_gate"] = informe
+    else:
+        st.session_state["_informe_tango_gate"] = {"bloqueantes": [], "advertencias": []}
+    return gate_asiento(
+        rows,
+        bloqueantes_tango=bloqueantes_tango,
+        plan_vacio=bool(plan_vacio and asientos),
+    )
+
+
+def _render_panel_revision(g: dict, *, slug: str = "") -> None:
+    if slug:
+        st.session_state[f"{slug}_revision"] = g
+    if g.get("bloqueantes"):
+        st.error("No se puede archivar ni exportar todavía:")
+        for item in g["bloqueantes"]:
+            st.markdown(f"- {item}")
+    for item in g.get("advertencias") or []:
+        st.warning(item)
+    informe = st.session_state.get("_informe_tango_gate") or {}
+    if informe.get("advertencias") and not g.get("bloqueantes"):
+        _mostrar_informe_exportacion_tango(informe)
+
+
+def _puede_exportar_asiento_generico(rows: list[dict], asientos: list | None = None) -> bool:
+    return bool(_gate_asiento_ui(rows, asientos).get("ok"))
 
 
 def _render_grilla_vacia_operativa(slug: str, impuesto: str) -> None:
@@ -9927,14 +10232,10 @@ def _render_resultados_conciliacion_bancaria(
 
     rows = st.session_state.get(f"{slug}_grilla_preview") or rows
     asientos = st.session_state.get(f"{slug}_asientos_generados") or asientos
-    puede_exportar = _puede_exportar_asiento_generico(rows)
+    g_rev = _gate_asiento_ui(rows, asientos)
+    _render_panel_revision(g_rev, slug=slug)
+    puede_exportar = bool(g_rev.get("ok"))
     finalizar = lambda: _finalizar_balance_grilla_slug(slug, ficha, forzar=True)
-
-    if not puede_exportar:
-        st.error(
-            "Exportación bloqueada: hay conceptos con código 99999 sin cuenta Tango "
-            "asignada. Completá todos los selectores de la grilla antes de descargar."
-        )
 
     try:
         periodo_ref = getattr(asientos[0], "periodo", "") or ""
@@ -10069,7 +10370,6 @@ def _render_resultados_devengamiento(
             _render_cuadro_control_analitico_universal(
                 st.session_state.get(f"{slug}_resumen_analitico"), rows, impuesto,
             )
-        puede_exportar = _puede_exportar_asiento_generico(rows)
         finalizar = lambda: _finalizar_balance_grilla_slug(slug, ficha, forzar=True)
     else:
         # Motores sin grilla dedicada: igual permitir ⇄ Debe/Haber.
@@ -10085,17 +10385,13 @@ def _render_resultados_devengamiento(
                 f"**Posición:** {_fmt_pesos_ar(resumen.get('diferencia_previa', 0))} — "
                 f"{resumen.get('resultado_tipo', '—')}"
             )
-        puede_exportar = _puede_exportar_asiento_generico(rows)
         finalizar = lambda: _finalizar_balance_grilla_slug(slug, ficha, forzar=True)
 
     rows = st.session_state.get(f"{slug}_grilla_preview") or rows
     asientos = st.session_state.get(f"{slug}_asientos_generados") or asientos
-
-    if not puede_exportar:
-        st.error(
-            "Exportación bloqueada: hay conceptos con código 99999 sin cuenta Tango "
-            "asignada. Completá todos los selectores de la grilla antes de descargar."
-        )
+    g_rev = _gate_asiento_ui(rows, asientos)
+    _render_panel_revision(g_rev, slug=slug)
+    puede_exportar = bool(g_rev.get("ok"))
 
     try:
         periodo_ref = getattr(asientos[0], "periodo", "") or ""
@@ -10105,26 +10401,17 @@ def _render_resultados_devengamiento(
         mes_ref, anio_ref = hoy.month, hoy.year
 
     if puede_exportar:
-        plan_df = st.session_state.get("plan_cuentas_df")
-        informe_mes = (
-            auditar_exportacion_tango(asientos, plan_df)
-            if plan_df is not None and not plan_df.empty and asientos
-            else {"bloqueantes": [], "advertencias": []}
+        _render_descarga_excel_tango_diferida(
+            slug=slug,
+            ficha=ficha,
+            asientos=asientos,
+            puede_exportar=True,
+            nombre_activo=nombre_activo,
+            cuit_activo=cuit_activo,
+            mes_ref=mes_ref,
+            anio_ref=anio_ref,
+            key_suffix="dev_mes",
         )
-        if informe_mes.get("bloqueantes") or informe_mes.get("advertencias"):
-            _mostrar_informe_exportacion_tango(informe_mes)
-        if not informe_mes.get("bloqueantes"):
-            _render_descarga_excel_tango_diferida(
-                slug=slug,
-                ficha=ficha,
-                asientos=asientos,
-                puede_exportar=True,
-                nombre_activo=nombre_activo,
-                cuit_activo=cuit_activo,
-                mes_ref=mes_ref,
-                anio_ref=anio_ref,
-                key_suffix="dev_mes",
-            )
 
     if puede_exportar and st.button(
         "💾 Guardar Asiento en Biblioteca",
@@ -10272,6 +10559,53 @@ def _seccion_devengamientos_impuesto(
                 st.session_state.pop(f"{slug}_auto_fp", None)
             except Exception:
                 pass
+
+    if motor in {"iva", "iibb", "cm"} and periodo_mensual:
+        st.caption(
+            "Mis Retenciones: se agrupa por **Fecha Ret./Perc.** y se toma **Importe Ret./Perc.** "
+            "Los registros en estado Pendiente no suman."
+        )
+        archivo_mis_ret = st.file_uploader(
+            "Mis Retenciones AFIP (opcional, .xls / .xlsx)",
+            type=["xls", "xlsx"],
+            key=f"uploader_mis_ret_{slug}_{sociedad_id}",
+            help="Export de AFIP. Completa retenciones y percepciones del período seleccionado.",
+        )
+        if archivo_mis_ret is not None:
+            fp_ret = f"{getattr(archivo_mis_ret, 'name', '')}_{getattr(archivo_mis_ret, 'size', 0)}_{periodo_mensual}_{slug}_{rc}"
+            if st.session_state.get(f"{slug}_misret_fp") != fp_ret:
+                parsed_ret = parsear_mis_retenciones_afip(
+                    archivo_mis_ret, str(periodo_mensual), impuesto=motor,
+                )
+                st.session_state[f"{slug}_misret_fp"] = fp_ret
+                st.session_state[f"{slug}_misret_info"] = parsed_ret
+                if not parsed_ret.get("error"):
+                    st.session_state[f"{slug}_retenciones_{rc}"] = float(parsed_ret.get("retenciones") or 0)
+                    st.session_state[f"{slug}_percepciones_{rc}"] = float(parsed_ret.get("percepciones") or 0)
+                    if motor in {"iibb", "cm"}:
+                        st.session_state[f"{slug}_retenciones_bancarias_{rc}"] = float(
+                            parsed_ret.get("retenciones_bancarias") or 0
+                        )
+            info_ret = st.session_state.get(f"{slug}_misret_info") or {}
+            if info_ret.get("error"):
+                st.warning(info_ret["error"])
+            elif info_ret:
+                n_omit = int(info_ret.get("omitidos_pendiente") or 0)
+                st.success(
+                    f"Mis Retenciones · {info_ret.get('cantidad', 0)} tomada(s) en {periodo_mensual}: "
+                    f"retenciones ${float(info_ret.get('retenciones') or 0):,.2f} · "
+                    f"percepciones ${float(info_ret.get('percepciones') or 0):,.2f}"
+                    + (
+                        f" · SIRCREB ${float(info_ret.get('retenciones_bancarias') or 0):,.2f}"
+                        if motor in {"iibb", "cm"}
+                        else ""
+                    )
+                    + (f" · {n_omit} Pendiente(s) omitida(s)" if n_omit else "")
+                )
+                detalle_ret = info_ret.get("detalle") or []
+                if detalle_ret:
+                    with st.expander("Detalle Mis Retenciones", expanded=False):
+                        st.dataframe(pd.DataFrame(detalle_ret), use_container_width=True, hide_index=True)
 
     inputs_manuales: dict[str, float] = {}
     saldos_contingencia: dict[str, list[float]] = {}
@@ -10565,13 +10899,8 @@ def _herramienta_matcheo_inteligente_pdf() -> None:
         st.warning("Registrá al menos un cliente antes de usar esta herramienta.")
         return
 
-    _selector_sociedad_devengamientos(clientes)
-    if (
-        st.session_state.cuit_activo is None
-        or st.session_state.nombre_activo is None
-        or st.session_state.get("plan_cuentas_cliente_id") != st.session_state.get(_SOCiedad_KEY)
-    ):
-        actualizar_sociedad_activa()
+    if not _selector_sociedad_devengamientos(clientes):
+        return
 
     sociedad_id = st.session_state.get(_SOCiedad_KEY)
     if not sociedad_id:
@@ -10717,7 +11046,7 @@ def _seccion_conciliacion_bancaria_banco(
         key=fecha_key,
         help=(
             "Fuente de verdad para Tango. Se fija al último día del período "
-            "mensual seleccionado (podés ajustarla a mano si hace falta)."
+            "mensual. El Excel de bancos sale con tipo CN, clase Básico, moneda PES."
         ),
     )
 
@@ -10750,9 +11079,13 @@ def _seccion_conciliacion_bancaria_banco(
 
 def _seccion_conciliacion_bancaria_balance() -> None:
     with st.container():
+        _mostrar_aviso_cambio_sociedad()
         st.caption(
             "Extracción mensual desde el Balance por solapa de banco. El motor de coordenadas "
-            "Debe/Haber congela columnas mellizas y genera asientos listos para Tango (PES, Ingresado)."
+            "Debe/Haber congela columnas mellizas y genera asientos listos para Tango "
+            "(PES, Ingresado, tipo **CN** según el instructivo de asientos). "
+            "IVA/IIBB siguen exportándose como VARIOS. "
+            "Si el asiento no cierra o hay 99999, no se archiva ni se exporta."
         )
 
         clientes = db.listar_clientes()
@@ -10765,7 +11098,8 @@ def _seccion_conciliacion_bancaria_balance() -> None:
 
         col_sociedad, col_banco = st.columns(2)
         with col_sociedad:
-            _selector_sociedad_devengamientos(clientes_pj)
+            if not _selector_sociedad_devengamientos(clientes_pj):
+                return
         with col_banco:
             banco_elegido = st.selectbox(
                 "🏦 Banco a Conciliar",
@@ -10831,11 +11165,19 @@ def _seccion_devengamientos_iibb(
     )
 
 
+def _mostrar_aviso_cambio_sociedad() -> None:
+    aviso = st.session_state.pop("_aviso_cambio_sociedad", None)
+    if aviso:
+        st.info(aviso)
+
+
 def _seccion_devengamientos() -> None:
+    _mostrar_aviso_cambio_sociedad()
     st.caption(
         "Refundición mensual por impuesto. Seleccioná sociedad e impuesto, "
         "cargá el Balance desde el servidor local (UNC) o subilo como respaldo; el sistema lee "
-        "la solapa del impuesto activo y completa los saldos manuales con el plan de cuentas vinculado."
+        "la solapa del impuesto activo y completa los saldos manuales con el plan de cuentas vinculado. "
+        "La IA no imputa sola: si no cierra o falta cuenta del plan, no se archiva ni se exporta."
     )
 
     clientes = db.listar_clientes()
@@ -10848,7 +11190,8 @@ def _seccion_devengamientos() -> None:
 
     col_sociedad, col_impuesto = st.columns(2)
     with col_sociedad:
-        _selector_sociedad_devengamientos(clientes_pj)
+        if not _selector_sociedad_devengamientos(clientes_pj):
+            return
     with col_impuesto:
         impuesto_elegido = st.selectbox(
             "Impuesto",
@@ -12716,6 +13059,7 @@ def _seccion_herramientas() -> None:
     herramienta_activa = st.selectbox(
         "Seleccioná la herramienta que vas a usar:",
         options=[
+            "Recategorización Monotributo",
             "FCI — Motor FIFO (ejercicio)",
             "Extracto FCI → Excel",
             "Completar cuadro bancario existente",
@@ -12733,7 +13077,9 @@ def _seccion_herramientas() -> None:
     )
     st.divider()
 
-    if herramienta_activa == "Completar cuadro bancario existente":
+    if herramienta_activa == "Recategorización Monotributo":
+        _seccion_recategorizacion_monotributo()
+    elif herramienta_activa == "Completar cuadro bancario existente":
         _herramienta_completar_cuadro_bancario()
     elif herramienta_activa == "Matcheo inteligente PDF + Tango":
         _herramienta_matcheo_inteligente_pdf()
@@ -12760,8 +13106,9 @@ def _seccion_herramientas() -> None:
 def _seccion_recategorizacion_monotributo() -> None:
     """Análisis de períodos devengados en facturas electrónicas AFIP (PDF / ZIP)."""
     st.caption(
-        "Cargá facturas electrónicas AFIP (PDF sueltos o ZIP) para consolidar "
-        "períodos facturados y preparar el papel de trabajo de recategorización."
+        "El mes de cada comprobante es el **Período Facturado Desde**, no la Fecha de Emisión. "
+        "Las notas de crédito restan. Los recibos se cargan (no se descartan aunque citen una factura). "
+        "Si el CUIT emisor no es el del cliente activo, el PDF no entra."
     )
 
     clientes = db.listar_clientes()
@@ -12769,13 +13116,8 @@ def _seccion_recategorizacion_monotributo() -> None:
         st.warning("Debe registrar al menos un cliente antes de analizar facturas.")
         return
 
-    _selector_sociedad_devengamientos(clientes)
-    if (
-        st.session_state.cuit_activo is None
-        or st.session_state.nombre_activo is None
-        or st.session_state.get("plan_cuentas_cliente_id") != st.session_state.get(_SOCiedad_KEY)
-    ):
-        actualizar_sociedad_activa()
+    if not _selector_sociedad_devengamientos(clientes):
+        return
 
     nombre = st.session_state.get("nombre_activo") or "—"
     cuit = st.session_state.get("cuit_activo") or "—"
@@ -12792,15 +13134,15 @@ def _seccion_recategorizacion_monotributo() -> None:
         type=["pdf", "zip"],
         accept_multiple_files=True,
         key="mono_uploader_facturas",
-        help="Podés subir varios PDFs o un ZIP con múltiples comprobantes.",
+        help="PDFs de facturas, NC, ND y recibos. El período facturado sale del cuerpo del PDF.",
     )
 
-    if st.button("🚀 Analizar Períodos Devengados", type="primary", key="mono_btn_analizar"):
+    if st.button("Analizar períodos facturados", type="primary", key="mono_btn_analizar"):
         if not archivos:
             st.warning("Subí al menos un archivo PDF o ZIP para analizar.")
         else:
-            with st.spinner("Procesando facturas y extrayendo períodos devengados..."):
-                df, errores = procesar_facturas_monotributo(archivos)
+            with st.spinner("Procesando comprobantes (período facturado, recibos, CUIT)..."):
+                df, errores = procesar_facturas_monotributo(archivos, cuit_cliente=str(cuit))
                 st.session_state.mono_facturas_df = df
                 st.session_state.mono_errores_extraccion = errores
             if df.empty:
@@ -12813,7 +13155,7 @@ def _seccion_recategorizacion_monotributo() -> None:
     errores_mono = st.session_state.get("mono_errores_extraccion") or []
 
     if errores_mono:
-        with st.expander(f"Archivos con advertencias ({len(errores_mono)})", expanded=False):
+        with st.expander(f"Advertencias / no se cargó ({len(errores_mono)})", expanded=True):
             st.dataframe(pd.DataFrame(errores_mono), use_container_width=True, hide_index=True)
 
     if df_mono is not None and not df_mono.empty:
@@ -12821,17 +13163,65 @@ def _seccion_recategorizacion_monotributo() -> None:
         total_fc = round(float(df_mono.loc[df_mono["Importe Total"] > 0, "Importe Total"].sum()), 2)
         total_nc = round(float(df_mono.loc[df_mono["Importe Total"] < 0, "Importe Total"].sum()), 2)
         n_nc = int((df_mono["Importe Total"] < 0).sum())
+        n_recibos = 0
+        n_usd = 0
+        n_supuesto = 0
+        if "Tipo" in df_mono.columns:
+            n_recibos = int(df_mono["Tipo"].astype(str).str.upper().str.startswith("RECIBO").sum())
+        if "Importe Dólares" in df_mono.columns:
+            n_usd = int(pd.to_numeric(df_mono["Importe Dólares"], errors="coerce").fillna(0).gt(0).sum())
+        if "Supuesto período" in df_mono.columns:
+            n_supuesto = int(df_mono["Supuesto período"].astype(str).str.len().gt(0).sum())
         periodos = df_mono["Período Desde"].astype(str).tolist()
         st.markdown(
             f"**Resumen:** {len(df_mono)} comprobante(s) "
-            f"({n_nc} nota(s) de crédito) · "
+            f"({n_nc} NC · {n_recibos} recibo(s)"
+            f"{f' · {n_usd} en USD' if n_usd else ''}"
+            f"{f' · {n_supuesto} con supuesto de período' if n_supuesto else ''}) · "
             f"Facturado **${total_fc:,.2f}** · "
             f"NC **${total_nc:,.2f}** · "
             f"Neto **${total_importe:,.2f}** · "
             f"Período **{periodos[0]}** a **{periodos[-1]}**"
         )
-        st.caption("Las notas de crédito figuran con importe negativo y ya están descontadas del neto.")
+        st.caption(
+            "NC con importe negativo. Recibos en positivo. "
+            "El mes sale de Período Desde. En USD, Imp. Total del Excel es dólares × tipo de cambio."
+        )
         st.dataframe(df_mono, use_container_width=True, hide_index=True)
+
+        meta_topes = cargar_topes_categorias()
+        cats = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K"]
+        cat_sel = st.selectbox(
+            "Categoría actual (para proyección)",
+            cats,
+            key="mono_cat_actual",
+            help="El tope se toma de ARCA. El control contra AFIP usa el semestre fijo, no la ventana rodante.",
+        )
+        proy = proyectar_monotributo(df_mono, cat_sel)
+        st.caption(f"{meta_topes.get('fuente')} · vigencia {meta_topes.get('vigencia')}")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric(
+            f"Facturado recategorización ({proy['recategorizacion']})",
+            f"${proy['facturado_fijo']:,.2f}",
+            help=f"{proy['fijo_desde'].strftime('%d/%m/%Y')} a {proy['fijo_hasta'].strftime('%d/%m/%Y')}",
+        )
+        c2.metric(
+            "Facturado rodante 12 meses",
+            f"${proy['facturado_rodante']:,.2f}",
+            help=f"{proy['rodante_desde'].strftime('%d/%m/%Y')} a {proy['rodante_hasta'].strftime('%d/%m/%Y')}",
+        )
+        tope_txt = f"${proy['tope']:,.2f}" if proy.get("tope") is not None else "—"
+        c3.metric(f"Tope categoría {cat_sel}", tope_txt)
+        max_mes = proy.get("max_facturar_mes")
+        c4.metric(
+            "Máx. a facturar este mes",
+            f"${max_mes:,.2f}" if max_mes is not None else "—",
+        )
+        if proy.get("supera_tope"):
+            st.warning(
+                "El rodante de 12 meses ya superó el tope de la categoría. "
+                "Puede corresponder recategorización inmediata: confirmarlo con el equipo / ARCA."
+            )
 
         cuit_limpio = re.sub(r"\D", "", str(cuit)) or "00000000000"
         nombre_xlsx = f"Recategorizacion_Monotributo_{cuit_limpio}_{date.today().strftime('%Y%m%d')}.xlsx"
@@ -13053,12 +13443,7 @@ def _cerrar_sesion_oficina() -> None:
 
 def _pantalla_login_oficina() -> None:
     """Pantalla de ingreso: cada persona de la oficina elige su usuario."""
-    st.title("Estudio Contable")
-    st.subheader("Ingreso a la oficina")
-    st.caption(
-        "Cada persona entra con su usuario. Las sesiones son independientes: "
-        "varios pueden trabajar a la vez sin pisarse."
-    )
+    _render_titulo_estudio("login")
     if _es_entorno_cloud():
         st.caption("Cada uno elige su nombre. PIN del equipo: el que les pasó el estudio.")
         try:
@@ -13294,12 +13679,12 @@ def main() -> None:
     # --- Vista administración (ocupa el área principal) ---
     vista_admin = st.session_state.get("vista_admin")
     if vista_admin == "clientes":
-        _render_titulo_estudio()
+        _render_titulo_estudio("clientes")
         _render_barra_superior_cuenta()
         _seccion_clientes()
         return
     if vista_admin == "usuarios_oficina":
-        _render_titulo_estudio()
+        _render_titulo_estudio("usuarios_oficina")
         _render_barra_superior_cuenta()
         if not st.session_state.get("usuario_oficina_admin"):
             st.warning("Solo administradores pueden gestionar usuarios.")
@@ -13307,7 +13692,7 @@ def main() -> None:
         _seccion_usuarios_oficina()
         return
     if vista_admin == "acerca":
-        _render_titulo_estudio()
+        _render_titulo_estudio("acerca")
         _render_barra_superior_cuenta()
         st.subheader("Acerca del sistema")
         st.markdown(
@@ -13315,7 +13700,7 @@ def main() -> None:
             - **Devengamientos de Fin de Mes**: solo Personas Jurídicas → Excel asientos Tango.
             - **Conciliación Bancaria**: extractos PDF + lista Tango → planilla Excel clonada.
             - **Préstamos Financieros**: auditoría de cuotas desde PDFs bancarios.
-            - **Herramientas**: matcheo PDF + Tango; cuadro bancario; extractos; FCI FIFO; caja USD; liquidaciones; cruce facturas.
+            - **Herramientas**: recategorización monotributo; matcheo PDF + Tango; cuadro bancario; extractos; FCI FIFO; caja USD; liquidaciones; cruce facturas.
             - **Tango**: agente del estudio (responde, formula y lee capturas) con las ayudas Axoft y el export de sueldos.
             - **ARCA**: encola jobs AFIP (emitir FCC / VEPs / comprobantes); el worker local ejecuta en Chrome. Sin claves en la web.
             - **Usuarios de oficina**: cada persona entra con su usuario; sesiones independientes.
@@ -13328,16 +13713,12 @@ def main() -> None:
         )
         return
 
-    # Título → Nav → Toolbar (orden crítico: el CSS fixed del toolbar no debe
-    # anteponerse al nav en el árbol de widgets / hit-testing).
-    _render_titulo_estudio()
-    ventana_activa = _render_nav_ventanas_principales()
+    ventana_activa = str(
+        st.session_state.get(_VENTANA_KEY) or _VENTANAS_PRINCIPALES[0]
+    )
     _detectar_cambio_ventana_y_flush()
+    _render_titulo_estudio(ventana_activa)
     _render_barra_superior_cuenta()
-    st.divider()
-
-    if ventana_activa != "Tango":
-        st.markdown(f"### **{ventana_activa}**")
 
     try:
         if ventana_activa == "Devengamiento de Impuestos":

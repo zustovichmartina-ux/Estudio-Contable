@@ -32,14 +32,14 @@ Secrets Cloud: `AFIP_WORKER_URL` + `AFIP_WORKER_TOKEN` (ver `jobs/cloud_bridge.t
 - Nunca claves en Excel ni Streamlit.
 - CUIT nuevo → `needs_admin` / job `needs_auth` + handoff admin.
 - Claves solo Chrome autofill en la PC del worker.
-- Arranque: `iniciar_afip_worker.bat` (dry-run hasta Playwright live).
+- Arranque: `iniciar_afip_worker.bat` (`--live`: Chrome/AFIP para `bajar_comprobantes`).
 
 ## Orden
 
 1. Dry-run del loop ✅
 2. UI ARCA (encolar + cola + registry) ✅
 3. Worker autónomo + API/túnel (`iniciar_afip_worker.bat`) ✅
-4. `bajar_comprobantes` Playwright
+4. `bajar_comprobantes` Playwright ✅ (Comprobantes en Línea → PDFs)
 5. `bajar_veps`
 6. `emitir_fcc`
 7. Badge auth + handoff 2FA (registry) ✅ base

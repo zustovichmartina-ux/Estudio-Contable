@@ -36,14 +36,13 @@ def _leer_secreto(clave: str) -> str | None:
         return None
 
 
-def tiene_clave_cifrado() -> bool:
-    return bool(_leer_secreto("DATA_ENCRYPTION_KEY"))
-
-
 def obtener_fernet():
-    """Devuelve Fernet o None si no hay clave configurada."""
+    """Devuelve Fernet o None si no hay clave configurada o no es una clave Fernet válida."""
     raw = _leer_secreto("DATA_ENCRYPTION_KEY")
     if not raw:
+        return None
+    # Placeholder del example: no es una clave Fernet (provoca el error al guardar planes).
+    if "PEGAR_CLAVE" in raw.upper() or len(raw) < 32:
         return None
     try:
         from cryptography.fernet import Fernet
@@ -52,6 +51,11 @@ def obtener_fernet():
         return Fernet(key)
     except Exception:
         return None
+
+
+def tiene_clave_cifrado() -> bool:
+    """True solo si la clave existe y Fernet puede usarla (no alcanza con el placeholder)."""
+    return obtener_fernet() is not None
 
 
 def instrucciones_clave_cifrado() -> str:

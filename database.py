@@ -1267,6 +1267,15 @@ def _inicializar_tablas_conciliacion(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    for col, spec in (
+        ("fuente", "TEXT NOT NULL DEFAULT ''"),
+        ("score", "TEXT NOT NULL DEFAULT '0'"),
+        ("confianza", "TEXT NOT NULL DEFAULT ''"),
+    ):
+        try:
+            conn.execute(f"ALTER TABLE bank_transactions ADD COLUMN {col} {spec}")
+        except sqlite3.OperationalError:
+            pass
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS proveedores_pendientes (
@@ -1405,8 +1414,8 @@ def insertar_movimientos_banco(filas: list[dict]) -> int:
                 INSERT INTO bank_transactions (
                     cliente_id, banco, periodo, fecha, descripcion,
                     credito, debito, saldo, categoria, tipo, estado,
-                    match_detalle, match_ref_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    match_detalle, match_ref_id, fuente, score, confianza
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     int(f["cliente_id"]),
@@ -1422,6 +1431,9 @@ def insertar_movimientos_banco(filas: list[dict]) -> int:
                     str(f.get("estado") or "PENDIENTE"),
                     f.get("match_detalle"),
                     f.get("match_ref_id"),
+                    str(f.get("fuente") or ""),
+                    str(f.get("score") or "0"),
+                    str(f.get("confianza") or ""),
                 ),
             )
         conn.commit()
@@ -1451,7 +1463,7 @@ def listar_movimientos_banco(
 
 
 def actualizar_movimiento_banco(mov_id: int, **campos) -> None:
-    allowed = {"categoria", "tipo", "estado", "match_detalle", "match_ref_id"}
+    allowed = {"categoria", "tipo", "estado", "match_detalle", "match_ref_id", "fuente", "score", "confianza"}
     parts, vals = [], []
     for k, v in campos.items():
         if k in allowed:

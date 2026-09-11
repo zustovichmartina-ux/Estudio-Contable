@@ -23,11 +23,18 @@ except ImportError:
 ROOT = Path(__file__).resolve().parent
 CONOCIMIENTO_DIR = ROOT / "tango_conocimiento"
 INDEX_PATH = CONOCIMIENTO_DIR / "index.jsonl"
+MANUAL_TANGO_UNC = Path(
+    r"\\TANGOSRV\Compartido\CLIENTES\1 - Normativa - Vencimientos\Tango"
+)
+MANUAL_TANGO_LOCAL = Path.home() / "Desktop" / "Tango"
 
 _SKIP_NAME = re.compile(
     r"thumbs\.db|tango_db_avance|tango\.ini|password|clave",
     re.I,
 )
+_SUF_PDF = {".pdf"}
+_SUF_HTML = {".html", ".htm"}
+_SUF_ESTUDIO = {".html", ".htm", ".md", ".txt"}
 _TOKEN = re.compile(r"[a-záéíóúñü0-9]{3,}", re.I)
 
 
@@ -63,14 +70,20 @@ def _html_a_texto(raw: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
-def _fuentes_dir() -> list[Path]:
-    home = Path.home() / "Desktop"
-    return [
-        CONOCIMIENTO_DIR,
-        home / "Tango",
-        Path(r"\\TANGOSRV\Compartido\CLIENTES\1 - Normativa - Vencimientos\Tango"),
-        home,
-    ]
+def _dir_ok(path: Path) -> bool:
+    try:
+        return path.is_dir()
+    except OSError:
+        return False
+
+
+def _raiz_manual_html() -> Path | None:
+    """Carpeta del manual Axoft. HTML primero; nunca PDF. UNC si está, si no el Escritorio."""
+    if _dir_ok(MANUAL_TANGO_UNC):
+        return MANUAL_TANGO_UNC
+    if _dir_ok(MANUAL_TANGO_LOCAL):
+        return MANUAL_TANGO_LOCAL
+    return None
 
 
 def _omitir(path: Path) -> bool:
@@ -78,6 +91,8 @@ def _omitir(path: Path) -> bool:
     if _SKIP_NAME.search(name):
         return True
     if name.startswith("~$"):
+        return True
+    if path.suffix.lower() in _SUF_PDF:
         return True
     return False
 
@@ -96,14 +111,53 @@ def _trozar(texto: str, size: int = 1400, overlap: int = 180) -> list[str]:
     return [c for c in out if len(c) > 40]
 
 
+def _titulo_html(path: Path, raw: str) -> str:
+    title_m = re.search(r"<title>(.*?)</title>", raw, re.I | re.S)
+    h1_m = re.search(r"<h1[^>]*>(.*?)</h1>", raw, re.I | re.S)
+    title = ""
+    if h1_m:
+        title = re.sub(r"<[^>]+>", " ", h1_m.group(1))
+    if not title and title_m:
+        title = title_m.group(1)
+    title = re.sub(r"\s+", " ", title).strip() or path.stem
+    partes = [p for p in path.parts if p.lower() not in {"tango", "desktop", "clientes"}]
+    crumbs: list[str] = []
+    for p in partes:
+        if p.lower().endswith((".html", ".htm")):
+            break
+        if p.startswith("\\\\") or p.endswith(":") or p in {"TANGOSRV", "Compartido"}:
+            crumbs = []
+            continue
+        if p.startswith("1 - "):
+            crumbs = []
+            continue
+        crumbs.append(p)
+    ruta = " / ".join(crumbs[-3:])
+    if ruta and title.lower() not in ruta.lower():
+        return f"{ruta} — {title}"
+    return title
+
+
+def _html_sin_cuerpo(texto: str) -> bool:
+    plano = _sin_acento(texto or "").lower()
+    if "sin contenido" in plano:
+        return True
+    cuerpo = re.sub(r"https?://\S+", " ", texto or "")
+    return len(cuerpo.strip()) < 80
+
+
 def _leer_archivo(path: Path) -> list[dict[str, str]]:
     suf = path.suffix.lower()
+    if suf in _SUF_PDF:
+        return []
     try:
-        if suf in {".html", ".htm"}:
+        if suf in _SUF_HTML:
             raw = path.read_text(encoding="utf-8", errors="replace")
-            title_m = re.search(r"<title>(.*?)</title>", raw, re.I | re.S)
-            title = re.sub(r"\s+", " ", title_m.group(1)).strip() if title_m else path.stem
-            chunks = _trozar(_html_a_texto(raw))
+            texto = _html_a_texto(raw)
+            if _html_sin_cuerpo(texto):
+                return []
+            title = _titulo_html(path, raw)
+            chunks = _trozar(texto, size=1800, overlap=220)
             return [{"source": str(path), "title": title, "text": c} for c in chunks]
         if suf in {".md", ".txt"}:
             raw = path.read_text(encoding="utf-8", errors="replace")
@@ -136,54 +190,119 @@ def _csv_sueldos(path: Path) -> list[dict[str, str]]:
     return rows
 
 
-def reconstruir_indice(*, guardar: bool = True) -> list[dict[str, str]]:
-    """Recorre Desktop/Tango, normativas UNC y tango_conocimiento/."""
+_INDICE_MEM: list[dict[str, str]] | None = None
+_INDICE_MTIME = 0.0
+
+
+def _clave_rel(path: Path, raiz: Path) -> str:
+    try:
+        return path.relative_to(raiz).as_posix().lower()
+    except ValueError:
+        return path.name.lower()
+
+
+def _indexar_carpeta(
+    raiz: Path,
+    vistos: set[str],
+    *,
+    sufijos: set[str],
+    prefijo: str,
+) -> list[dict[str, str]]:
+    docs: list[dict[str, str]] = []
+    if not _dir_ok(raiz):
+        return docs
+    for path in raiz.rglob("*"):
+        if not path.is_file() or _omitir(path):
+            continue
+        if path.suffix.lower() not in sufijos:
+            continue
+        key = f"{prefijo}:{_clave_rel(path, raiz)}"
+        if key in vistos:
+            continue
+        vistos.add(key)
+        docs.extend(_leer_archivo(path))
+    return docs
+
+
+def reconstruir_indice(*, guardar: bool = True, completo: bool = False) -> list[dict[str, str]]:
+    """Indexa reglas del estudio + manual HTML de Tango (nunca PDF).
+
+    El manual vive en TANGOSRV (HTML). Si la red no responde, usa el Escritorio.
+    ``completo`` también mira la copia local si el UNC ya se indexó.
+    """
+    global _INDICE_MEM, _INDICE_MTIME
     CONOCIMIENTO_DIR.mkdir(parents=True, exist_ok=True)
     docs: list[dict[str, str]] = []
     vistos: set[str] = set()
 
-    def _clave(path: Path, raiz: Path) -> str:
-        try:
-            return path.relative_to(raiz).as_posix().lower()
-        except ValueError:
-            return path.name.lower()
+    docs.extend(_indexar_carpeta(
+        CONOCIMIENTO_DIR, vistos, sufijos=_SUF_ESTUDIO, prefijo="estudio",
+    ))
 
-    for raiz in _fuentes_dir():
-        if not raiz.exists():
-            continue
-        if raiz.name.lower() == "desktop":
-            for path in raiz.glob("Tango_Sueldos_*.csv"):
-                if _omitir(path) or path.name.lower() in vistos:
-                    continue
-                vistos.add(path.name.lower())
-                docs.extend(_leer_archivo(path))
-            for path in raiz.glob("Tango_Sueldos_arbol_*.txt"):
-                if _omitir(path) or path.name.lower() in vistos:
-                    continue
-                vistos.add(path.name.lower())
-                docs.extend(_leer_archivo(path))
-            continue
-        for path in raiz.rglob("*"):
-            if not path.is_file() or _omitir(path):
-                continue
-            if path.suffix.lower() not in {".html", ".htm", ".md", ".txt"}:
-                continue
-            key = _clave(path, raiz)
-            if key in vistos:
+    raiz_html = _raiz_manual_html()
+    if raiz_html is not None:
+        docs.extend(_indexar_carpeta(
+            raiz_html, vistos, sufijos=_SUF_HTML, prefijo="manual",
+        ))
+    if completo and raiz_html != MANUAL_TANGO_LOCAL and _dir_ok(MANUAL_TANGO_LOCAL):
+        docs.extend(_indexar_carpeta(
+            MANUAL_TANGO_LOCAL, vistos, sufijos=_SUF_HTML, prefijo="manual",
+        ))
+
+    escritorio = Path.home() / "Desktop"
+    if escritorio.is_dir():
+        for path in escritorio.glob("Tango_Sueldos_*.csv"):
+            key = f"csv:{path.name.lower()}"
+            if _omitir(path) or key in vistos:
                 continue
             vistos.add(key)
             docs.extend(_leer_archivo(path))
+        for path in escritorio.glob("Tango_Sueldos_arbol_*.txt"):
+            key = f"txt:{path.name.lower()}"
+            if _omitir(path) or key in vistos:
+                continue
+            vistos.add(key)
+            docs.extend(_leer_archivo(path))
+
+    prepared = _preparar_docs(docs)
     if guardar:
         INDEX_PATH.write_text(
             "\n".join(json.dumps(d, ensure_ascii=False) for d in docs) + ("\n" if docs else ""),
             encoding="utf-8",
         )
-    return docs
+        _INDICE_MEM = prepared
+        try:
+            _INDICE_MTIME = INDEX_PATH.stat().st_mtime
+        except OSError:
+            _INDICE_MTIME = 0.0
+    else:
+        _INDICE_MEM = prepared
+    return prepared
+
+
+def _preparar_docs(docs: list[dict[str, str]]) -> list[dict[str, str]]:
+    out: list[dict[str, str]] = []
+    for item in docs:
+        if not isinstance(item, dict) or not item.get("text"):
+            continue
+        doc = {
+            "source": str(item.get("source") or ""),
+            "title": str(item.get("title") or ""),
+            "text": str(item.get("text") or ""),
+        }
+        doc["_tok"] = _tokens(f"{doc['title']} {doc['text']}")
+        out.append(doc)
+    return out
 
 
 def cargar_indice() -> list[dict[str, str]]:
+    """Lee el índice de disco una vez y lo deja en memoria."""
+    global _INDICE_MEM, _INDICE_MTIME
     if not INDEX_PATH.exists() or INDEX_PATH.stat().st_size < 50:
-        return reconstruir_indice(guardar=True)
+        return reconstruir_indice(guardar=True, completo=False)
+    mtime = INDEX_PATH.stat().st_mtime
+    if _INDICE_MEM is not None and mtime == _INDICE_MTIME:
+        return _INDICE_MEM
     out: list[dict[str, str]] = []
     for line in INDEX_PATH.read_text(encoding="utf-8", errors="replace").splitlines():
         line = line.strip()
@@ -199,7 +318,10 @@ def cargar_indice() -> list[dict[str, str]]:
                 "title": str(item.get("title") or ""),
                 "text": str(item.get("text") or ""),
             })
-    return out
+    docs = _preparar_docs(out)
+    _INDICE_MEM = docs
+    _INDICE_MTIME = mtime
+    return docs
 
 
 def _sin_acento(texto: str) -> str:
@@ -277,15 +399,17 @@ def _nro_concepto(pregunta: str) -> str:
     return m.group(1) if m else ""
 
 
-def recuperar(pregunta: str, docs: list[dict[str, str]], k: int = 8) -> list[dict[str, str]]:
+def recuperar(pregunta: str, docs: list[dict[str, str]], k: int = 6) -> list[dict[str, str]]:
     q = _tokens(pregunta)
     if not q or not docs:
         return docs[:k]
     nro = _nro_concepto(pregunta) if _es_consulta_formula(pregunta) else ""
     scored: list[tuple[float, dict[str, str]]] = []
     for doc in docs:
-        blob = f"{doc.get('title', '')} {doc.get('text', '')}"
-        t = _tokens(blob)
+        texto_doc = f"{doc.get('title', '')} {doc.get('text', '')}"
+        t = doc.get("_tok")
+        if not isinstance(t, set):
+            t = _tokens(texto_doc)
         if not t:
             continue
         hit = len(q & t)
@@ -296,6 +420,10 @@ def recuperar(pregunta: str, docs: list[dict[str, str]], k: int = 8) -> list[dic
         source = (doc.get("source") or "").lower()
         if any(w in title for w in q):
             score += 2.0
+        if source.endswith(".html") or source.endswith(".htm"):
+            score += 8.0
+        elif source.endswith(".pdf"):
+            score -= 50.0
         es_formula_csv = (
             "formulas_completo.csv" in source
             or "sueldos_formulas" in source
@@ -312,7 +440,10 @@ def recuperar(pregunta: str, docs: list[dict[str, str]], k: int = 8) -> list[dic
                 score += 20.0
             if "sueldos" in source and es_formula_csv:
                 score -= 15.0
-        if nro and re.search(rf'codigo["\']?\s*:\s*["\']?{nro}\b', _sin_acento(blob).lower()):
+        if nro and re.search(
+            rf'codigo["\']?\s*:\s*["\']?{re.escape(nro)}\b',
+            _sin_acento(texto_doc).lower(),
+        ):
             score += 25.0
         if nro and re.search(rf"^sueldos {nro} ", title):
             score += 4.0
@@ -321,8 +452,8 @@ def recuperar(pregunta: str, docs: list[dict[str, str]], k: int = 8) -> list[dic
         if "sicoss" in source or "siap" in source:
             if "sicoss" not in q and "siap" not in q:
                 score -= 8.0
-        if "base_marti" in source or "tango_conocimiento" in source:
-            score += 8.0
+        if "base_marti" in source or "tango_conocimiento" in source or "reglas_estudio" in source:
+            score += 12.0
         scored.append((score, doc))
     scored.sort(key=lambda x: x[0], reverse=True)
     return [d for _, d in scored[:k]]
@@ -637,23 +768,15 @@ def _llamar_llm(
         partes.append({"type": "text", "text": texto})
         messages = [*messages[:-1], {"role": "user", "content": partes}]
     candidatos = [modelo]
-    if "x.ai" in url:
-        for alt in _GROK_MODELOS:
-            if alt not in candidatos:
-                candidatos.append(alt)
-    extras: list[dict[str, Any]] = [{}]
-    if "x.ai" in url:
-        extras = [{"reasoning_effort": "low"}, {}]
-    else:
-        extras = [{"max_tokens": 4096}]
+    extras: list[dict[str, Any]] = [{"max_tokens": 1800}]
     ultimo = ""
-    timeout = 55
+    timeout = 40 if imagenes else 22
     for modelo_try in candidatos:
         salto_modelo = False
         for extra in extras:
             payload = {
                 "model": modelo_try,
-                "temperature": 0.7,
+                "temperature": 0.2,
                 "messages": [{"role": "system", "content": system}, *messages],
             }
             payload.update(extra)
@@ -709,14 +832,17 @@ Información del estudio. Formulá la respuesta con esto, con tus palabras. No l
 - Concepto 1 sueldo básico = USUELD/30*CANTIDAD. Si cambia una fórmula, refrescar el concepto y reliquidar.
 - Concepto en 0 en la liquidación: no se “borra” como en Excel. Liquidaciones habilitadas para no calcularlo; no imprimir si importe es cero para que no salga en el recibo. Si da 0 por CTRATO 099/048, está bien.
 - Papeles de bancos: solo el primer mes toma el saldo inicial del extracto; el resto arrastra. No forzar la diferencia a 0. No inventar meses sin extracto. Transferencias propias: una vez del lado que recibe.
-- Monotributo: el período es fecha desde/hasta, no la fecha de emisión.
+- Monotributo: el mes es Período Facturado Desde, no la fecha de emisión. Recibos se cargan (no se descartan aunque citen una factura). NC restan. Facturas, NC y Recibos tienen correlatividad aparte. USD: Imp. Total = dólares × tipo de cambio (fórmula).
+- IVA retenciones/percepciones sufridas: agrupar por Fecha Ret./Perc. (nunca Fecha Comprobante). Tomar Importe Ret./Perc. Estado Pendiente no suma.
+- Asientos web→Tango: fecha = último día del mes, moneda PES, leyenda de renglones vacía. IVA/IIBB se exportan como VARIOS. Conciliación bancaria se exporta como CN. El código de cuenta es del plan de esa sociedad.
+- Fechas dd/mm/yyyy; mes en encabezados mmm-yy. No inventar alícuotas ni topes; si pueden haber cambiado, hay que chequear ARCA.
 """
 
 _SYSTEM = """Sos Grok en el chat del Estudio Contable.
 
-Tenés IA: pensá y explicá como en grok.com, en español. La respuesta la ARMÁS vos usando la información del estudio y el material que te pasamos. No inventes menús ni fórmulas si ya está en ese material. No pegues manuales ni URLs.
+Tenés IA: pensá y explicá como en grok.com, en español. La respuesta la ARMÁS vos usando la información del estudio y el material que te pasamos. El manual de Tango que te damos está en HTML (ayudas Axoft); razoná desde esas páginas, no desde PDF. No inventes menús ni fórmulas si ya está en ese material. No pegues manuales ni URLs.
 
-No pidas ni escribas claves, TANGO.INI ni contraseñas.
+Si algo no está en el material, decilo: no completes con una cuenta, alícuota o fórmula plausible. El código de cuenta es del plan de ESA sociedad, no de otra. No pidas ni escribas claves, TANGO.INI ni contraseñas.
 """ + _MEMORIA_ESTUDIO
 
 _SYSTEM_FORMULA = _SYSTEM + """
@@ -980,7 +1106,7 @@ def responder(
     hay_foto = bool(imagenes)
     seguimiento = hay_foto and _es_seguimiento_visual(consulta)
     busqueda = consulta if hay_foto else _texto_busqueda(consulta, historial)
-    hits = recuperar(busqueda if _pide_pegar(consulta) else consulta, docs, k=4 if hay_foto else 8)
+    hits = recuperar(busqueda if _pide_pegar(consulta) else consulta, docs, k=3 if hay_foto else 6)
     formula_hit = None
     pide_formula = (
         (not _es_pregunta_concepto_cero(consulta))
@@ -1012,6 +1138,8 @@ def responder(
             "docs": len(docs),
             "uso_ia": False,
             "clave_invalida": False,
+            "pide_formula": bool(pide_formula),
+            "formula_encontrada": bool(formula_hit),
         }
     bloques_ctx: list[str] = []
     if formula_hit:
@@ -1029,13 +1157,15 @@ def responder(
         if _es_doc_formula(h):
             texto_h = _explicar_formula(h)
         else:
-            texto_h = re.sub(r"\s+\|\s+", "\n", texto_h)[:600]
+            fuente = str(h.get("source") or "").lower()
+            limite = 1800 if fuente.endswith((".html", ".htm")) else 450
+            texto_h = re.sub(r"\s+\|\s+", "\n", texto_h)[:limite]
         bloques_ctx.append(
             f"### {h.get('title')}\n{texto_h}"
         )
     contexto = "\n\n".join(bloques_ctx)
     msgs: list[dict[str, Any]] = []
-    hist_usar = (historial or [])[-4:] if hay_foto else (historial or [])[-10:]
+    hist_usar = (historial or [])[-3:] if hay_foto else (historial or [])[-6:]
     for m in hist_usar:
         role = m.get("role") or "user"
         if role not in {"user", "assistant"}:
@@ -1088,4 +1218,6 @@ def responder(
         "docs": len(docs),
         "uso_ia": bool(ia),
         "clave_invalida": _es_error_clave(error),
+        "pide_formula": bool(pide_formula),
+        "formula_encontrada": bool(formula_hit),
     }

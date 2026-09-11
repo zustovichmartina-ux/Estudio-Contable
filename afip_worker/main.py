@@ -20,6 +20,7 @@ from afip_worker.jobs import (
     ensure_job_dirs,
     finish_job,
     jobs_root,
+    login_in_progress,
     mark_needs_auth,
     write_job,
 )
@@ -34,6 +35,9 @@ def process_one(*, dry_run: bool = True, root: Path | None = None) -> bool:
     """Procesa un job. True si tomó uno; False si la cola pending está vacía."""
     root = root or jobs_root()
     ensure_job_dirs(root)
+    if login_in_progress(root):
+        LOG.info("login visible en curso; pauso la cola")
+        return False
     job = claim_next(root)
     if not job:
         return False
@@ -62,6 +66,7 @@ def process_one(*, dry_run: bool = True, root: Path | None = None) -> bool:
         ok=result.ok,
         message=result.message,
         files=result.files,
+        extra=getattr(result, "extra", None) or {},
         root=root,
     )
     LOG.info(
@@ -87,8 +92,8 @@ def loop(*, dry_run: bool = True, interval: float = 3.0, once: bool = False, roo
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Worker AFIP (cola jobs/)")
-    parser.add_argument("--dry-run", action="store_true", default=True, help="Sin AFIP real (default)")
-    parser.add_argument("--live", action="store_true", help="Modo real (aún stub)")
+    parser.add_argument("--dry-run", action="store_true", default=True, help="Sin AFIP real (default si no hay --live)")
+    parser.add_argument("--live", action="store_true", help="Comprobantes en Línea en segundo plano (sesión persistente)")
     parser.add_argument("--once", action="store_true", help="Procesar un solo job y salir")
     parser.add_argument("--interval", type=float, default=3.0, help="Segundos entre polls")
     parser.add_argument("--jobs-root", type=str, default="", help="Override AFIP_JOBS_ROOT")

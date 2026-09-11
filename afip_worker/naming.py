@@ -49,3 +49,27 @@ def nombre_comprobante(
 
 def join_destino(ruta_destino: str, filename: str) -> Path:
     return Path(ruta_destino) / filename
+
+
+def iso_to_ddmmyyyy(iso: str) -> str:
+    raw = (iso or "").strip()[:10]
+    if len(raw) == 10 and raw[4] == "-" and raw[7] == "-":
+        year, month, day = raw.split("-")
+        return f"{day}/{month}/{year}"
+    return raw
+
+
+def nombre_mis_comprobantes(
+    *,
+    cliente: str,
+    tipo: str,
+    desde: str,
+    hasta: str,
+    ext: str,
+) -> str:
+    """Martina Zustovich MisComprobantes Emitidos 2026-01-01_a_2026-09-04.xlsx"""
+    suf = (ext or "xlsx").lstrip(".")
+    return (
+        f"{safe_name(cliente or 'Cliente', 40)} MisComprobantes "
+        f"{safe_name(tipo, 16)} {safe_name(desde, 12)}_a_{safe_name(hasta, 12)}.{suf}"
+    )

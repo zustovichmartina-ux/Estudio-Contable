@@ -86,10 +86,37 @@ def save_registry(entries: dict[str, CuitEntry], path: Path | None = None) -> Pa
         "note": "Solo estado de acceso. Nunca claves ni tokens.",
         "cuits": [e.to_dict() for e in sorted(entries.values(), key=lambda x: x.cuit)],
     }
+    text = json.dumps(payload, ensure_ascii=False, indent=2)
     tmp = p.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(p)
+    tmp.write_text(text, encoding="utf-8")
+    try:
+        os.replace(tmp, p)
+    except OSError:
+        p.write_text(text, encoding="utf-8")
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
     return p
+
+
+def merge_entries(updates: dict[str, CuitEntry], path: Path | None = None) -> dict[str, CuitEntry]:
+    """Una sola lectura + escritura. No pisa nombre existente si el update viene vacío."""
+    entries = load_registry(path)
+    now = datetime.now(TZ).isoformat(timespec="seconds")
+    for key, incoming in updates.items():
+        prev = entries.get(key)
+        razon = (incoming.razon_social or (prev.razon_social if prev else "")).strip()
+        entries[key] = CuitEntry(
+            cuit=incoming.cuit or (prev.cuit if prev else ""),
+            razon_social=razon,
+            status=incoming.status or (prev.status if prev else "unknown"),
+            note=incoming.note or (prev.note if prev else ""),
+            updated_at=now,
+            chrome_profile=incoming.chrome_profile or (prev.chrome_profile if prev else ""),
+        )
+    save_registry(entries, path)
+    return entries
 
 
 def _key(cuit: str) -> str:

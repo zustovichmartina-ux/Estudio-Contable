@@ -1,0 +1,17 @@
+{
+  "fuente": "ARCA — Montos y categorías vigentes (valores de aplicación desde el 01/08/2026). Verificar en https://www.arca.gob.ar/monotributo/categorias.asp",
+  "vigencia": "01/08/2026",
+  "topes_ingresos": {
+    "A": 12009410.45,
+    "B": 17595182.74,
+    "C": 24670494.31,
+    "D": 30628651.43,
+    "E": 36028231.33,
+    "F": 45151659.41,
+    "G": 53995798.87,
+    "H": 81924660.37,
+    "I": 91699761.90,
+    "J": 105012519.20,
+    "K": 126610838.75
+  }
+}

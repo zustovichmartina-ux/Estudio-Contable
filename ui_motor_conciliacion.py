@@ -9,8 +9,9 @@ import pandas as pd
 import streamlit as st
 
 import database as db
+from capa_revision import resumen_revision_motor
+from conceptos_bancos import CACHE_PATH, cargar_instructivo
 from motor_conciliacion import (
-    CATEGORIA_A_CUENTA_HINT,
     correr_motor,
     df_extracto_a_filas,
     money,
@@ -18,6 +19,7 @@ from motor_conciliacion import (
     resumen_por_categoria,
     validar_saldos_corridos,
 )
+from procesador import procesar_extractos_bancarios_pdfs
 
 
 def _periodo_str(d: date | None) -> str:
@@ -83,10 +85,12 @@ def render_motor_conciliacion(
     nombre_activo: str | None,
 ) -> None:
     st.markdown("---")
-    st.subheader("Motor de Conciliación (extracto → reglas → match)")
+    st.subheader("Motor de Conciliación (extracto → Conceptos Bancos → match)")
     st.caption(
-        "Clasifica el extracto PDF con reglas editables, matchea proveedores y VEPs, "
-        "y deja excepciones para revisión. No reemplaza el flujo Balance→Tango; lo complementa."
+        "La cuenta sale de **Conceptos Bancos 2.xlsx** (hoja del banco + lista CUENTAS). "
+        "Si el extracto no alcanza, queda en «a identificar». "
+        "El motor propone; vos confirmás antes de guardar. "
+        "No reemplaza el flujo Balance→Tango; lo complementa."
     )
 
     periodo_key = f"motor_periodo_{sociedad_id}"
@@ -127,13 +131,14 @@ def render_motor_conciliacion(
         st.session_state[periodo_key] = periodo_ui.replace(day=1)
         periodo = _periodo_str(st.session_state[periodo_key])
 
-        if st.button("Correr motor de conciliación", type="primary", key=f"motor_run_{sociedad_id}"):
+        preview_key = f"motor_preview_{sociedad_id}"
+        existentes = db.listar_movimientos_banco(sociedad_id, periodo=periodo)
+
+        if st.button("Proponer clasificación", type="primary", key=f"motor_run_{sociedad_id}"):
             if not pdfs:
                 st.error("Subí al menos un PDF de extracto.")
             else:
-                with st.spinner("Parseando extracto y corriendo motor..."):
-                    from procesador import procesar_extractos_bancarios_pdfs
-
+                with st.spinner("Parseando extracto y proponiendo cuentas..."):
                     df, meta, errores = procesar_extractos_bancarios_pdfs(pdfs)
                     if errores:
                         st.warning("Algunos PDF tuvieron problemas: " + "; ".join(
@@ -179,30 +184,90 @@ def render_motor_conciliacion(
                             periodo=st.session_state[periodo_key],
                             saldo_ok=ok_saldo,
                         )
-                        db.borrar_movimientos_periodo(sociedad_id, periodo=periodo, banco=None)
+                        st.session_state[preview_key] = {
+                            "resultados": resultados,
+                            "proveedores": proveedores,
+                            "banco": banco,
+                            "periodo": periodo,
+                        }
+                        st.rerun()
+
+        preview = st.session_state.get(preview_key)
+        if preview:
+            resultados = preview.get("resultados") or []
+            rev = resumen_revision_motor(resultados)
+            st.markdown("##### Propuesta del motor (todavía no se guardó)")
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Movimientos", rev["total"])
+            c2.metric("Automáticos altos", rev["ok"] + rev["conciliados"])
+            c3.metric("A confirmar", rev["pendientes"])
+            c4.metric("Regla local", rev["regla_local"])
+            df_prev = pd.DataFrame(
+                [
+                    {
+                        "Fecha": m.get("fecha"),
+                        "Descripción": m.get("descripcion"),
+                        "Cuenta propuesta": m.get("categoria"),
+                        "Estado": m.get("estado"),
+                        "Confianza": m.get("confianza"),
+                        "Por qué": m.get("match_detalle") or m.get("citar") or "",
+                    }
+                    for m in resultados
+                ]
+            )
+            st.dataframe(df_prev, use_container_width=True, hide_index=True)
+            reviso = st.checkbox(
+                "Revisé las pendientes y los automáticos. El motor no imputa solo: yo confirmo.",
+                key=f"motor_confirm_rev_{sociedad_id}",
+            )
+            pisar_ok = True
+            if existentes:
+                pisar_ok = st.checkbox(
+                    f"Pisar los {len(existentes)} movimiento(s) ya cargados de este período.",
+                    key=f"motor_confirm_overwrite_{sociedad_id}",
+                )
+            col_ok, col_no = st.columns(2)
+            with col_ok:
+                if st.button("Confirmar y guardar", type="primary", key=f"motor_save_{sociedad_id}"):
+                    if not reviso:
+                        st.error("Tildá que revisaste la propuesta antes de guardar.")
+                    elif not pisar_ok:
+                        st.error("Este período ya tiene movimientos. Tildá que querés pisarlos, o cancelá.")
+                    else:
+                        banco = str(preview.get("banco") or "")
+                        periodo_save = str(preview.get("periodo") or periodo)
+                        proveedores = preview.get("proveedores") or []
+                        db.borrar_movimientos_periodo(sociedad_id, periodo=periodo_save, banco=None)
                         db.insertar_movimientos_banco(resultados)
-                        # Persistir usados
                         for p in proveedores:
                             if p.get("usado") and p.get("id"):
                                 db.marcar_proveedor_usado(int(p["id"]), True)
-
                         usuario = str(st.session_state.get("oficina_usuario") or "sistema")
                         db.registrar_auditoria_conciliacion(
                             cliente_id=sociedad_id,
                             movimiento_id=None,
                             usuario=usuario,
                             accion="correr_motor",
-                            detalle=f"{len(resultados)} movimientos | banco={banco} | periodo={periodo}",
+                            detalle=(
+                                f"{len(resultados)} movimientos | banco={banco} | "
+                                f"periodo={periodo_save} | pendientes={rev['pendientes']}"
+                            ),
                         )
-                        st.session_state["motor_last_periodo"] = periodo
+                        st.session_state["motor_last_periodo"] = periodo_save
+                        plan_df = st.session_state.get("plan_cuentas_df")
                         st.session_state["motor_grilla_bridge"] = movimientos_a_filas_grilla_tango(
-                            resultados
+                            resultados, plan_cuentas=plan_df,
                         )
+                        st.session_state.pop(preview_key, None)
                         st.success(
-                            f"Motor OK: {len(resultados)} movimientos. "
-                            f"Conciliados: {sum(1 for r in resultados if r['estado']=='CONCILIADO')} · "
-                            f"Pendientes: {sum(1 for r in resultados if r['estado']=='PENDIENTE')}"
+                            f"Guardado: {len(resultados)} movimientos. "
+                            f"Conciliados: {rev['conciliados']} · Pendientes: {rev['pendientes']}."
                         )
+                        st.rerun()
+            with col_no:
+                if st.button("Descartar propuesta", key=f"motor_discard_{sociedad_id}"):
+                    st.session_state.pop(preview_key, None)
+                    st.rerun()
 
     periodo_activo = st.session_state.get("motor_last_periodo") or _periodo_str(
         st.session_state.get(periodo_key)
@@ -241,9 +306,10 @@ def render_motor_conciliacion(
                         "Descripción": m.get("descripcion"),
                         "Crédito": float(money(m.get("credito"))),
                         "Débito": float(money(m.get("debito"))),
-                        "Categoría": m.get("categoria"),
+                        "Categoría / cuenta": m.get("categoria"),
                         "Estado": m.get("estado"),
-                        "Match": m.get("match_detalle") or "",
+                        "Confianza": m.get("confianza") or "",
+                        "Por qué": m.get("match_detalle") or "",
                     }
                     for m in data
                 ]
@@ -259,8 +325,9 @@ def render_motor_conciliacion(
             if st.session_state.get("motor_grilla_bridge"):
                 st.markdown("#### Puente a grilla Tango")
                 st.caption(
-                    "Filas no pendientes con cuenta sugerida (99999 = sin mapeo). "
-                    "Usá el flujo Balance→grilla para el asiento final; esto es el sugerido del motor."
+                    "Filas no pendientes con cuenta del plan de esta sociedad "
+                    "(99999 = no hubo match: no se inventa). "
+                    "El asiento final sale del flujo Balance→grilla."
                 )
                 st.dataframe(
                     pd.DataFrame(st.session_state["motor_grilla_bridge"]),
@@ -352,7 +419,34 @@ def render_motor_conciliacion(
             st.metric("Total débitos extracto", f"$ {tot_d:,.2f}")
 
     with tab_cfg:
-        st.markdown("##### Reglas de clasificación (editables)")
+        st.markdown("##### Instructivo Conceptos Bancos")
+        try:
+            info = None
+            try:
+                info = cargar_instructivo()
+                n_b = len(info.get("bancos") or {})
+                n_c = len(info.get("cuentas") or {})
+                st.success(
+                    f"Instructivo activo: **{n_c} cuentas** · **{n_b} bancos**. "
+                    f"Origen: `{info.get('origen') or CACHE_PATH}`"
+                )
+            except Exception as exc:
+                st.warning(f"Sin instructivo cargado: {exc}")
+            up_cb = st.file_uploader(
+                "Subir Conceptos Bancos 2.xlsx (actualiza el cache de la web)",
+                type=["xlsx"],
+                key=f"uploader_conceptos_bancos_{sociedad_id}",
+            )
+            if up_cb is not None:
+                data = cargar_instructivo(up_cb.getvalue())
+                st.success(
+                    f"Cache actualizado: {len(data.get('cuentas') or [])} cuentas, "
+                    f"{len(data.get('bancos') or {})} bancos."
+                )
+        except Exception as exc:
+            st.caption(f"Conceptos Bancos no disponible: {exc}")
+
+        st.markdown("##### Reglas de clasificación (editables, respaldo si no hay instructivo)")
         reglas = db.listar_reglas_clasificacion(solo_activas=False)
         st.dataframe(
             pd.DataFrame(reglas)[

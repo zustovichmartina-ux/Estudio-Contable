@@ -10,6 +10,17 @@ from typing import Any, Iterable
 
 import pandas as pd
 
+from conceptos_bancos import (
+    cargar_instructivo,
+    clasificar_movimiento_instructivo,
+    tipo_desde_cuenta,
+)
+from capa_revision import (
+    SCORE_AUTO_OK,
+    confianza_clasificacion,
+    resolver_codigo_plan,
+)
+
 # Seed del prompt (orden = prioridad; primera match gana)
 REGLAS_SEED: list[tuple[str, str, str]] = [
     # INGRESOS
@@ -143,8 +154,41 @@ def _parse_fecha(val: Any) -> date | None:
 def clasificar(
     descripcion: str,
     reglas: list[dict] | None = None,
-) -> dict[str, str]:
-    """Primera regla cuyo patrón aparece en el texto normalizado."""
+    *,
+    banco: str = "",
+    debito: float = 0.0,
+    credito: float = 0.0,
+    instructivo: dict | None = None,
+) -> dict[str, Any]:
+    """Instructivo Conceptos Bancos primero; si no hay match, reglas seed."""
+    if instructivo and banco:
+        hit = clasificar_movimiento_instructivo(
+            descripcion,
+            banco,
+            debito=debito,
+            credito=credito,
+            instructivo=instructivo,
+        )
+        cuenta = str(hit.get("cuenta") or "Movimientos a identificar")
+        score = float(hit.get("score") or 0)
+        identificado = bool(hit.get("identificado"))
+        tipo = tipo_desde_cuenta(cuenta, debito, credito)
+        if not identificado:
+            tipo = "DEBITO_REVISAR"
+        fuente = "conceptos_bancos"
+        conf = confianza_clasificacion(
+            fuente=fuente, score=score, identificado=identificado,
+        )
+        return {
+            "categoria": cuenta,
+            "tipo": tipo,
+            "citar": str(hit.get("citar") or ""),
+            "concepto_instructivo": str(hit.get("concepto") or ""),
+            "fuente": fuente,
+            "score": score,
+            "confianza": conf,
+        }
+
     texto = normalizar_texto(descripcion)
     lista = reglas
     if lista is None:
@@ -160,10 +204,20 @@ def clasificar(
             return {
                 "categoria": str(r.get("categoria") or ""),
                 "tipo": str(r.get("tipo") or "DEBITO_REVISAR"),
+                "citar": f"Regla local «{patron}» (no es fila de Conceptos Bancos).",
+                "concepto_instructivo": "",
+                "fuente": "regla_local",
+                "score": 75.0,
+                "confianza": "media",
             }
     return {
-        "categoria": "Otros gastos (sin clasificar)",
+        "categoria": "Movimientos a identificar",
         "tipo": "DEBITO_REVISAR",
+        "citar": "Sin fila citable en Conceptos Bancos ni en reglas locales.",
+        "concepto_instructivo": "",
+        "fuente": "",
+        "score": 0.0,
+        "confianza": "baja",
     }
 
 
@@ -340,14 +394,30 @@ def correr_motor(
     # Copia local de usados
     usados: set[Any] = {p.get("id") for p in proveedores if p.get("usado")}
     resultados: list[dict] = []
+    instructivo = None
+    try:
+        instructivo = cargar_instructivo()
+    except Exception:
+        instructivo = None
 
     for f in filas_extracto:
         desc = str(f.get("descripcion") or "")
-        clf = clasificar(desc, reglas)
-        categoria = clf["categoria"]
-        tipo = clf["tipo"]
         credito = money(f.get("credito"))
         debito = money(f.get("debito"))
+        clf = clasificar(
+            desc,
+            reglas,
+            banco=banco or str(f.get("banco") or ""),
+            debito=float(debito),
+            credito=float(credito),
+            instructivo=instructivo,
+        )
+        categoria = clf["categoria"]
+        tipo = clf["tipo"]
+        citar = str(clf.get("citar") or "")
+        confianza = str(clf.get("confianza") or "baja")
+        fuente = str(clf.get("fuente") or "")
+        score = float(clf.get("score") or 0)
         estado = "OK"
         match_detalle = None
         match_ref_id = None
@@ -398,9 +468,22 @@ def correr_motor(
                     match_detalle = f"VEP sin match en padrón" + (f" — VEP {nro}" if nro else "")
         elif tipo == "DEBITO_REVISAR":
             estado = "PENDIENTE"
-            match_detalle = "Sin regla de clasificación — revisar"
+            match_detalle = citar or "Sin regla de clasificación — revisar"
         elif tipo in ("INGRESO", "DEBITO_IMPUESTO", "DEBITO_FIJO", "INGRESO_O_DEBITO_PROPIO"):
             estado = "OK"
+            if citar:
+                match_detalle = citar
+
+        if estado == "OK" and confianza in {"media", "baja"}:
+            estado = "PENDIENTE"
+            extra = f" — confirmar (score {score:.0f}"
+            if fuente == "regla_local":
+                extra = " — confirmar regla local"
+            elif score:
+                extra = f" — confirmar (score {score:.0f} < {SCORE_AUTO_OK:.0f})"
+            else:
+                extra = " — confirmar"
+            match_detalle = f"{citar or match_detalle or 'Clasificación automática'}{extra}"
 
         resultados.append(
             {
@@ -417,6 +500,9 @@ def correr_motor(
                 "estado": estado,
                 "match_detalle": match_detalle,
                 "match_ref_id": str(match_ref_id) if match_ref_id is not None else None,
+                "fuente": fuente,
+                "score": score,
+                "confianza": confianza,
             }
         )
     return resultados
@@ -459,14 +545,19 @@ def resumen_por_categoria(movimientos: list[dict]) -> pd.DataFrame:
     return pd.concat([g, total], ignore_index=True)
 
 
-def movimientos_a_filas_grilla_tango(movimientos: list[dict]) -> list[dict]:
-    """Puente mínimo hacia grilla: categoría → hint de cuenta."""
+def movimientos_a_filas_grilla_tango(
+    movimientos: list[dict],
+    plan_cuentas: pd.DataFrame | None = None,
+) -> list[dict]:
+    """Puente a grilla: categoría del instructivo → código del plan del cliente."""
     filas = []
     for m in movimientos:
         if m.get("estado") == "PENDIENTE":
             continue
         cat = str(m.get("categoria") or "")
-        codigo = CATEGORIA_A_CUENTA_HINT.get(cat, "99999")
+        codigo, desc_plan, score_plan = resolver_codigo_plan(
+            cat, plan_cuentas, hints=CATEGORIA_A_CUENTA_HINT,
+        )
         credito = money(m.get("credito"))
         debito = money(m.get("debito"))
         filas.append(
@@ -474,12 +565,15 @@ def movimientos_a_filas_grilla_tango(movimientos: list[dict]) -> list[dict]:
                 "fecha": m.get("fecha"),
                 "descripcion": m.get("descripcion"),
                 "categoria": cat,
+                "cuenta_plan": desc_plan,
                 "tipo": m.get("tipo"),
                 "estado": m.get("estado"),
                 "cuenta_sugerida": codigo,
                 "debe": float(debito) if debito > 0 else 0.0,
                 "haber": float(credito) if credito > 0 else 0.0,
                 "match_detalle": m.get("match_detalle") or "",
+                "origen": m.get("fuente") or "",
+                "score_plan": score_plan,
             }
         )
     return filas

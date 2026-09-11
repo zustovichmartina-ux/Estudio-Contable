@@ -3820,9 +3820,10 @@ def conciliar_banco_con_tango(
 
 _RE_FECHA_AFIP = r"(\d{2}/\d{2}/\d{4})"
 
-# Códigos AFIP: NC restan, ND/FC suman, para recategorización monotributo.
+# Códigos AFIP: NC restan, ND/FC/Recibos suman, para recategorización monotributo.
 _CODIGOS_AFIP_NC = {"003", "008", "013", "053", "203", "208", "213"}
 _CODIGOS_AFIP_ND = {"002", "007", "012", "052", "202", "207", "212"}
+_CODIGOS_AFIP_RECIBO = {"009", "010", "015", "090", "091"}
 _CODIGOS_AFIP_FC = {
     "001", "006", "011", "051", "081", "082", "083",
     "201", "206", "211",
@@ -3837,8 +3838,12 @@ COLUMNAS_MONOTRIBUTO = [
     "Período Hasta",
     "Concepto",
     "Importe Total",
+    "Importe Dólares",
+    "Tipo de Cambio",
     "Comprobante",
     "CAE",
+    "CUIT Emisor",
+    "Supuesto período",
 ]
 
 
@@ -3899,10 +3904,24 @@ def _normalizar_codigo_afip(valor: str | int | None) -> str:
     return digitos.zfill(3)[-3:]
 
 
+def _familia_correlatividad_monotributo(tipo: str, codigo: str = "") -> str:
+    """Facturas, NC y Recibos no se mezclan en la misma correlatividad."""
+    codigo = _normalizar_codigo_afip(codigo)
+    tipo_u = str(tipo or "").upper()
+    if codigo in _CODIGOS_AFIP_NC or "CRÉDITO" in tipo_u or "CREDITO" in tipo_u:
+        return "Notas de Crédito"
+    if codigo in _CODIGOS_AFIP_ND or "DÉBITO" in tipo_u or "DEBITO" in tipo_u:
+        return "Notas de Débito"
+    if codigo in _CODIGOS_AFIP_RECIBO or tipo_u.startswith("RECIBO"):
+        return "Recibos"
+    return "Facturas"
+
+
 def detectar_tipo_comprobante_afip(texto: str) -> tuple[str, str, int]:
     """
     Detecta tipo AFIP del PDF.
     Retorna (tipo_legible, codigo_afip_3dig, signo) donde signo es -1 para NC.
+    Recibos se detectan ANTES que Factura: el texto del recibo suele citar una factura.
     """
     bloque = str(texto or "")
     codigo = ""
@@ -3933,14 +3952,34 @@ def detectar_tipo_comprobante_afip(texto: str) -> tuple[str, str, int]:
     es_nd_txt = bool(
         re.search(r"NOTA\s+DE\s+D[EÉ]BITO", bloque, flags=re.IGNORECASE)
     )
+    es_recibo_txt = bool(
+        re.search(r"\bRECIBO\b", bloque, flags=re.IGNORECASE)
+    ) and not es_nc_txt and not es_nd_txt
     es_fc_txt = bool(
         re.search(r"\bFACTURA\b", bloque, flags=re.IGNORECASE)
-    ) and not es_nc_txt and not es_nd_txt
+    ) and not es_nc_txt and not es_nd_txt and not es_recibo_txt
 
     if codigo in _CODIGOS_AFIP_NC or (es_nc_txt and codigo not in _CODIGOS_AFIP_ND):
         return "Nota de Crédito", codigo or ("013" if es_nc_txt else ""), -1
     if codigo in _CODIGOS_AFIP_ND or es_nd_txt:
         return "Nota de Débito", codigo or ("012" if es_nd_txt else ""), 1
+    if codigo in _CODIGOS_AFIP_RECIBO or (es_recibo_txt and codigo not in _CODIGOS_AFIP_FC):
+        letra = ""
+        m_let = re.search(
+            r"\bRECIBO\s+([ABC])\b",
+            bloque,
+            flags=re.IGNORECASE,
+        )
+        if m_let:
+            letra = (m_let.group(1) or "").upper()
+        elif codigo == "009":
+            letra = "A"
+        elif codigo == "010":
+            letra = "B"
+        elif codigo == "015":
+            letra = "C"
+        tipo = f"Recibo {letra}".strip() if letra else "Recibo"
+        return tipo, codigo or ("015" if es_recibo_txt else ""), 1
     if codigo in _CODIGOS_AFIP_FC or es_fc_txt or not codigo:
         letra = ""
         m_let = re.search(
@@ -4002,10 +4041,53 @@ def deduplicar_comprobantes_monotributo(
     return unicos, descartados
 
 
+def _extraer_cuit_emisor_afip(texto: str) -> str:
+    """Primer CUIT del encabezado (emisor). 11 dígitos sin guiones."""
+    cabeza = str(texto or "")[:2200]
+    for bloque in (cabeza, str(texto or "")):
+        m = re.search(
+            r"CUIT[:\s]*(\d{2}[-.\s]?\d{8}[-.\s]?\d)",
+            bloque,
+            flags=re.IGNORECASE,
+        )
+        if m:
+            return re.sub(r"\D", "", m.group(1))
+    return ""
+
+
+def _extraer_usd_afip(texto: str, importe_total: float) -> tuple[float, float]:
+    """(importe_dólares, tipo_cambio). 0,0 si la factura está en pesos."""
+    bloque = str(texto or "")
+    if not re.search(
+        r"Moneda[:\s]*(DOL|USD|U\$S|D[OÓ]LAR(?:ES)?)",
+        bloque,
+        flags=re.IGNORECASE,
+    ):
+        return 0.0, 0.0
+    tipo_cambio = 0.0
+    m_tc = re.search(
+        r"Tipo\s+de\s+Cambio[:\s]*\$?\s*([\d][\d.,]*)",
+        bloque,
+        flags=re.IGNORECASE,
+    )
+    if m_tc:
+        tipo_cambio = _limpiar_monto(m_tc.group(1))
+    dolares = abs(float(importe_total or 0))
+    m_usd = re.search(
+        r"Importe\s+(?:Total\s+)?(?:en\s+)?(?:D[oó]lares|USD|U\$S)[:\s]*([\d][\d.,]*)",
+        bloque,
+        flags=re.IGNORECASE,
+    )
+    if m_usd:
+        dolares = _limpiar_monto(m_usd.group(1))
+    return round(dolares, 2), round(tipo_cambio, 6)
+
+
 def parsear_factura_afip_texto(texto: str, archivo: str = "") -> dict | None:
     """
     Extrae campos clave de un comprobante electrónico AFIP desde texto PDF.
     Notas de crédito quedan con Importe Total negativo.
+    Recibos se cargan (positivo). El mes es Período Facturado, no Fecha de Emisión.
     Retorna None si faltan datos mínimos (período desde + importe).
     """
     if not texto or not str(texto).strip():
@@ -4035,8 +4117,32 @@ def parsear_factura_afip_texto(texto: str, archivo: str = "") -> dict | None:
     else:
         periodo_hasta = _buscar_fecha_afip(
             bloque,
-            rf"(?:Hasta|al)[:\s]*{_RE_FECHA_AFIP}",
+            rf"Per[ií]odo\s+Facturado\s+Hasta[:\s]*{_RE_FECHA_AFIP}",
         )
+        if not periodo_hasta:
+            periodo_hasta = _buscar_fecha_afip(
+                bloque,
+                rf"(?:Hasta|al)[:\s]*{_RE_FECHA_AFIP}",
+            )
+
+    if not periodo_desde:
+        periodo_desde = _buscar_fecha_afip(
+            bloque,
+            rf"Fecha\s+Servicio\s+Desde[:\s]*{_RE_FECHA_AFIP}",
+        )
+        if periodo_desde:
+            periodo_hasta = periodo_hasta or _buscar_fecha_afip(
+                bloque,
+                rf"Fecha\s+Servicio\s+Hasta[:\s]*{_RE_FECHA_AFIP}",
+            )
+
+    tenia_periodo_impreso = bool(periodo_desde)
+    supuesto = ""
+    if not periodo_desde and fecha_emision:
+        periodo_desde = fecha_emision
+        supuesto = "Fecha de emisión (PDF sin Período Facturado)"
+    if not periodo_hasta and periodo_desde:
+        periodo_hasta = periodo_desde
 
     concepto = ""
     m_conc = re.search(
@@ -4080,19 +4186,27 @@ def parsear_factura_afip_texto(texto: str, archivo: str = "") -> dict | None:
         if m_imp2:
             importe_total = _limpiar_monto(m_imp2.group(1))
 
+    importe_dolares, tipo_cambio = _extraer_usd_afip(texto, importe_total)
+    if importe_dolares > 0 and tipo_cambio > 0:
+        importe_total = round(importe_dolares * tipo_cambio, 2)
+
     comprobante = ""
     if punto_venta and nro_cmp:
         comprobante = formatear_comprobante_tango(punto_venta, nro_cmp)
 
     cae = _extraer_cae_afip(bloque)
-
-    if not periodo_desde and fecha_emision:
-        periodo_desde = fecha_emision
-    if not periodo_hasta and periodo_desde:
-        periodo_hasta = periodo_desde
+    cuit_emisor = _extraer_cuit_emisor_afip(texto)
 
     if not periodo_desde or importe_total <= 0:
         return None
+
+    if (
+        tenia_periodo_impreso
+        and fecha_emision
+        and periodo_desde == fecha_emision
+        and "Servicios" in concepto
+    ):
+        supuesto = supuesto or "Revisar: Fecha Desde = Fecha de Emisión en factura de servicios"
 
     # NC siempre resta en el consolidado de facturación.
     importe_firmado = round(abs(importe_total) * signo, 2)
@@ -4106,25 +4220,75 @@ def parsear_factura_afip_texto(texto: str, archivo: str = "") -> dict | None:
         "Período Hasta": periodo_hasta,
         "Concepto": concepto,
         "Importe Total": importe_firmado,
+        "Importe Dólares": importe_dolares if importe_dolares else "",
+        "Tipo de Cambio": tipo_cambio if tipo_cambio else "",
         "Comprobante": comprobante,
         "CAE": cae,
+        "CUIT Emisor": cuit_emisor,
+        "Supuesto período": supuesto,
     }
 
 
-def procesar_facturas_monotributo(archivos) -> tuple[pd.DataFrame, list[dict]]:
+def auditar_correlatividad_monotributo(filas: list[dict]) -> list[str]:
+    """Saltos de numeración por serie (Facturas / NC / Recibos) y punto de venta."""
+    grupos: dict[tuple[str, str], list[int]] = {}
+    for fila in filas or []:
+        cmpte = str(fila.get("Comprobante") or "").strip()
+        m = re.match(r"^(\d{1,5})-(\d+)$", cmpte)
+        if not m:
+            continue
+        pv, nro = m.group(1), int(m.group(2))
+        familia = _familia_correlatividad_monotributo(
+            str(fila.get("Tipo") or ""),
+            str(fila.get("Código AFIP") or ""),
+        )
+        grupos.setdefault((familia, pv), []).append(nro)
+
+    avisos: list[str] = []
+    for (familia, pv), numeros in sorted(grupos.items()):
+        unicos = sorted(set(numeros))
+        if len(unicos) < 2:
+            continue
+        faltan = [n for n in range(unicos[0], unicos[-1] + 1) if n not in set(unicos)]
+        if faltan:
+            muestra = ", ".join(str(n) for n in faltan[:8])
+            extra = f" (+{len(faltan) - 8})" if len(faltan) > 8 else ""
+            avisos.append(
+                f"{familia} PV {int(pv)}: falta nro {muestra}{extra} "
+                f"(rango {unicos[0]}–{unicos[-1]})."
+            )
+    return avisos
+
+
+def procesar_facturas_monotributo(
+    archivos,
+    cuit_cliente: str | None = None,
+) -> tuple[pd.DataFrame, list[dict]]:
     """
     Procesa PDFs sueltos y/o ZIP con facturas AFIP.
-    NC van en negativo; elimina duplicados (mismo CAE/comprobante).
+    NC van en negativo; Recibos se cargan; elimina duplicados (mismo CAE/comprobante).
+    Si se pasa cuit_cliente, descarta PDFs de otro emisor.
     Retorna DataFrame ordenado por Período Desde y lista de errores por archivo.
     """
     filas: list[dict] = []
     errores: list[dict] = []
+    cuit_limpio = re.sub(r"\D", "", str(cuit_cliente or ""))
 
     for nombre, pdf_bytes in iter_pdfs_desde_uploads(archivos):
         try:
             texto = extraer_texto_factura_afip(pdf_bytes)
             parsed = parsear_factura_afip_texto(texto, nombre)
             if parsed:
+                emisor = re.sub(r"\D", "", str(parsed.get("CUIT Emisor") or ""))
+                if cuit_limpio and emisor and emisor != cuit_limpio:
+                    errores.append({
+                        "archivo": nombre,
+                        "motivo": (
+                            f"CUIT emisor {emisor} distinto del cliente {cuit_limpio}. "
+                            "No se cargó."
+                        ),
+                    })
+                    continue
                 filas.append(parsed)
             else:
                 errores.append({
@@ -4141,6 +4305,9 @@ def procesar_facturas_monotributo(archivos) -> tuple[pd.DataFrame, list[dict]]:
             "motivo": f"Se descartaron {n_dupes} comprobante(s) duplicado(s).",
         })
 
+    for aviso in auditar_correlatividad_monotributo(filas):
+        errores.append({"archivo": "(correlatividad)", "motivo": aviso})
+
     if not filas:
         return pd.DataFrame(columns=COLUMNAS_MONOTRIBUTO), errores
 
@@ -4156,9 +4323,63 @@ def procesar_facturas_monotributo(archivos) -> tuple[pd.DataFrame, list[dict]]:
     return df.reset_index(drop=True), errores
 
 
+def analizar_comprobantes_monotributo_rutas(
+    rutas: list,
+    cuit_cliente: str | None = None,
+    dest_xlsx: Path | None = None,
+) -> dict:
+    """Analiza PDFs en disco (post-descarga ARCA) y opcionalmente guarda el Excel."""
+    class _PdfDisk:
+        def __init__(self, path: Path) -> None:
+            self.name = path.name
+            self._data = path.read_bytes()
+
+        def getvalue(self) -> bytes:
+            return self._data
+
+    uploads = []
+    faltan: list[str] = []
+    for raw in rutas or []:
+        p = Path(raw)
+        if not p.is_file() or p.suffix.lower() != ".pdf":
+            faltan.append(str(raw))
+            continue
+        uploads.append(_PdfDisk(p))
+
+    df, errores = procesar_facturas_monotributo(uploads, cuit_cliente=cuit_cliente)
+    xlsx_path = ""
+    if dest_xlsx is not None:
+        dest_xlsx = Path(dest_xlsx)
+        dest_xlsx.parent.mkdir(parents=True, exist_ok=True)
+        dest_xlsx.write_bytes(exportar_monotributo_excel(df))
+        xlsx_path = str(dest_xlsx)
+
+    n_recibos = 0
+    n_nc = 0
+    n_usd = 0
+    if not df.empty:
+        if "Tipo" in df.columns:
+            n_recibos = int(df["Tipo"].astype(str).str.upper().str.startswith("RECIBO").sum())
+        n_nc = int((df["Importe Total"] < 0).sum()) if "Importe Total" in df.columns else 0
+        if "Importe Dólares" in df.columns:
+            n_usd = int(pd.to_numeric(df["Importe Dólares"], errors="coerce").fillna(0).gt(0).sum())
+
+    return {
+        "cantidad": int(len(df)),
+        "neto": round(float(df["Importe Total"].sum()), 2) if not df.empty else 0.0,
+        "recibos": n_recibos,
+        "notas_credito": n_nc,
+        "usd": n_usd,
+        "errores": errores,
+        "omitidos": faltan,
+        "xlsx": xlsx_path,
+    }
+
+
 def exportar_monotributo_excel(df: pd.DataFrame) -> bytes:
     """Excel de trabajo monotributo en formato estándar del Estudio."""
-    from excel_formato_estudio import exportar_informe_excel
+    from excel_formato_estudio import construir_informe_excel, informe_a_bytes
+    from openpyxl.utils import get_column_letter
 
     df_export = df.copy() if df is not None else pd.DataFrame()
     total = float(df_export["Importe Total"].sum()) if not df_export.empty and "Importe Total" in df_export.columns else 0.0
@@ -4172,27 +4393,269 @@ def exportar_monotributo_excel(df: pd.DataFrame) -> bytes:
         if not df_export.empty and "Importe Total" in df_export.columns
         else 0.0
     )
+    n_recibos = 0
+    if not df_export.empty and "Tipo" in df_export.columns:
+        n_recibos = int(df_export["Tipo"].astype(str).str.upper().str.startswith("RECIBO").sum())
     resumen = pd.DataFrame(
         [
-            {"Concepto": "Facturas / ND (positivos)", "Importe": round(facturas, 2)},
+            {"Concepto": "Facturas / ND / Recibos (positivos)", "Importe": round(facturas, 2)},
             {"Concepto": "Notas de crédito (negativos)", "Importe": round(notas, 2)},
             {"Concepto": "Neto facturado", "Importe": round(total, 2)},
         ]
     )
-    return exportar_informe_excel(
+    wb = construir_informe_excel(
         titulo="Monotributo — Facturas devengadas",
         subtitulo="Análisis de períodos · Estudio Contable",
         kpis=[
             ("Neto facturado", round(total, 2), "money"),
             ("Cantidad de comprobantes", len(df_export), "int"),
+            ("Recibos cargados", n_recibos, "int"),
         ],
-        resumenes=[("Resumen FC / NC", resumen)],
+        resumenes=[("Resumen FC / NC / Recibos", resumen)],
         detalle=df_export,
         hoja_detalle="Facturas Devengadas",
-        col_moneda=["Importe", "Importe Total"],
-        col_fecha=["Fecha", "Fecha Emisión", "Fecha Contable"],
+        col_moneda=["Importe", "Importe Total", "Importe Dólares", "Tipo de Cambio"],
+        col_fecha=["Fecha", "Fecha Emisión", "Fecha Contable", "Período Desde", "Período Hasta"],
         total_col="Importe Total" if "Importe Total" in df_export.columns else None,
     )
+    if "Facturas Devengadas" in wb.sheetnames and not df_export.empty:
+        ws = wb["Facturas Devengadas"]
+        headers = [str(c.value or "") for c in ws[1]]
+        try:
+            col_tot = headers.index("Importe Total") + 1
+            col_usd = headers.index("Importe Dólares") + 1
+            col_tc = headers.index("Tipo de Cambio") + 1
+        except ValueError:
+            col_tot = col_usd = col_tc = 0
+        if col_tot and col_usd and col_tc:
+            for i, (_, row) in enumerate(df_export.iterrows(), start=2):
+                try:
+                    usd = float(row.get("Importe Dólares") or 0)
+                    tc = float(row.get("Tipo de Cambio") or 0)
+                except (TypeError, ValueError):
+                    continue
+                if usd > 0 and tc > 0:
+                    letra_usd = get_column_letter(col_usd)
+                    letra_tc = get_column_letter(col_tc)
+                    signo = -1 if float(row.get("Importe Total") or 0) < 0 else 1
+                    prefijo = "-" if signo < 0 else ""
+                    ws.cell(i, col_tot).value = f"={prefijo}{letra_usd}{i}*{letra_tc}{i}"
+    return informe_a_bytes(wb)
+
+
+def _periodo_mm_aaaa(periodo: str) -> tuple[int, int] | None:
+    """'MM/AAAA' o 'MM-AAAA' → (mes, año)."""
+    texto = str(periodo or "").strip().replace("-", "/")
+    partes = [p for p in texto.split("/") if p]
+    if len(partes) < 2:
+        return None
+    try:
+        mes = int(partes[0])
+        anio = int(partes[1])
+    except (TypeError, ValueError):
+        return None
+    if mes < 1 or mes > 12 or anio < 1990:
+        return None
+    return mes, anio
+
+
+def _es_col_fecha_ret_perc(nombre: str) -> bool:
+    n = str(nombre or "").lower()
+    return "fecha" in n and ("ret" in n or "perc" in n)
+
+
+def _es_col_importe_ret_perc(nombre: str) -> bool:
+    n = str(nombre or "").lower()
+    if "total" in n or "excedente" in n:
+        return False
+    return "importe" in n and ("ret" in n or "perc" in n)
+
+
+def _clasificar_impuesto_retencion(texto: str) -> str:
+    t = str(texto or "").lower()
+    if "sircreb" in t:
+        return "sircreb"
+    if "iva" in t or "valor agregado" in t:
+        return "iva"
+    if "iibb" in t or "ingresos brutos" in t or "ing. brutos" in t or "convenio" in t:
+        return "iibb"
+    return ""
+
+
+def parsear_mis_retenciones_afip(
+    archivo,
+    periodo: str,
+    impuesto: str = "iva",
+) -> dict:
+    """
+    Lee Mis Retenciones de AFIP (.xls/.xlsx).
+
+    Reglas del estudio:
+    - Agrupa por Fecha Ret./Perc. (nunca Fecha Comprobante).
+    - Toma Importe Ret./Perc. (nunca Importe Total ni Excedente).
+    - Estado Pendiente no suma.
+    """
+    vacio = {
+        "retenciones": 0.0,
+        "percepciones": 0.0,
+        "retenciones_bancarias": 0.0,
+        "total": 0.0,
+        "cantidad": 0,
+        "omitidos_pendiente": 0,
+        "detalle": [],
+        "periodo_filtrado": periodo,
+        "error": "",
+    }
+    objetivo = _periodo_mm_aaaa(periodo)
+    if objetivo is None:
+        vacio["error"] = f"Período inválido: {periodo}"
+        return vacio
+
+    nombre = str(getattr(archivo, "name", "retenciones.xlsx") or "retenciones.xlsx")
+    try:
+        if hasattr(archivo, "read"):
+            data = archivo.getvalue() if hasattr(archivo, "getvalue") else archivo.read()
+            if hasattr(archivo, "seek"):
+                try:
+                    archivo.seek(0)
+                except Exception:
+                    pass
+            raw = pd.read_excel(io.BytesIO(data), header=None, dtype=object)
+        else:
+            raw = pd.read_excel(archivo, header=None, dtype=object)
+    except Exception as exc:
+        vacio["error"] = f"No se pudo leer {nombre}: {exc}"
+        return vacio
+
+    if raw is None or raw.empty:
+        vacio["error"] = "Mis Retenciones vacío."
+        return vacio
+
+    header_idx = None
+    for i in range(min(40, len(raw))):
+        vals = [str(v).strip().lower() for v in raw.iloc[i].tolist() if pd.notna(v)]
+        joined = " | ".join(vals)
+        if ("fecha" in joined and "ret" in joined) or (
+            "importe" in joined and ("ret" in joined or "perc" in joined)
+        ):
+            header_idx = i
+            break
+    if header_idx is None:
+        for i in range(min(15, len(raw))):
+            if raw.iloc[i].notna().sum() >= 4:
+                header_idx = i
+                break
+    if header_idx is None:
+        vacio["error"] = "No se encontró encabezado en Mis Retenciones."
+        return vacio
+
+    headers = [str(c).strip() if pd.notna(c) else f"col_{j}" for j, c in enumerate(raw.iloc[header_idx])]
+    df = raw.iloc[header_idx + 1 :].copy()
+    df.columns = headers
+    df = df.dropna(how="all")
+
+    col_fecha = next((c for c in df.columns if _es_col_fecha_ret_perc(c)), None)
+    if col_fecha is None:
+        col_fecha = next((c for c in df.columns if str(c).lower().startswith("fecha") and "comp" not in str(c).lower()), None)
+    col_importe = next((c for c in df.columns if _es_col_importe_ret_perc(c)), None)
+    if col_importe is None:
+        candidatos = [
+            c for c in df.columns
+            if "importe" in str(c).lower() and "total" not in str(c).lower() and "excedente" not in str(c).lower()
+        ]
+        col_importe = candidatos[0] if candidatos else None
+    col_estado = next((c for c in df.columns if "estado" in str(c).lower()), None)
+    col_tipo = next(
+        (c for c in df.columns if "operaci" in str(c).lower() or str(c).lower() in {"tipo", "descripción operación", "descripcion operacion"}),
+        None,
+    )
+    col_impuesto = next((c for c in df.columns if str(c).lower() in {"impuesto", "imp."} or str(c).lower().startswith("impuesto")), None)
+    col_regimen = next((c for c in df.columns if "r[eé]gimen".replace("[eé]", "e") in str(c).lower() or "regimen" in str(c).lower() or "régimen" in str(c).lower()), None)
+    col_agente = next((c for c in df.columns if "denomin" in str(c).lower() or "agente" in str(c).lower()), None)
+
+    if col_fecha is None or col_importe is None:
+        vacio["error"] = "Faltan columnas Fecha Ret./Perc. o Importe Ret./Perc."
+        return vacio
+
+    impuesto_filtro = str(impuesto or "iva").strip().lower()
+    if impuesto_filtro in {"cm", "convenio"}:
+        impuesto_filtro = "iibb"
+
+    mes_obj, anio_obj = objetivo
+    filas: list[dict] = []
+    omitidos_pendiente = 0
+    for _, row in df.iterrows():
+        fecha_val = row[col_fecha]
+        if fecha_val is None or (isinstance(fecha_val, float) and pd.isna(fecha_val)):
+            continue
+        if hasattr(fecha_val, "month"):
+            mes_f, anio_f = int(fecha_val.month), int(fecha_val.year)
+            fecha_str = fecha_val.strftime("%d/%m/%Y") if hasattr(fecha_val, "strftime") else str(fecha_val)
+        else:
+            fecha_str = str(fecha_val).strip()
+            parsed_f = _parsear_fecha(fecha_str)
+            if parsed_f is None:
+                continue
+            mes_f, anio_f = parsed_f.month, parsed_f.year
+            fecha_str = parsed_f.strftime("%d/%m/%Y")
+        if mes_f != mes_obj or anio_f != anio_obj:
+            continue
+
+        estado = str(row[col_estado] if col_estado is not None else "").strip().lower()
+        if "pendiente" in estado:
+            omitidos_pendiente += 1
+            continue
+
+        monto = _limpiar_monto(row[col_importe])
+        if monto <= 0:
+            continue
+
+        tipo_op = str(row[col_tipo] if col_tipo is not None else "").strip().upper()
+        texto_imp = " ".join(
+            str(row[c] or "")
+            for c in (col_impuesto, col_regimen)
+            if c is not None
+        )
+        clase = _clasificar_impuesto_retencion(texto_imp + " " + tipo_op)
+        if impuesto_filtro == "iva":
+            if clase not in {"", "iva"}:
+                continue
+            if clase == "" and texto_imp.strip():
+                continue
+        elif impuesto_filtro == "iibb":
+            if clase not in {"", "iibb", "sircreb"}:
+                continue
+            if clase == "" and texto_imp.strip():
+                continue
+
+        es_perc = "PERCEP" in tipo_op
+        es_sircreb = clase == "sircreb" or "sircreb" in tipo_op.lower()
+        filas.append({
+            "Agente": str(row[col_agente] if col_agente is not None else "")[:50],
+            "Fecha Ret./Perc.": fecha_str,
+            "Tipo": tipo_op or ("PERCEPCION" if es_perc else "RETENCION"),
+            "Impuesto": texto_imp.strip()[:50],
+            "Importe Ret./Perc.": round(monto, 2),
+            "Estado": str(row[col_estado] if col_estado is not None else "").strip(),
+            "sircreb": es_sircreb,
+            "percepcion": es_perc,
+        })
+
+    retenciones = round(sum(f["Importe Ret./Perc."] for f in filas if not f["percepcion"] and not f["sircreb"]), 2)
+    percepciones = round(sum(f["Importe Ret./Perc."] for f in filas if f["percepcion"] and not f["sircreb"]), 2)
+    bancarias = round(sum(f["Importe Ret./Perc."] for f in filas if f["sircreb"]), 2)
+    detalle = [{k: v for k, v in f.items() if k not in {"sircreb", "percepcion"}} for f in filas]
+    return {
+        "retenciones": retenciones,
+        "percepciones": percepciones,
+        "retenciones_bancarias": bancarias,
+        "total": round(retenciones + percepciones + bancarias, 2),
+        "cantidad": len(filas),
+        "omitidos_pendiente": omitidos_pendiente,
+        "detalle": detalle,
+        "periodo_filtrado": periodo,
+        "error": "",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -4586,6 +5049,60 @@ def _montos_en_linea_extracto(ln: str) -> list[float]:
     return out
 
 
+# OCR frecuente en extractos Santander/Provincia: 11.xxx.xxx,xx se lee como
+# 71.xxx.xxx,xx (dígito 7 vs 1). La diferencia es exactamente 60 millones y
+# fabrica débitos/créditos fantasmas (ej. $272.250 leído como $60.272.250).
+_OCR_SALDO_7_POR_1 = 60_000_000.0
+_OCR_SALDO_7_MIN = 70_000_000.0
+_OCR_SALDO_7_MAX = 80_000_000.0
+
+
+def _saldo_alternativa_ocr_7_por_1(saldo: float) -> float | None:
+    s = round(float(saldo), 2)
+    if _OCR_SALDO_7_MIN <= s < _OCR_SALDO_7_MAX:
+        return round(s - _OCR_SALDO_7_POR_1, 2)
+    return None
+
+
+def _resolver_saldo_ocr(
+    saldo: float,
+    saldo_prev: float | None,
+    monto_mov: float | None = None,
+) -> float:
+    """Si 71.xxx vs 11.xxx, elige el saldo que cierra el movimiento / el salto menor."""
+    s0 = round(float(saldo), 2)
+    alt = _saldo_alternativa_ocr_7_por_1(s0)
+    if alt is None:
+        return s0
+    if saldo_prev is None:
+        return s0
+    p0 = round(float(saldo_prev), 2)
+    p_alt = _saldo_alternativa_ocr_7_por_1(p0)
+    prevs = [p0] + ([p_alt] if p_alt is not None and p_alt != p0 else [])
+    orden_s = (alt, s0)
+    if monto_mov is not None and abs(float(monto_mov)) >= 0.01:
+        mabs = abs(float(monto_mov))
+        montos_try = [mabs]
+        if mabs >= 50_000_000:
+            montos_try.insert(0, abs(round(mabs - _OCR_SALDO_7_POR_1, 2)))
+        for m in montos_try:
+            if m < 0.01:
+                continue
+            for prev in prevs:
+                for s in orden_s:
+                    if abs(abs(s - prev) - m) <= 0.51:
+                        return s
+    best_s = s0
+    best_d = abs(s0 - p0)
+    for prev in prevs:
+        for s in (s0, alt):
+            d = abs(s - prev)
+            if d + 1 < best_d:
+                best_d = d
+                best_s = s
+    return best_s
+
+
 def _elegir_monto_y_saldo_extracto(
     montos: list[float],
     saldo_prev: float | None,
@@ -4604,6 +5121,9 @@ def _elegir_monto_y_saldo_extracto(
     # el delta y clasificaba mal retiro/rescate.
     saldo = float(montos[-1])
     candidatos = montos[:-1]
+    cand_ref = candidatos[-1] if candidatos else None
+    if saldo_prev is not None:
+        saldo = _resolver_saldo_ocr(saldo, float(saldo_prev), cand_ref)
 
     if saldo_prev is not None:
         delta = round(saldo - float(saldo_prev), 2)
@@ -4620,6 +5140,14 @@ def _elegir_monto_y_saldo_extracto(
                 if delta > 0:
                     return abs(elegido), saldo
                 return elegido, saldo
+        # No inventar un movimiento de ~60 millones: el OCR mezcló 71.xxx / 11.xxx.
+        if delta_abs >= 50_000_000:
+            chicos = [c for c in candidatos if 0.01 < abs(c) < 25_000_000]
+            if chicos:
+                elegido = abs(chicos[-1])
+                if delta < 0:
+                    return -elegido, round(float(saldo_prev) - elegido, 2)
+                return elegido, round(float(saldo_prev) + elegido, 2)
         # Ningún candidato cierra: usar el delta con signo contable
         if delta_abs >= 0.01:
             return (-delta_abs if delta < 0 else delta_abs), saldo
@@ -4676,6 +5204,73 @@ def _aplicar_importe_y_dc(r: dict, importe_signed: float | None) -> dict:
     return r
 
 
+_RUIDO_NO_MOVIMIENTO_EXT = (
+    "ponemos en tu conocimiento",
+    "intercambio de informacion",
+    "estandar de intercambio",
+    "concepto valor",
+    "totales de devolucion impuesto",
+    "cuenta corriente en pesos",
+    "acuerdo de giro en descubierto",
+    "por cada movimiento",
+    "mayores a y hasta",
+    "por devolucion impuesto ley",
+    "red link",
+)
+
+
+def _es_fila_ruido_pie_extracto(r: dict) -> bool:
+    t = _normalizar_texto(f"{r.get('Descripcion') or ''} {r.get('Detalle') or ''}")
+    return any(x in t for x in _RUIDO_NO_MOVIMIENTO_EXT)
+
+
+def _monto_chico_en_texto(r: dict, importe: float | None) -> float | None:
+    """Si el OCR usó el saldo como débito, el importe real suele estar en la leyenda (2.853,47)."""
+    if importe is None or abs(importe) < 5_000_000:
+        return None
+    blob = f"{r.get('Descripcion') or ''} {r.get('Detalle') or ''}"
+    chicos = [m for m in _montos_ar_libres(blob) if 0.01 < m < abs(float(importe)) / 20.0]
+    uniq = sorted({round(m, 2) for m in chicos})
+    if len(uniq) == 1:
+        return uniq[0]
+    return None
+
+
+def _normalizar_saldos_ocr_71_en_lote(movs: list[dict]) -> list[dict]:
+    """
+    Si el mismo extracto mezcla saldos ~11 millones y ~71 millones, los 71.xxx
+    son 11.xxx con el 7 leído de más. Convertirlos antes de armar la cadena.
+    """
+    saldos: list[float] = []
+    for r in movs:
+        try:
+            s = r.get("Saldo")
+            if s is not None and str(s).strip() != "":
+                saldos.append(float(s))
+        except (TypeError, ValueError):
+            continue
+    if not saldos:
+        return movs
+    tiene_banda_real = any(8_000_000 <= s < 20_000_000 for s in saldos)
+    tiene_banda_71 = any(_OCR_SALDO_7_MIN <= s < _OCR_SALDO_7_MAX for s in saldos)
+    if not (tiene_banda_real and tiene_banda_71):
+        return movs
+    out: list[dict] = []
+    for r in movs:
+        rr = dict(r)
+        try:
+            s = rr.get("Saldo")
+            sf = float(s) if s is not None and str(s).strip() != "" else None
+        except (TypeError, ValueError):
+            sf = None
+        if sf is not None:
+            alt = _saldo_alternativa_ocr_7_por_1(sf)
+            if alt is not None:
+                rr["Saldo"] = alt
+        out.append(rr)
+    return out
+
+
 def _corregir_filas_extracto_por_saldos(movs: list[dict]) -> list[dict]:
     """
     Conserva el signo matemático del movimiento (− resta, + suma).
@@ -4684,6 +5279,7 @@ def _corregir_filas_extracto_por_saldos(movs: list[dict]) -> list[dict]:
     """
     if not movs:
         return movs
+    movs = _normalizar_saldos_ocr_71_en_lote(movs)
     saldo_prev: float | None = None
     out: list[dict] = []
     for row in movs:
@@ -4705,8 +5301,23 @@ def _corregir_filas_extracto_por_saldos(movs: list[dict]) -> list[dict]:
             out.append(r)
             continue
 
+        if _es_fila_ruido_pie_extracto(r):
+            r = _aplicar_importe_y_dc(r, None)
+            r["Valido"] = False
+            out.append(r)
+            continue
+
         importe = _importe_firmado_desde_fila(r)
         valido = True
+        chico = _monto_chico_en_texto(r, importe)
+        fijo_leyenda = False
+        if chico is not None:
+            importe = -chico if (importe or 0) < 0 else chico
+            fijo_leyenda = True
+
+        if saldo_f is not None:
+            saldo_f = _resolver_saldo_ocr(saldo_f, saldo_prev, importe)
+            r["Saldo"] = saldo_f
 
         if saldo_prev is not None and saldo_f is not None:
             delta = round(saldo_f - saldo_prev, 2)
@@ -4719,8 +5330,17 @@ def _corregir_filas_extracto_por_saldos(movs: list[dict]) -> list[dict]:
                     importe = delta
                 elif abs(abs(importe) - abs(delta)) > 0.05:
                     # Magnitud no cierra: el delta dice qué restó/sumó (signo contable real)
-                    importe = delta
-                    valido = False
+                    # Salvo importe tomado de la leyenda (2.853,47) o salto enorme tipo 71/11.
+                    if fijo_leyenda or (
+                        abs(importe) >= 0.01
+                        and abs(delta) >= max(50_000_000.0, abs(importe) * 20.0)
+                    ):
+                        if saldo_prev is not None:
+                            saldo_f = round(saldo_prev + float(importe), 2)
+                            r["Saldo"] = saldo_f
+                    else:
+                        importe = delta
+                        valido = False
                 else:
                     # Misma magnitud: forzar el signo del movimiento del saldo
                     # (resta → negativo) sin perder el valor
@@ -4863,6 +5483,7 @@ def _clasificar_debito_credito_extracto(
     if monto_abs <= 0:
         return 0.0, 0.0
     if saldo_prev is not None and saldo is not None:
+        saldo = _resolver_saldo_ocr(float(saldo), float(saldo_prev), monto_abs)
         delta = round(float(saldo) - float(saldo_prev), 2)
         if abs(abs(delta) - monto_abs) <= 0.05 or abs(delta) >= 0.01:
             if abs(abs(delta) - monto_abs) <= 1.01:
@@ -5512,10 +6133,8 @@ def _parsear_movimientos_provincia_paginas(
         if m_dh:
             marca_dh = (m_dh.group(2) or m_dh.group(3) or "").upper()
 
-        if len(montos) >= 2:
-            monto_mov, saldo = montos[-2], montos[-1]
-        else:
-            monto_mov, saldo = montos[0], None
+        monto_signed, saldo = _elegir_monto_y_saldo_extracto(montos, saldo_prev)
+        monto_mov = abs(monto_signed) if monto_signed else abs(montos[0])
 
         descripcion = _RE_FECHA_EXT.sub("", texto_bloque)
         descripcion = _RE_MONTO_AR_LIBRE.sub("", descripcion)
@@ -13283,7 +13902,7 @@ _MAPA_TIPO_ASIENTO_TANGO: dict[str, str] = {
     "TISH": "VARIOS",
     "TSH": "VARIOS",
     "CM": "VARIOS",
-    "BANCO": "VARIOS",
+    "BANCO": "CN",
 }
 
 
@@ -13298,12 +13917,12 @@ def _codigo_tipo_asiento_tango(tipo_str: str) -> str:
             return codigo
     if tipo in _TIPOS_ASIENTO_TANGO_VALIDOS:
         return tipo
-    # Códigos de banco del registry (GALICIA, MACRO, …) → VARIOS
+    # Códigos de banco del registry (GALICIA, MACRO, …) → CN (instructivo asientos)
     for ficha in BANK_REGISTRY.values():
         if str(ficha.get("codigo_tango") or "").upper() == tipo:
-            return "VARIOS"
+            return "CN"
         if str(ficha.get("slug") or "").upper() == tipo:
-            return "VARIOS"
+            return "CN"
     return "VARIOS"
 
 

@@ -1324,7 +1324,7 @@ def test_codigo_tipo_asiento_tango_mapping():
   assert proc._codigo_tipo_asiento_tango("IIBB") == "VARIOS"
   assert proc._codigo_tipo_asiento_tango("IIBB_ARBA") == "VARIOS"
   assert proc._codigo_tipo_asiento_tango("IIBB_CM03") == "VARIOS"
-  assert proc._codigo_tipo_asiento_tango("BANCO") == "VARIOS"
+  assert proc._codigo_tipo_asiento_tango("BANCO") == "CN"
   assert proc._codigo_tipo_asiento_tango("CM") == "VARIOS"
   assert proc._codigo_tipo_asiento_tango("") == "VARIOS"
   assert proc._codigo_tipo_asiento_tango("SUELDOSRES") == "SUELDOSRES"
@@ -1577,6 +1577,348 @@ def test_procesar_facturas_monotributo_orden_cronologico():
   print("OK test_procesar_facturas_monotributo_orden_cronologico")
 
 
+def test_recibo_no_se_clasifica_como_factura():
+  import procesador as proc
+
+  texto = """
+  RECIBO C
+  Codigo: 015
+  Fecha de Emisión: 12/08/2025
+  Punto de Venta: 3
+  Comp. Nro: 44
+  Concepto: 2 - Servicios
+  Período Facturado Desde: 01/07/2025 Hasta: 31/07/2025
+  Importe Total: $ 80.000,00
+  CAE: 77776666555544
+  Recibimos la suma de pesos en concepto de la factura nro 00003-00000010
+  """
+  parsed = proc.parsear_factura_afip_texto(texto, "recibo.pdf")
+  assert parsed is not None
+  assert parsed["Tipo"].startswith("Recibo")
+  assert parsed["Código AFIP"] == "015"
+  assert parsed["Importe Total"] > 0
+  assert parsed["Período Desde"] == "01/07/2025"
+  print("OK test_recibo_no_se_clasifica_como_factura")
+
+
+def test_factura_usd_imp_total_es_dolares_por_tc():
+  import procesador as proc
+
+  texto = """
+  FACTURA C
+  Codigo: 011
+  CUIT: 20-11222333-9
+  Fecha de Emisión: 05/08/2025
+  Punto de Venta: 1
+  Comp. Nro: 90
+  Concepto: 2 - Servicios
+  Período Facturado Desde: 01/07/2025 Hasta: 31/07/2025
+  Moneda: DOL
+  Tipo de Cambio: 1.250,50
+  Importe Total: 100,00
+  CAE: 33332222111100
+  """
+  parsed = proc.parsear_factura_afip_texto(texto, "usd.pdf")
+  assert parsed is not None
+  assert abs(float(parsed["Importe Dólares"]) - 100.0) < 0.02
+  assert abs(float(parsed["Tipo de Cambio"]) - 1250.50) < 0.02
+  assert abs(float(parsed["Importe Total"]) - 125050.0) < 0.05
+  assert parsed["CUIT Emisor"] == "20112223339"
+  print("OK test_factura_usd_imp_total_es_dolares_por_tc")
+
+
+def test_cuit_ajeno_no_se_carga_en_monotributo():
+  import unittest.mock as mock
+  import procesador as proc
+
+  class _FakeUpload:
+    def __init__(self, name: str, data: bytes):
+      self.name = name
+      self._data = data
+
+    def getvalue(self):
+      return self._data
+
+  texto = """
+  FACTURA C
+  Codigo: 011
+  CUIT: 30-99999999-9
+  Fecha de Emisión: 01/05/2025
+  Punto de Venta: 1
+  Comp. Nro: 1
+  Concepto: 1 - Productos
+  Importe Total: 1.000,00
+  CAE: 10101010101010
+  """
+
+  def _fake_extraer(pdf_bytes: bytes) -> str:
+    return pdf_bytes.decode("utf-8")
+
+  with mock.patch.object(proc, "extraer_texto_factura_afip", side_effect=_fake_extraer):
+    df, errores = proc.procesar_facturas_monotributo(
+      [_FakeUpload("ajeno.pdf", texto.encode("utf-8"))],
+      cuit_cliente="20112223339",
+    )
+  assert df.empty
+  assert any("CUIT emisor" in str(e.get("motivo", "")) for e in errores)
+  print("OK test_cuit_ajeno_no_se_carga_en_monotributo")
+
+
+def test_correlatividad_facturas_y_recibos_aparte():
+  import procesador as proc
+
+  filas = [
+    {"Tipo": "Factura C", "Código AFIP": "011", "Comprobante": "00001-00000010"},
+    {"Tipo": "Factura C", "Código AFIP": "011", "Comprobante": "00001-00000012"},
+    {"Tipo": "Recibo C", "Código AFIP": "015", "Comprobante": "00001-00000001"},
+    {"Tipo": "Recibo C", "Código AFIP": "015", "Comprobante": "00001-00000002"},
+  ]
+  avisos = proc.auditar_correlatividad_monotributo(filas)
+  assert any("Facturas" in a and "11" in a for a in avisos)
+  assert not any("Recibos" in a for a in avisos)
+  print("OK test_correlatividad_facturas_y_recibos_aparte")
+
+
+def test_mis_retenciones_fecha_ret_perc_omite_pendiente():
+  import io
+  from openpyxl import Workbook
+  import procesador as proc
+
+  wb = Workbook()
+  ws = wb.active
+  ws.append([
+    "CUIT Agente", "Denominación", "Fecha Comprobante", "Fecha Ret./Perc.",
+    "Impuesto", "Régimen", "Descripción Operación", "Importe Total",
+    "Importe Ret./Perc.", "Estado",
+  ])
+  ws.append(["20111", "Agente A", "01/04/2026", "15/05/2026", "IVA", "Ret IVA", "RETENCION", 5000, 1200, "Tomada"])
+  ws.append(["20111", "Agente B", "01/05/2026", "20/05/2026", "IVA", "Perc IVA", "PERCEPCION", 8000, 300, "Tomada"])
+  ws.append(["20111", "Agente C", "01/05/2026", "22/05/2026", "IVA", "Ret IVA", "RETENCION", 1000, 400, "Pendiente"])
+  ws.append(["20111", "Agente D", "01/05/2026", "10/04/2026", "IVA", "Ret IVA", "RETENCION", 2000, 999, "Tomada"])
+  ws.append(["20111", "Agente E", "01/05/2026", "18/05/2026", "Ganancias", "Gcias", "RETENCION", 7000, 700, "Tomada"])
+  buf = io.BytesIO()
+  wb.save(buf)
+  buf.seek(0)
+  buf.name = "mis_retenciones.xlsx"
+  out = proc.parsear_mis_retenciones_afip(buf, "05/2026", impuesto="iva")
+  assert not out.get("error")
+  assert out["omitidos_pendiente"] == 1
+  assert abs(out["retenciones"] - 1200) < 0.02
+  assert abs(out["percepciones"] - 300) < 0.02
+  assert out["cantidad"] == 2
+  print("OK test_mis_retenciones_fecha_ret_perc_omite_pendiente")
+
+
+def test_conceptos_bancos_lista_cerrada_y_a_identificar():
+  import io
+  from openpyxl import Workbook
+  import conceptos_bancos as cb
+
+  wb = Workbook()
+  ws = wb.active
+  ws.title = "CUENTAS"
+  ws.append(["Cuenta contable"])
+  ws.append(["Impuesto a los débitos y créditos a cuenta de ganancias"])
+  ws.append(["Movimientos a identificar"])
+  ws.append(["Deudores por ventas"])
+  ws2 = wb.create_sheet("Banco Galicia")
+  ws2.append(["Concepto del banco", "Cuenta contable", "Tratamiento"])
+  ws2.append(["Impuesto Ley 25413", "Impuesto a los débitos y créditos a cuenta de ganancias", "Totalizado"])
+  ws2.append(["Acreditamiento prisma comercios", "Deudores por ventas", "Ventas"])
+  buf = io.BytesIO()
+  wb.save(buf)
+  data = cb.parsear_instructivo(buf.getvalue())
+  hit = cb.clasificar_movimiento_instructivo(
+      "IMP. DEB. LEY 25413 $ 1200",
+      "Galicia",
+      debito=1200,
+      credito=0,
+      instructivo=data,
+  )
+  assert "débitos y créditos" in hit["cuenta"].lower() or "debitos y creditos" in hit["cuenta"].lower()
+  assert hit["identificado"] is True
+  miss = cb.clasificar_movimiento_instructivo(
+      "MOVIMIENTO RARO XYZ SIN PISTA",
+      "Galicia",
+      debito=10,
+      credito=0,
+      instructivo=data,
+  )
+  assert "identificar" in miss["cuenta"].lower()
+  assert miss["identificado"] is False
+  print("OK test_conceptos_bancos_lista_cerrada_y_a_identificar")
+
+
+def test_proyeccion_monotributo_fijo_vs_rodante():
+  import pandas as pd
+  from datetime import date
+  from monotributo_proyeccion import periodo_recategorizacion_fijo, proyectar_monotributo, ventana_rodante_12m
+
+  hoy = date(2026, 9, 10)
+  d_f, h_f, recat = periodo_recategorizacion_fijo(hoy)
+  assert recat == "julio"
+  assert d_f == date(2025, 7, 1)
+  assert h_f == date(2026, 6, 30)
+  d_r, h_r = ventana_rodante_12m(hoy)
+  assert d_r == date(2025, 10, 1)
+  assert h_r == hoy
+
+  df = pd.DataFrame([
+      {"Período Desde": "01/08/2025", "Importe Total": 1000},
+      {"Período Desde": "01/11/2025", "Importe Total": 2000},
+      {"Período Desde": "01/08/2026", "Importe Total": 4000},
+  ])
+  proy = proyectar_monotributo(df, "A", hoy=hoy)
+  assert abs(proy["facturado_fijo"] - 3000) < 0.02  # ago-25 + nov-25 (ago-26 fuera del semestre julio)
+  assert abs(proy["facturado_rodante"] - 6000) < 0.02  # nov-25 + ago-26
+  assert proy["tope"] is not None
+  assert abs(proy["max_facturar_mes"] - (proy["tope"] - 6000)) < 0.02
+  print("OK test_proyeccion_monotributo_fijo_vs_rodante")
+
+
+def test_conceptos_bancos_debito_no_toma_regla_credito():
+  import io
+  from openpyxl import Workbook
+  import conceptos_bancos as cb
+  from motor_conciliacion import clasificar
+
+  wb = Workbook()
+  ws = wb.active
+  ws.title = "CUENTAS"
+  ws.append(["Cuenta contable"])
+  ws.append(["Deudores por ventas"])
+  ws.append(["Proveedores"])
+  ws.append(["Movimientos a identificar"])
+  ws2 = wb.create_sheet("Banco Galicia")
+  ws2.append(["Concepto del banco", "Cuenta contable", "Tratamiento"])
+  ws2.append(["Transferencia (crédito)", "Deudores por ventas", "Ventas"])
+  ws2.append(["Transferencia (débito)", "Proveedores", "Pago"])
+  buf = io.BytesIO()
+  wb.save(buf)
+  data = cb.parsear_instructivo(buf.getvalue())
+  hit_deb = cb.clasificar_movimiento_instructivo(
+      "TRANSFERENCIA",
+      "Galicia",
+      debito=500,
+      credito=0,
+      instructivo=data,
+  )
+  assert "proveedor" in hit_deb["cuenta"].lower()
+  hit_cre = cb.clasificar_movimiento_instructivo(
+      "TRANSFERENCIA",
+      "Galicia",
+      debito=0,
+      credito=500,
+      instructivo=data,
+  )
+  assert "deudor" in hit_cre["cuenta"].lower()
+  clf = clasificar(
+      "MOVIMIENTO RARO XYZ SIN PISTA",
+      [{"patron": "MOVIMIENTO RARO", "categoria": "NO DEBE USARSE", "tipo": "INGRESO", "orden": 1, "activo": 1}],
+      banco="Galicia",
+      debito=10,
+      credito=0,
+      instructivo=data,
+  )
+  assert "identificar" in clf["categoria"].lower()
+  print("OK test_conceptos_bancos_debito_no_toma_regla_credito")
+
+
+def test_arca_dryrun_analizar_monotributo_deja_nota():
+  import tempfile
+  from afip_worker.actions import run_bajar_comprobantes
+  from afip_worker.jobs import JobResult, create_job
+
+  dest = Path(tempfile.mkdtemp())
+  job = create_job(
+      cuit="27-42043034-0",
+      razon_social="Test Mono",
+      action="bajar_comprobantes",
+      params={
+          "ruta_destino": str(dest),
+          "periodo_desde": "2026-08-01",
+          "periodo_hasta": "2026-08-31",
+          "analizar_monotributo": True,
+      },
+  )
+  result = run_bajar_comprobantes(job, dry_run=True)
+  assert result.ok
+  extra = (result.extra or {}).get("monotributo") or {}
+  assert extra.get("cantidad") == 0
+  assert extra.get("errores")
+  dumped = JobResult(files=result.files, message=result.message, extra=result.extra)
+  assert dumped.extra["monotributo"]["cantidad"] == 0
+  print("OK test_arca_dryrun_analizar_monotributo_deja_nota")
+
+
+def test_gate_asiento_bloquea_desbalance_y_99999():
+  from capa_revision import gate_asiento, resolver_codigo_plan
+
+  rows = [
+      {"Código": "21401", "Debe": 100, "Haber": 0},
+      {"Código": "99999", "Debe": 0, "Haber": 90},
+  ]
+  g = gate_asiento(rows)
+  assert g["ok"] is False
+  assert any("99999" in b or "sin cuenta" in b.lower() for b in g["bloqueantes"])
+  assert any("cierra" in b.lower() or "diferencia" in b.lower() for b in g["bloqueantes"])
+
+  ok_rows = [
+      {"Código": "21401", "Debe": 100, "Haber": 0},
+      {"Código": "11101", "Debe": 0, "Haber": 100},
+  ]
+  g2 = gate_asiento(ok_rows)
+  assert g2["ok"] is True
+
+  g3 = gate_asiento(ok_rows, plan_vacio=True)
+  assert g3["ok"] is False
+
+  plan = pd.DataFrame([
+      {"codigo": "11301", "descripcion": "Deudores por ventas"},
+      {"codigo": "51201", "descripcion": "Impuesto a los débitos y créditos"},
+  ])
+  cod, _desc, score = resolver_codigo_plan("Deudores por ventas", plan)
+  assert cod == "11301"
+  assert score >= 90
+  cod2, _, _ = resolver_codigo_plan("Cuenta inventada xyzqq", plan)
+  assert cod2 == "99999"
+  print("OK test_gate_asiento_bloquea_desbalance_y_99999")
+
+
+def test_motor_match_debil_no_queda_ok():
+  from motor_conciliacion import clasificar, correr_motor
+
+  clf = clasificar("MOVIMIENTO RARO XYZ SIN PISTA", banco="", debito=10, credito=0)
+  assert clf["confianza"] == "baja"
+  assert clf["tipo"] == "DEBITO_REVISAR"
+
+  clf_seed = clasificar("IMP. DEB. LEY 25413 $ 10", banco="", debito=10, credito=0)
+  assert clf_seed["fuente"] == "regla_local"
+  assert clf_seed["confianza"] == "media"
+
+  filas = [{
+      "fecha": "10/09/2026",
+      "descripcion": "IMP. DEB. LEY 25413 $ 10",
+      "debito": 10,
+      "credito": 0,
+      "saldo": 0,
+  }]
+  out = correr_motor(
+      filas,
+      None,
+      [],
+      [],
+      cliente_id=1,
+      banco="",
+      periodo=None,
+      saldo_ok=True,
+  )
+  assert len(out) == 1
+  assert out[0]["estado"] == "PENDIENTE"
+  assert "confirmar" in str(out[0]["match_detalle"] or "").lower()
+  print("OK test_motor_match_debil_no_queda_ok")
+
+
 if __name__ == "__main__":
     test_ventas_21_debe()
     test_compras_21_haber()
@@ -1636,4 +1978,15 @@ if __name__ == "__main__":
     test_parsear_factura_afip_texto_servicios()
     test_parsear_nota_credito_afip_importe_negativo()
     test_procesar_facturas_monotributo_orden_cronologico()
+    test_recibo_no_se_clasifica_como_factura()
+    test_factura_usd_imp_total_es_dolares_por_tc()
+    test_cuit_ajeno_no_se_carga_en_monotributo()
+    test_correlatividad_facturas_y_recibos_aparte()
+    test_mis_retenciones_fecha_ret_perc_omite_pendiente()
+    test_conceptos_bancos_lista_cerrada_y_a_identificar()
+    test_proyeccion_monotributo_fijo_vs_rodante()
+    test_conceptos_bancos_debito_no_toma_regla_credito()
+    test_arca_dryrun_analizar_monotributo_deja_nota()
+    test_gate_asiento_bloquea_desbalance_y_99999()
+    test_motor_match_debil_no_queda_ok()
     print("\nTodos los tests pasaron.")

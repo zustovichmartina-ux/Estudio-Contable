@@ -1,0 +1,1282 @@
+{
+  "cuentas": [
+    "Anticipo de Ganancias a pagar",
+    "Aportes de obra social a pagar",
+    "Aportes de seguridad social a pagar",
+    "ART a pagar",
+    "Autónomos a pagar",
+    "Banco BBVA cta. cte.",
+    "Banco Credicoop cta. cte.",
+    "Banco Galicia cta. cte.",
+    "Banco ICBC cta. cte.",
+    "Banco Macro cta. cte.",
+    "Banco moneda extranjera",
+    "Banco Nación cta. cte.",
+    "Banco Provincia cta. cte.",
+    "Banco Santander cta. cte.",
+    "Banco Supervielle cta. cte.",
+    "Bienes de uso",
+    "Bienes Personales a pagar",
+    "Caja",
+    "Contribuciones de obra social a pagar",
+    "Contribuciones de seguridad social a pagar",
+    "Cuenta particular",
+    "Deudores por ventas",
+    "Deudores por ventas a identificar",
+    "Devoluciones a identificar",
+    "Fletes",
+    "Fondos comunes de inversión",
+    "Gastos a identificar",
+    "Gastos de publicidad",
+    "Gastos de servicios",
+    "Gastos y comisiones bancarias",
+    "Honorarios profesionales",
+    "IIBB a pagar",
+    "Impuesto a las Ganancias a pagar",
+    "Impuesto a los débitos y créditos a cuenta de ganancias",
+    "Impuesto PAÍS",
+    "Impuestos a identificar",
+    "Impuestos y tasas",
+    "Intereses ganados",
+    "Intereses negativos",
+    "Inversiones - títulos públicos",
+    "IVA a pagar",
+    "IVA crédito fiscal 10,5%",
+    "IVA crédito fiscal 21%",
+    "Leasing a pagar",
+    "Mercado Pago",
+    "Monotributo a pagar",
+    "Movimientos a identificar",
+    "Otros ingresos a identificar",
+    "Percepciones de IIBB - banco",
+    "Percepciones de IIBB - jurisdicción",
+    "Percepciones de IVA sufridas",
+    "Plan de pago AFIP a pagar",
+    "Plazo fijo",
+    "Préstamo Mercado Pago",
+    "Préstamos bancarios - Garantía FOGABA",
+    "Préstamos bancarios a pagar",
+    "Proveedores",
+    "Proveedores a identificar",
+    "Reclamos a identificar",
+    "Resultado por compraventa de moneda extranjera",
+    "Retenciones de Ganancias sufridas",
+    "Retenciones de IIBB - banco",
+    "Retenciones de IIBB - jurisdicción",
+    "Retenciones de IVA sufridas",
+    "Seguro de vida obligatorio a pagar",
+    "Seguros pagados",
+    "Sindicato a pagar",
+    "Sueldos y jornales a pagar",
+    "Tarjetas de crédito a pagar",
+    "Tasa de Seguridad e Higiene a identificar",
+    "Tasa de seguridad e higiene a pagar",
+    "Transferencias entre cuentas propias - [Banco X]"
+  ],
+  "bancos": {
+    "bbva": [
+      {
+        "concepto": "Impuesto Ley 25413",
+        "cuenta": "Impuesto a los débitos y créditos a cuenta de ganancias",
+        "tratamiento": "Totalizado al final del resumen, separado en debitos y credito pero suma ambos"
+      },
+      {
+        "concepto": "Cupones Prisma/Argen/Mastercard",
+        "cuenta": "Deudores por ventas",
+        "tratamiento": "Deudores por Ventas"
+      },
+      {
+        "concepto": "Oper. Fondos comunes de Inversion (capital)",
+        "cuenta": "Fondos comunes de inversión",
+        "tratamiento": "Fondos comunes de Inversion, separalos por suscripcion (-)  y rescate (+) en dos filas, en la misma cuenta pero una en el debe y otra en el haber."
+      },
+      {
+        "concepto": "Transferencias (credito)",
+        "cuenta": "Deudores por ventas a identificar",
+        "tratamiento": "Verificar abajo en el detalle de quien es. Si es de la misma sociedad que quede separado, sino suma todo a deudores por ventas. Si son transferencias entre cuentas propias de la misma sociedad, identificar de que banco es. Y si no podes dejalo separado. Regla de imputación: por defecto Deudores por ventas a identificar. Si se identifica al cliente → Deudores por ventas. Si es una cuenta propia de la misma sociedad → la cuenta del banco de contrapartida."
+      },
+      {
+        "concepto": "Retencion ARBA",
+        "cuenta": "Retenciones de IIBB - banco",
+        "tratamiento": "Totalizado al final del resumen"
+      },
+      {
+        "concepto": "Debito por pago de haberes",
+        "cuenta": "Sueldos y jornales a pagar",
+        "tratamiento": "Es la suma de los sueldos netos devengados inmediato anterior"
+      },
+      {
+        "concepto": "Comisiones",
+        "cuenta": "Gastos y comisiones bancarias",
+        "tratamiento": "Es un gasto por el uso del banco o por cheques rechazados/desopistados, el iva es al 21% y dejalo separado de los otros gastos junto con el iva y sus impuesto relacionados (perc de iva y perc de iibb)"
+      },
+      {
+        "concepto": "Iva Tasa General",
+        "cuenta": "IVA crédito fiscal 21%",
+        "tratamiento": "Es siempre al 21%"
+      },
+      {
+        "concepto": "Iva Tasa RI",
+        "cuenta": "IVA crédito fiscal 10,5%",
+        "tratamiento": "Es siempre al 10,5%"
+      },
+      {
+        "concepto": "Transferencias (debito)",
+        "cuenta": "Proveedores a identificar",
+        "tratamiento": "Consultar el cuit, por lo general al lado del concepto figura el cuit. Si coincide con un proveedor del listado sumarlo a proveedores y sino dejalo separado con la identificacion de quien es  Regla de imputación: por defecto Proveedores a identificar. Si el CUIT coincide con un proveedor del listado → Proveedores."
+      },
+      {
+        "concepto": "Pago Proveedores",
+        "cuenta": "Proveedores a identificar",
+        "tratamiento": "No lo sumes a proveedores, dejalo aparte para anlizarlo  Regla de imputación: queda en Proveedores a identificar hasta analizarlo. No se suma a Proveedores automáticamente."
+      },
+      {
+        "concepto": "Impuesto sellos",
+        "cuenta": "Impuestos y tasas",
+        "tratamiento": "Es un gasto por el uso del banco o por cheques rechazados/desopistados, el iva es al 21% y dejalo separado de los otros gastos junto con el iva y sus impuesto relacionados (perc de iva y perc de iibb)  Decisión del estudio: el impuesto de sellos que cobra el banco va a Impuestos y tasas, no a gastos y comisiones bancarias."
+      },
+      {
+        "concepto": "Interes saldo deudor",
+        "cuenta": "Intereses negativos",
+        "tratamiento": "Es un gasto por el uso del banco o por cheques rechazados/desopistados, el iva es al 10,5% y dejalo separado de los otros gastos junto con el iva y sus impuesto relacionados (perc de iva y perc de iibb)"
+      },
+      {
+        "concepto": "PERCEPCION IVA RG 2408",
+        "cuenta": "Percepciones de IVA sufridas",
+        "tratamiento": ""
+      },
+      {
+        "concepto": "Pago Tarjeta de Crédito (Visa/Mastercard/Amex) débito en cuenta bancaria",
+        "cuenta": "Tarjetas de crédito a pagar",
+        "tratamiento": "Es el pago del resumen de tarjeta visto desde la cuenta bancaria, no un gasto en sí mismo. Identificá de qué banco y marca es la tarjeta por el propio concepto (suele decir el banco emisor y Visa/Mastercard/Amex) y conciliá el importe y la fecha contra el resumen de esa tarjeta para no duplicarlo con los conceptos que salen de ese resumen. Si coincide, cancela la deuda de tarjeta; si no coincide en monto, dejalo separado para analizar."
+      },
+      {
+        "concepto": "Consumo con tarjeta de crédito adicional/familiar (cliente persona física)",
+        "cuenta": "Cuenta particular",
+        "tratamiento": "Cuando el titular es una persona física con tarjetas adicionales, separá el consumo propio del titular del consumo de un familiar o adicional (suele identificarse por el nombre del adicional en el detalle). El consumo familiar se imputa a cuenta particular y no es un gasto del negocio; el consumo propio se analiza aparte para ver si es deducible. Puede ocurrir que dentro de los consumos se pueda cancelar Proveedores, ya que utilizan la tarjeta el titular o el adicional para la actividad; siempre se cruza con el listado de imputacion contable. Regla de imputación: Cuenta particular, sea el cliente unipersonal o sociedad. Si el consumo cancela una factura del listado de imputación contable → Proveedores."
+      },
+      {
+        "concepto": "Retención/percepción de Ganancias RG 5617 en resumen de tarjeta",
+        "cuenta": "Retenciones de Ganancias sufridas",
+        "tratamiento": "Retención a cuenta del Impuesto a las Ganancias del titular practicada sobre consumos en moneda extranjera. No es un ingreso: se acumula con el resto de las retenciones de Ganancias sufridas del período."
+      },
+      {
+        "concepto": "Devolución de Impuesto PAÍS en resumen de tarjeta",
+        "cuenta": "Impuesto PAÍS",
+        "tratamiento": "Devolución parcial del Impuesto PAÍS sobre consumos en moneda extranjera. Puede restarse del saldo a pagar del resumen siguiente cuando el saldo en dólares se paga en esa misma moneda."
+      },
+      {
+        "concepto": "Transferencia a cuenta particular de socio o familiar",
+        "cuenta": "Cuenta particular",
+        "tratamiento": "Cuando la transferencia (débito o crédito) es hacia o desde una cuenta personal de un socio, directivo o familiar directo identificado por nombre, y no corresponde a la operatoria comercial del cliente, imputala a cuenta particular y dejala separada de proveedores y de deudores por ventas. Sino existe la cuenta particular/familiar, imputarse directamente a la cuenta del socio. Regla de imputación: Cuenta particular, una sola cuenta para el titular y para los socios."
+      },
+      {
+        "concepto": "Pago de impuestos AFIP/ARBA por VEP o transferencia (IVA, Ganancias, Ingresos Brutos, Cargas Sociales)",
+        "cuenta": "Impuestos a identificar",
+        "tratamiento": "Es el pago de una obligación fiscal ya devengada, no un gasto nuevo. Identificá el impuesto por el propio concepto del extracto (IVA-AFIP, Empleadores-AFIP, IIBB a pagar, etc.) y cancelalo contra la cuenta de pasivo fiscal que corresponda. Si el concepto es genérico sin poder identificar el impuesto, dejalo separado y pedile al cliente la constancia de pago AFIP para clasificarlo. Regla de imputación: por defecto Impuestos a identificar. Abrir según el VEP: IVA → IVA a pagar; IIBB → IIBB a pagar; anticipos de Ganancias → Anticipo de Ganancias a pagar; Bienes Personales → Bienes Personales a pagar; SICOSS/931 → Aportes y Contribuciones de seguridad social, Aportes y Contribuciones de obra social, ART a pagar y Seguro de vida obligatorio a pagar; cuotas de plan → Plan de pago AFIP a pagar."
+      },
+      {
+        "concepto": "Débito cuota de préstamo bancario",
+        "cuenta": "Préstamos bancarios a pagar",
+        "tratamiento": "Si el extracto discrimina capital e interés, separá ambos: el capital cancela el préstamo y el interés va a gastos financieros. Si no está discriminado, imputá el total a préstamos a pagar y dejalo señalado para pedir el cronograma de pagos."
+      },
+      {
+        "concepto": "Pago de seguros (débito automático)",
+        "cuenta": "Seguros pagados",
+        "tratamiento": "Es un gasto por pólizas debitadas automáticamente (auto, vida, etc.). Si se paga en cuotas y el cliente ya tiene devengada la póliza, cancelá contra seguros a pagar; si es un pago sin devengamiento previo, imputalo directo a gasto del período. Si esta la factura de dicho seguro dentro de proveedores, en el listado de imputacion contable, cancelarlo contra proveedores. Regla de imputación: por defecto Seguros pagados. Si la factura del seguro está en el listado de imputación contable → Proveedores."
+      },
+      {
+        "concepto": "Cajas de ahorro / cuentas en moneda extranjera (USD/EUR)",
+        "cuenta": "Banco moneda extranjera",
+        "tratamiento": "Llevalas en una cuenta contable separada, distinta de la cuenta en pesos, valuada en la moneda de origen. Aunque no tengan movimientos en el período, verificá siempre que el saldo final coincida con el extracto para no dejar la conciliación incompleta."
+      },
+      {
+        "concepto": "Cupones Cabal u otros procesadores de tarjeta",
+        "cuenta": "Deudores por ventas",
+        "tratamiento": "Mismo tratamiento que los cupones Prisma/Argencard/Mastercard, pero identificá el procesador (Cabal u otro) para poder abrir el detalle por agrupador si el cliente necesita conciliar contra la liquidación de cada procesadora por separado."
+      },
+      {
+        "concepto": "Depósito en efectivo",
+        "cuenta": "Caja",
+        "tratamiento": "Verificá con el cliente el origen del efectivo (cobranzas, aporte de socio, etc.) antes de imputarlo contra caja. Si no se puede identificar el origen, mandalo a caja igual."
+      }
+    ],
+    "galicia": [
+      {
+        "concepto": "Concepto del banco",
+        "cuenta": "Cuenta contable",
+        "tratamiento": "Tratamiento"
+      },
+      {
+        "concepto": "Acreditamiento prisma comercios",
+        "cuenta": "Deudores por ventas",
+        "tratamiento": "Deudores por ventas"
+      },
+      {
+        "concepto": "Impuesto Ley 25413",
+        "cuenta": "Impuesto a los débitos y créditos a cuenta de ganancias",
+        "tratamiento": "Totalizado al final del resumen, separado en debitos y credito pero contemplando la suma de ambos"
+      },
+      {
+        "concepto": "Ing. Brutos Ley 12837",
+        "cuenta": "Retenciones de IIBB - banco",
+        "tratamiento": "Reteciones de ingresos brutos, totalizado al final del resumen"
+      },
+      {
+        "concepto": "Intereses sobre saldos deudores",
+        "cuenta": "Intereses negativos",
+        "tratamiento": "Es un gasto por el uso del banco, el iva es al 10,5% y dejalo separado de los otros gastos junto con el iva y sus impuesto relacionados (perc de iva y perc de iibb)  Regla de imputación: es un interés, no una comisión. Va a Intereses negativos, igual que en BBVA y Provincia."
+      },
+      {
+        "concepto": "Impuesto de Sellos",
+        "cuenta": "Impuestos y tasas",
+        "tratamiento": "Es un gasto de sellado  Decisión del estudio: el impuesto de sellos que cobra el banco va a Impuestos y tasas."
+      },
+      {
+        "concepto": "Iva",
+        "cuenta": "IVA crédito fiscal 10,5%",
+        "tratamiento": "Relacionado con el interes inmediato anterior que tenga en los movimientos"
+      },
+      {
+        "concepto": "Deb. Autom de Serv",
+        "cuenta": "Proveedores a identificar",
+        "tratamiento": "Relacionalo con el listado de imputacion contable, si es un proveedor sumalo. Sino dejalo como \"a identificar\"  Regla de imputación: por defecto Proveedores a identificar. Si matchea el listado de imputación contable → Proveedores."
+      },
+      {
+        "concepto": "Rescate FIMA",
+        "cuenta": "Fondos comunes de inversión",
+        "tratamiento": "Fondo comun de inversion, Rescate"
+      },
+      {
+        "concepto": "Servicio de Acreditamiento de Haberes",
+        "cuenta": "Sueldos y jornales a pagar",
+        "tratamiento": "Es la suma de los sueldos netos devengados inmediato anterior"
+      },
+      {
+        "concepto": "Suscripcion FIMA",
+        "cuenta": "Fondos comunes de inversión",
+        "tratamiento": "Fondo comun de inversion, Suscripciones"
+      },
+      {
+        "concepto": "Credito Transferencia Coelsa",
+        "cuenta": "Transferencias entre cuentas propias - [Banco X]",
+        "tratamiento": "COELSA con origen o destino Mercado Pago. Regla de imputación: «Transferencias entre cuentas propias - Mercado Pago». Si no se confirman los tres datos del cruce (banco contraparte, fecha razonable de acreditación e importe exacto), no se fuerza: va a Movimientos a identificar."
+      },
+      {
+        "concepto": "Transf. AFIP",
+        "cuenta": "Impuestos a identificar",
+        "tratamiento": "Se cruza automaticamente contra los comprobantes de VEP reales (carpeta 'Informacion/veps zaid' del cliente: IVA, SICOSS, Bienes Personales, Ganancias, etc.) por importe y fecha de pago exactos, y si se pudiera, con el numero de VEP tambien. Segun el tipo de VEP: IVA -> 'IVA a Pagar'; SICOSS/Empleadores (cargas sociales) -> Aportes de Seguridad Social/Aportes de Obra social/Contribuciones de Seguridad Social/Contribuciones de Obra social/ART/Seguro de vida a pagar; todos con el formato \"Impuesto + a Pagar\". Si no matchea ningun VEP de la carpeta con ese importe/fecha exactos, queda en 'AFIP - a identificar' para revisar el comprobante a mano. Ademas, si hubiera intereses se separa en la cuenta \"Intereses negativos\"  Regla de imputación: por defecto Impuestos a identificar. Según el VEP: IVA → IVA a pagar; SICOSS/931 → Aportes y Contribuciones de seguridad social, Aportes y Contribuciones de obra social, ART a pagar, Seguro de vida obligatorio a pagar; otros impuestos → su propia cuenta a pagar. Los intereses que vengan en el mismo pago → Intereses negativos."
+      },
+      {
+        "concepto": "Servicio Pago a Proveedores (Creditos)",
+        "cuenta": "Deudores por ventas",
+        "tratamiento": "Deudores por ventas"
+      },
+      {
+        "concepto": "Deb. Autom de Serv AFIP",
+        "cuenta": "Impuestos a identificar",
+        "tratamiento": "Mismo cruce automatico que 'Transf. AFIP' (fila de arriba) contra los VEP de la carpeta 'Informacion/veps zaid'. Si no matchea ningun VEP, se intenta tambien contra las cuotas del plan de facilidades AFIP ('Informacion/Plan de Pagos.pdf') por importe y fecha de vencimiento -> 'Impuestos a Pagar'. Si tampoco matchea, queda en 'AFIP - a identificar'. Regla de imputación: por defecto Impuestos a identificar. Mismo cruce que Transf. AFIP; si matchea una cuota del plan de facilidades → Plan de pago AFIP a pagar."
+      },
+      {
+        "concepto": "Transfer. Cash misma titularidad",
+        "cuenta": "Transferencias entre cuentas propias - [Banco X]",
+        "tratamiento": "Regla de imputación: la cuenta es «Transferencias entre cuentas propias - [Banco X]», con [Banco X] reemplazado por el banco contraparte confirmado, y lleva el código contable de ese banco. Si no se confirman los tres datos del cruce (banco contraparte, fecha razonable de acreditación e importe exacto), no se fuerza: va a Movimientos a identificar."
+      },
+      {
+        "concepto": "Pago de Servicios ARBA IIBB",
+        "cuenta": "IIBB a pagar",
+        "tratamiento": "Pago de Ingresos brutos"
+      },
+      {
+        "concepto": "Compra de Bonos / Títulos",
+        "cuenta": "Inversiones - títulos públicos",
+        "tratamiento": "Aparece en cuentas en moneda extranjera (caja de ahorro en USD). Es una inversión financiera, no un gasto: se activa como título/bono a su costo en la moneda de origen y se revalúa al tipo de cambio de cierre en cada balance."
+      },
+      {
+        "concepto": "Venta / Compra de Dólar MEP",
+        "cuenta": "Resultado por compraventa de moneda extranjera",
+        "tratamiento": "Operación de canje entre pesos y dólares (o viceversa) vía bonos. Registrar el ingreso/egreso de la moneda resultante y la diferencia entre el tipo de cambio pactado y el contable como resultado financiero, no como venta ni gasto operativo."
+      },
+      {
+        "concepto": "Depósito en Efectivo",
+        "cuenta": "Caja",
+        "tratamiento": "El extracto no informa el origen del efectivo. Consultar con el cliente o cruzar contra cobranzas en efectivo del período; si no se puede identificar, imputar provisoriamente a caja. Regla de imputación: por defecto Caja. Si se identifica el origen (cobranza de un cliente, aporte del titular), se reimputa a la cuenta que corresponda."
+      },
+      {
+        "concepto": "Retiro en Efectivo",
+        "cuenta": "Caja",
+        "tratamiento": "Siempre es caja. Regla de imputación: siempre Caja."
+      },
+      {
+        "concepto": "Consumo Personal (débito en cuenta o resumen de tarjeta de crédito)",
+        "cuenta": "Cuenta particular",
+        "tratamiento": "Válido tanto para débitos directos en cuenta corriente/caja de ahorro como para consumos identificados en el resumen de tarjeta de crédito de una persona física. Se imputan contra la cuenta particular, salvo justificación de afectación al negocio, en ese caso si se encuentra en el listado de imputacion contable iria a proveedores, de caso contrario asignarlo a una cuenta de gastos."
+      },
+      {
+        "concepto": "Cuota de Préstamo",
+        "cuenta": "Préstamos bancarios a pagar",
+        "tratamiento": "Débito automático de cuota de préstamo. Si el resumen discrimina capital e interés, separar: capital cancela el pasivo por préstamo, interés va a gastos financieros."
+      },
+      {
+        "concepto": "Acreditación de Intereses",
+        "cuenta": "Intereses ganados",
+        "tratamiento": "Interés que el banco acredita sobre saldos en cuenta. Se imputa como ingreso financiero, en contrapartida de los intereses sobre saldos deudores ya contemplados."
+      },
+      {
+        "concepto": "Reintegros Banco",
+        "cuenta": "Otros ingresos a identificar",
+        "tratamiento": "Recupero o bonificación que acredita el banco. No es un interés ganado. Regla de imputación: por defecto Otros ingresos a identificar; si se identifica qué gasto lo generó, va contra esa cuenta restando su saldo."
+      },
+      {
+        "concepto": "TRANSFERENCIA PEI (crédito)",
+        "cuenta": "Deudores por ventas a identificar",
+        "tratamiento": "Cruzar contra el listado de imputación contable: si el remitente es un cliente, la imputación es Deudores por ventas. Si no se identifica, queda acá."
+      },
+      {
+        "concepto": "TRANSFERENCIA PEI (débito)",
+        "cuenta": "Proveedores a identificar",
+        "tratamiento": "Cruzar contra el listado de imputación contable: si el destinatario es un proveedor, la imputación es Proveedores. Si no se identifica, queda acá."
+      }
+    ],
+    "provincia": [
+      {
+        "concepto": "Cargo a comercios",
+        "cuenta": "Gastos y comisiones bancarias",
+        "tratamiento": "Gastos bancarios por uso de sus medios de pago"
+      },
+      {
+        "concepto": "Comision Extra de cuenta",
+        "cuenta": "Gastos y comisiones bancarias",
+        "tratamiento": "Gastos bancarios"
+      },
+      {
+        "concepto": "Impuesto Debito Ley 25413",
+        "cuenta": "Impuesto a los débitos y créditos a cuenta de ganancias",
+        "tratamiento": "Totalizado al final del resumen, separado en debitos y credito pero contemplando la suma de ambos"
+      },
+      {
+        "concepto": "Compra Ctadni (Creditos)",
+        "cuenta": "Deudores por ventas",
+        "tratamiento": "Deudores por ventas"
+      },
+      {
+        "concepto": "Impuesto Credito Ley 25413",
+        "cuenta": "Impuesto a los débitos y créditos a cuenta de ganancias",
+        "tratamiento": "Totalizado al final del resumen, separado en debitos y credito pero contemplando la suma de ambos"
+      },
+      {
+        "concepto": "Arancel clave dni",
+        "cuenta": "Gastos y comisiones bancarias",
+        "tratamiento": "Gastos Bancarios"
+      },
+      {
+        "concepto": "Retencion ARBA",
+        "cuenta": "Retenciones de IIBB - banco",
+        "tratamiento": "Reteciones de ingresos brutos, totalizado al final del resumen"
+      },
+      {
+        "concepto": "Debito fondo comun de inversion",
+        "cuenta": "Fondos comunes de inversión",
+        "tratamiento": "Fondos comunes de inversion, suscripciones"
+      },
+      {
+        "concepto": "Comision Mantenimiento",
+        "cuenta": "Gastos y comisiones bancarias",
+        "tratamiento": "Gastos Bancarios"
+      },
+      {
+        "concepto": "Impuesto I.Brutos Percepcion",
+        "cuenta": "Percepciones de IIBB - banco",
+        "tratamiento": "Percepcion de Ingresos brutos"
+      },
+      {
+        "concepto": "Pago AFIP",
+        "cuenta": "Impuestos a identificar",
+        "tratamiento": "Pagos de VEP a AFIP distintos de cargas sociales y de la DDJJ de IVA (anticipos, otros impuestos). Verificar el comprobante de pago para imputar al impuesto correcto antes de cancelar contra Impuestos a Pagar."
+      },
+      {
+        "concepto": "Pago DDJJ IVA (saldo a pagar) e intereses resarcitorios",
+        "cuenta": "IVA a pagar",
+        "tratamiento": "Cancelacion del saldo de la declaracion jurada de IVA del periodo via AFIP. Si el pago incluye intereses resarcitorios, separar ese importe e imputarlo a Intereses y Gastos Bancarios, no a IVA. Regla de imputación: el saldo de la DDJJ va a IVA a pagar. Los intereses resarcitorios incluidos en el mismo pago se separan y van a Intereses negativos."
+      },
+      {
+        "concepto": "Pago cuota prestamo bancario propio",
+        "cuenta": "Préstamos bancarios a pagar",
+        "tratamiento": "Cuota de un prestamo tomado con el banco. Discriminar capital (cancela el pasivo de Prestamos Bancarios) de intereses (Intereses Perdidos / Gastos Financieros) usando el detalle del resumen o el cuadro de amortizacion."
+      },
+      {
+        "concepto": "Pago prestamo con garantia FOGABA",
+        "cuenta": "Préstamos bancarios - Garantía FOGABA",
+        "tratamiento": "Cuota de un prestamo con aval de una sociedad de garantia reciproca (FOGABA). Mismo criterio que un prestamo bancario comun, separando capital e interes; el costo del aval, si figura por separado, va a Gastos Bancarios."
+      },
+      {
+        "concepto": "Alta de prestamo (acreditacion)",
+        "cuenta": "Préstamos bancarios a pagar",
+        "tratamiento": "Acreditacion en cuenta por el otorgamiento de un prestamo nuevo. Se registra como alta del pasivo por el neto acreditado; si el banco descuenta gastos de otorgamiento antes de acreditar, esos gastos van a Gastos Bancarios."
+      },
+      {
+        "concepto": "Transferencia entre cuentas propias en otro banco (enviada o recibida)",
+        "cuenta": "Transferencias entre cuentas propias - [Banco X]",
+        "tratamiento": "Movimiento de fondos entre cuentas del mismo titular en distintos bancos. No es un pago a terceros ni un cobro de clientes. Regla de imputación: «Transferencias entre cuentas propias - [Banco X]», con el código contable del banco contraparte. No se usa cuenta puente ni fondos en tránsito. Si no se confirman los tres datos del cruce (banco contraparte, fecha razonable de acreditación e importe exacto), no se fuerza: va a Movimientos a identificar."
+      },
+      {
+        "concepto": "Transferencia enviada o recibida via Mercado Pago (cuenta propia)",
+        "cuenta": "Transferencias entre cuentas propias - [Banco X]",
+        "tratamiento": "Movimiento entre la cuenta bancaria y una cuenta de Mercado Pago del mismo titular. Regla de imputación: «Transferencias entre cuentas propias - Mercado Pago». Si no se confirman los tres datos del cruce (banco contraparte, fecha razonable de acreditación e importe exacto), no se fuerza: va a Movimientos a identificar."
+      },
+      {
+        "concepto": "Pago de energia electrica (distribuidora)",
+        "cuenta": "Gastos de servicios",
+        "tratamiento": "Debito automatico o transferencia a la distribuidora electrica de la zona. Imputar a Proveedores sino se encuentra a Gastos de Luz. Regla de imputación: por defecto Gastos de servicios. Si la factura está en el listado de imputación contable → Proveedores."
+      },
+      {
+        "concepto": "Pago de agua / servicio sanitario",
+        "cuenta": "Gastos de servicios",
+        "tratamiento": "Pago del servicio de agua corriente y cloacas a la prestadora local. Imputar a Proveedores, sino esta dentro del listado de imputacion contable a Gastos de Agua. Regla de imputación: por defecto Gastos de servicios. Si la factura está en el listado de imputación contable → Proveedores."
+      },
+      {
+        "concepto": "Pago de gas natural",
+        "cuenta": "Gastos de servicios",
+        "tratamiento": "Pago del servicio de gas natural a la distribuidora. Imputar a Proveedores, sino directo a Gastos de Gas. Regla de imputación: por defecto Gastos de servicios. Si la factura está en el listado de imputación contable → Proveedores."
+      },
+      {
+        "concepto": "Pago de telefonia / internet",
+        "cuenta": "Gastos de servicios",
+        "tratamiento": "Pago de servicio de telefonia fija, movil o internet. Imputar directo a Gastos de Telefonia, salvo que corresponda prorratear entre socios o uso particular. Regla de imputación: por defecto Gastos de servicios. Si la factura está en el listado de imputación contable → Proveedores."
+      },
+      {
+        "concepto": "Pago de resumen de tarjeta de credito propia del banco",
+        "cuenta": "Tarjetas de crédito a pagar",
+        "tratamiento": "Cancelacion del resumen de la tarjeta de credito emitida por este mismo banco. No abrir el detalle de consumos aca: eso se analiza en la solapa de la tarjeta correspondiente; este movimiento solo cancela el pasivo por el total del resumen."
+      },
+      {
+        "concepto": "Pago de tarjeta de credito de otro banco",
+        "cuenta": "Tarjetas de crédito a pagar",
+        "tratamiento": "Pago de un resumen de tarjeta emitida por otro banco, debitado desde esta cuenta. Suele indicar debito centralizado de una tarjeta corporativa; solo cancela el pasivo, el detalle de consumos se analiza en la solapa de esa tarjeta. Regla de imputación: una sola cuenta de tarjetas, que incluye las de otros bancos."
+      },
+      {
+        "concepto": "Pagos por BIP a proveedores identificados por CUIT",
+        "cuenta": "Proveedores",
+        "tratamiento": "Transferencia saliente via BIP (Banca Internet Provincia) a un CUIT de proveedor identificable en la descripcion. Cruzar contra las facturas de compra para cancelar el proveedor puntual."
+      },
+      {
+        "concepto": "Pagos por BIP sin identificar",
+        "cuenta": "Proveedores a identificar",
+        "tratamiento": "Transferencia saliente via BIP a una persona fisica sin datos suficientes en el extracto para determinar el concepto. Dejar en cuenta transitoria e informar al cliente para que aclare el destino antes de imputar en forma definitiva."
+      },
+      {
+        "concepto": "Pago de cuota sindical",
+        "cuenta": "Sindicato a pagar",
+        "tratamiento": ""
+      },
+      {
+        "concepto": "Pago de seguros (polizas, ART)",
+        "cuenta": "Seguros pagados",
+        "tratamiento": "Pago o debito de una poliza de seguro (ART, seguro de vida colectivo, otras). Si es una cuota sobre un seguro devengado por periodo, y esta la factura imputar como Proveedores, y de no estarlo a Seguros Pagados. Regla de imputación: por defecto Seguros pagados. Si la factura del seguro está en el listado de imputación contable → Proveedores."
+      },
+      {
+        "concepto": "Intereses ganados por colocacion en la cuenta",
+        "cuenta": "Intereses ganados",
+        "tratamiento": "Acreditacion de intereses por plazo fijo u otra colocacion dentro de la cuenta. Imputar a resultado positivo (Intereses Ganados); no confundir con acreditaciones de terceros ni con cobros de clientes."
+      },
+      {
+        "concepto": "Intereses negativos / punitorios por descubierto",
+        "cuenta": "Intereses negativos",
+        "tratamiento": "Debito de intereses por saldo deudor o descubierto en cuenta corriente. Imputar a Gastos Financieros / Intereses Perdidos, separado de las comisiones bancarias comunes."
+      },
+      {
+        "concepto": "IVA RG 4240 - credito fiscal en resumen de tarjeta",
+        "cuenta": "Percepciones de IVA sufridas",
+        "tratamiento": "Percepcion de IVA que discrimina el resumen de la tarjeta de credito por RG 4240 sobre las compras del periodo. Computar como credito fiscal de IVA en la DDJJ, no como gasto bancario. Regla de imputación: RG 4240 es una percepción, no crédito fiscal directo. Va con el resto de las percepciones sufridas de IVA, igual que en Macro, Santander y Supervielle."
+      },
+      {
+        "concepto": "Retencion de Ganancias RG 5617 en resumen de tarjeta",
+        "cuenta": "Retenciones de Ganancias sufridas",
+        "tratamiento": "Retencion de Impuesto a las Ganancias que practica el banco en el resumen de tarjeta de credito conforme RG 5617. Esta devolucion puede ser devuelta en el proximo resumen si el saldo en usd se paga en la misma moneda."
+      },
+      {
+        "concepto": "Percepcion de Ingresos Brutos en resumen de tarjeta",
+        "cuenta": "Percepciones de IIBB - banco",
+        "tratamiento": "Percepcion de IIBB incluida en el resumen de la tarjeta de credito por las compras del periodo. Mismo tratamiento que las percepciones de IIBB bancarias: computar como pago a cuenta del impuesto."
+      },
+      {
+        "concepto": "Comision gestion de cobro de cheques",
+        "cuenta": "Gastos y comisiones bancarias",
+        "tratamiento": "Misma cuenta que el resto de las comisiones bancarias del banco (ver filas de Cargo a comercios, Comision Extra de cuenta, Arancel clave dni, Comision Mantenimiento)."
+      },
+      {
+        "concepto": "Alta de Plazo Fijo",
+        "cuenta": "Plazo fijo",
+        "tratamiento": "Constitucion de un plazo fijo. Se vincula por numero de certificado con su Acreditacion (ver fila siguiente); si la Acreditacion no cae dentro del periodo reconciliado, la Alta queda igual en esta cuenta hasta que se pueda vincular."
+      },
+      {
+        "concepto": "Acreditación de Plazo Fijo - capital",
+        "cuenta": "Plazo fijo",
+        "tratamiento": "Vincular con el Alta del mismo plazo fijo por número de certificado (puede figurar con o sin ceros a la izquierda). El capital es igual al monto del Alta y netea contra ella, dejando la cuenta en cero para ese certificado. Si no se encuentra el Alta dentro del período, la acreditación completa queda acá sin poder desagregar el interés."
+      },
+      {
+        "concepto": "Acreditación de Plazo Fijo - interés",
+        "cuenta": "Intereses ganados",
+        "tratamiento": "Es la diferencia entre el monto acreditado y el monto del Alta del mismo certificado. Sólo se puede separar si el Alta cae dentro del período conciliado."
+      },
+      {
+        "concepto": "Ingresos Brutos SIRCREB",
+        "cuenta": "Retenciones de IIBB - banco",
+        "tratamiento": "Misma cuenta que se usa para el resto de las retenciones de Ingresos Brutos bancarias (ver fila Retencion ARBA)."
+      },
+      {
+        "concepto": "Depósito de cheque / cheque de cámara (crédito)",
+        "cuenta": "Deudores por ventas a identificar",
+        "tratamiento": "Cheque de terceros depositado. Cruzar contra el listado de imputación contable: si el importe coincide con una o varias facturas de venta, la imputación es Deudores por ventas. Si no hay coincidencia, queda acá con el detalle disponible, sin forzar la cuenta."
+      },
+      {
+        "concepto": "Pago con cheque propio / cheque de cámara (débito)",
+        "cuenta": "Proveedores a identificar",
+        "tratamiento": "Cheque propio pagado por cámara. Cruzar contra el listado de imputación contable: si el importe coincide con una o varias facturas de compra, la imputación es Proveedores. Si no hay coincidencia, queda acá."
+      },
+      {
+        "concepto": "Ingresos por BIP sin identificar",
+        "cuenta": "Deudores por ventas a identificar",
+        "tratamiento": "Transferencia entrante via BIP sin datos suficientes en el extracto para confirmar el cliente puntual. Como regla general en Provincia, todo movimiento con BIP en el concepto es una transferencia ingresada (recibida) o emitida (enviada) - nunca se trata como venta o gasto en si mismo. Dejar en cuenta transitoria e intentar cruzar contra el listado de imputacion contable antes de confirmar el cliente definitivo."
+      },
+      {
+        "concepto": "Pagos por BIP a persona juridica sin CUIT de proveedor confirmado",
+        "cuenta": "Proveedores a identificar",
+        "tratamiento": "Transferencia saliente via BIP a un CUIT que por su prefijo (30/33/34) corresponde a una persona juridica, pero no matchea ningun proveedor del listado de imputacion contable. Dejar en cuenta transitoria de Proveedores en vez de Partidas a Identificar generica, porque ya se sabe que el destinatario es una empresa; consultar al cliente para confirmar a que proveedor corresponde."
+      },
+      {
+        "concepto": "Devolucion de transferencia o cheque",
+        "cuenta": "Devoluciones a identificar",
+        "tratamiento": "Identificar el movimiento original (transferencia o cheque) que la devolucion esta revirtiendo y anular el importe contra la MISMA cuenta contable que se uso para ese movimiento original (no una cuenta de Devoluciones generica). Buscar por importe exactamente opuesto y fecha mas cercana entre los movimientos del periodo (puede caer en un mes distinto al original). Si hay mas de un movimiento candidato igual de cercano (ambiguo) o no se encuentra ninguno, dejar en cuenta transitoria 'Devoluciones - a identificar'."
+      },
+      {
+        "concepto": "Pagos de servicios P.SERV - ENTE 950",
+        "cuenta": "Impuestos a identificar",
+        "tratamiento": "Pago de aportes y contribuciones (obra social, ART, jubilacion) via VEP/AFIP, identificable en el extracto como 'P.SERV...-ENTE950-CUIT'. Desagregar según los VEP a que conceptos imputar. Una vez desagregado, no se tiene que repetir los importes, es decir que no se dupliquen. Ejemplo: pago un vep de afip de 931 de 100mil pesos, y eso es 50mil de aportes de seguridad social y 50mil de contribuciones de seguridad social, solo se ponen estos ultimos dos no se pone el 100mil porque se duplicaria)  Regla de imputación: por defecto Impuestos a identificar. Abrir según el VEP a Aportes de seguridad social, Contribuciones de seguridad social, Aportes de obra social, Contribuciones de obra social, ART a pagar y Seguro de vida obligatorio a pagar. Una vez desagregado no se repite el total, para no duplicar."
+      },
+      {
+        "concepto": "Pagos de servicios P.SERV - ENTE DR2",
+        "cuenta": "Tasa de Seguridad e Higiene a identificar",
+        "tratamiento": "ENTEDR2 = Seguridad e Higiene municipal (va a cuenta transitoria 'Seguridad e Higiene - a identificar' hasta confirmar la imputacion exacta), otros codigos de pago municipal que aparezcan van a Impuestos a Pagar hasta identificarlos puntualmente. Cruzar siempre contra las DDJJ de impuestos del cliente para confirmar a que concepto corresponde cada ENTE antes de imputar."
+      },
+      {
+        "concepto": "AFIP RE.",
+        "cuenta": "Plan de pago AFIP a pagar",
+        "tratamiento": "Son cuotas de planes de pago de afip, las cuales estan compuestas por capital e intereses, no hay que segregarlo. Regla de imputación: Plan de pago AFIP a pagar. En el detalle del VEP se mira a qué impuesto corresponde la cuota."
+      },
+      {
+        "concepto": "TRANSFERENCIA PEI (crédito)",
+        "cuenta": "Deudores por ventas a identificar",
+        "tratamiento": "Cruzar contra el listado de imputación contable: si el remitente es un cliente, la imputación es Deudores por ventas. Si no se identifica, queda acá."
+      },
+      {
+        "concepto": "TRANSFERENCIA PEI (débito)",
+        "cuenta": "Proveedores a identificar",
+        "tratamiento": "Cruzar contra el listado de imputación contable: si el destinatario es un proveedor, la imputación es Proveedores. Si no se identifica, queda acá."
+      }
+    ],
+    "mercado pago": [
+      {
+        "concepto": "Cobro",
+        "cuenta": "Deudores por ventas",
+        "tratamiento": "Deudores por ventas"
+      },
+      {
+        "concepto": "Cobro por descuento a tu contraparte",
+        "cuenta": "Deudores por ventas",
+        "tratamiento": "Deudores por ventas"
+      },
+      {
+        "concepto": "Impuesto sobre los Créditos y Débitos en cobros",
+        "cuenta": "Impuesto a los débitos y créditos a cuenta de ganancias",
+        "tratamiento": "Separado en debitos y creditos. Suma ambos y agregalos"
+      },
+      {
+        "concepto": "Costo de Mercado Pago",
+        "cuenta": "Gastos y comisiones bancarias",
+        "tratamiento": "Es el gasto bancario"
+      },
+      {
+        "concepto": "Retención Impuesto Ingresos Brutos Régimen SIRTAC",
+        "cuenta": "Retenciones de IIBB - banco",
+        "tratamiento": "Reteciones de ingresos brutos, totalizado al final del resumen"
+      },
+      {
+        "concepto": "Descuento a tu contraparte",
+        "cuenta": "Gastos y comisiones bancarias",
+        "tratamiento": "Es el gasto bancario"
+      },
+      {
+        "concepto": "Costo por intereses absorbidos",
+        "cuenta": "Gastos y comisiones bancarias",
+        "tratamiento": "Es el gasto bancario"
+      },
+      {
+        "concepto": "Rendimiento positivo de la inversión",
+        "cuenta": "Intereses ganados",
+        "tratamiento": "Interes ganado por tener el dinero en la plataforma"
+      },
+      {
+        "concepto": "Pago",
+        "cuenta": "Proveedores a identificar",
+        "tratamiento": "Relacionalo con el listado de imputacion contable, si es un proveedor sumalo. Sino dejalo separado en una cuenta y entre comillas ponele a identificar. Puede ser que un solo movimiento sea la compra de 2 o mas cosas, que van a estar en facturas separadas. Verificar si la suma de algunas facturas coincide con el importe de este movimiento. Regla de imputación: por defecto Proveedores a identificar. Si matchea el listado de imputación contable → Proveedores."
+      },
+      {
+        "concepto": "Transferencia recibida (cobro de cliente por transferencia)",
+        "cuenta": "Deudores por ventas",
+        "tratamiento": "Es un cobro de venta que entra por transferencia y no por tarjeta/QR, así que no es lo mismo que el concepto 'Cobro'. Si el remitente es un cliente, tratalo igual que un cobro de venta; si no podés identificar al remitente, dejalo aparte para preguntar. Regla de imputación: por defecto Deudores por ventas. Si no se identifica al remitente → Deudores por ventas a identificar."
+      },
+      {
+        "concepto": "Liquidación de dinero",
+        "cuenta": "Deudores por ventas",
+        "tratamiento": "Es la acreditación de ventas hechas en una plataforma de venta online (no tarjeta directa en MP) que se liquida a la cuenta de Mercado Pago. Tratalo como cobro de venta, igual que 'Cobro'."
+      },
+      {
+        "concepto": "Transferencia recibida de [banco]",
+        "cuenta": "Transferencias entre cuentas propias - [Banco X]",
+        "tratamiento": "El banco de origen es otra cuenta del mismo titular. Conciliar contra la salida registrada en la cuenta bancaria de origen; no cargarlo a ventas ni a ningún ingreso. Regla de imputación: «Transferencias entre cuentas propias - [Banco X]». Si no se confirman los tres datos del cruce (banco contraparte, fecha razonable de acreditación e importe exacto), no se fuerza: va a Movimientos a identificar."
+      },
+      {
+        "concepto": "Transferencia enviada a [banco]",
+        "cuenta": "Transferencias entre cuentas propias - [Banco X]",
+        "tratamiento": "Misma lógica que la transferencia recibida entre cuentas propias, en sentido inverso. No es un pago a proveedor ni un gasto. Regla de imputación: «Transferencias entre cuentas propias - [Banco X]». Si no se confirman los tres datos del cruce (banco contraparte, fecha razonable de acreditación e importe exacto), no se fuerza: va a Movimientos a identificar."
+      },
+      {
+        "concepto": "Pago de impuestos (AFIP u otro organismo) hecho directo desde Mercado Pago",
+        "cuenta": "Impuestos a identificar",
+        "tratamiento": "No lo cargues a 'proveedores': identificá qué impuesto se está pagando y imputalo a la cuenta contable de ese impuesto en particular. Tene en cuenta el VEP, para desagregar los conceptos. Regla de imputación: por defecto Impuestos a identificar. Abrir según el VEP a la cuenta del impuesto que corresponda."
+      },
+      {
+        "concepto": "Impuesto o comisión por extracción de dinero",
+        "cuenta": "Gastos y comisiones bancarias",
+        "tratamiento": "Es el costo que cobra Mercado Pago por retirar/extraer fondos de la cuenta hacia un banco. Tratalo como gasto bancario, igual que el costo de Mercado Pago."
+      },
+      {
+        "concepto": "Transferencia hacia/desde cuenta particular de socio o familiar",
+        "cuenta": "Cuenta particular",
+        "tratamiento": "No es proveedor ni gasto de la empresa: es un retiro o aporte personal de un socio o familiar. Separalo en cuenta particular, distinto de proveedores y de gastos varios. Regla de imputación: Cuenta particular, una sola cuenta para el titular y para los socios."
+      },
+      {
+        "concepto": "Transferencia o pago saliente sin proveedor ni destinatario identificable",
+        "cuenta": "Proveedores a identificar",
+        "tratamiento": "Cuando el movimiento saliente no tiene un proveedor reconocible en el listado de imputación ni corresponde a cuenta particular, dejalo imputado a gastos varios pendiente de revisión en vez de forzarlo a proveedores. Regla de imputación: por defecto Proveedores a identificar, igual que el resto de los salientes sin identificar."
+      },
+      {
+        "concepto": "Devolución de cobro",
+        "cuenta": "Deudores por ventas",
+        "tratamiento": ""
+      },
+      {
+        "concepto": "Devolución de cobro por descuento a tu contraparte",
+        "cuenta": "Deudores por ventas",
+        "tratamiento": ""
+      },
+      {
+        "concepto": "Devolución por Compra Protegida",
+        "cuenta": "Deudores por ventas",
+        "tratamiento": ""
+      },
+      {
+        "concepto": "Retención Impuesto a los IIBB",
+        "cuenta": "Retenciones de IIBB - jurisdicción",
+        "tratamiento": "Si tiene retenciones de distintas provincias hacer un total por cada una"
+      },
+      {
+        "concepto": "Anulacion de impuesto sobre creditos y debitos",
+        "cuenta": "Impuesto a los débitos y créditos a cuenta de ganancias",
+        "tratamiento": "Son anulaciones de esos impuestos y va neteando al total"
+      },
+      {
+        "concepto": "Anulacion de retencion impuesto IIBB",
+        "cuenta": "Retenciones de IIBB - banco",
+        "tratamiento": "Son anulaciones de esos impuestos y va neteando al total. Todas las jurisdicciones se suman en esta cuenta"
+      },
+      {
+        "concepto": "Anulación de retención impuesto Ingresos Brutos Régimen SIRTAC",
+        "cuenta": "Retenciones de IIBB - banco",
+        "tratamiento": "Son anulaciones de esos impuestos y va neteando al total"
+      },
+      {
+        "concepto": "Cargo por devolución",
+        "cuenta": "Gastos y comisiones bancarias",
+        "tratamiento": ""
+      },
+      {
+        "concepto": "Cargo por vender",
+        "cuenta": "Gastos y comisiones bancarias",
+        "tratamiento": ""
+      },
+      {
+        "concepto": "Conversión por pago en moneda extranjera con tarjeta prepaga",
+        "cuenta": "Gastos y comisiones bancarias",
+        "tratamiento": ""
+      },
+      {
+        "concepto": "Costo fijo",
+        "cuenta": "Gastos y comisiones bancarias",
+        "tratamiento": ""
+      },
+      {
+        "concepto": "Anulación del cargo por vender",
+        "cuenta": "Gastos y comisiones bancarias",
+        "tratamiento": "Son anulaciones de las comisiones bancarias y va neteando al total"
+      },
+      {
+        "concepto": "Anulación del costo fijo",
+        "cuenta": "Gastos y comisiones bancarias",
+        "tratamiento": "Son anulaciones de las comisiones bancarias y va neteando al total"
+      },
+      {
+        "concepto": "Anulación de cargo por devolución",
+        "cuenta": "Gastos y comisiones bancarias",
+        "tratamiento": "Son anulaciones de las comisiones bancarias y va neteando al total"
+      },
+      {
+        "concepto": "Anulación del costo de envío",
+        "cuenta": "Fletes",
+        "tratamiento": "Son anulaciones de los costos de envio y va neteando al total"
+      },
+      {
+        "concepto": "Costo de envío por cross docking",
+        "cuenta": "Fletes",
+        "tratamiento": ""
+      },
+      {
+        "concepto": "Ingreso de Dinero",
+        "cuenta": "Movimientos a identificar",
+        "tratamiento": "Puede ser transferencias entre cuentas propias (verificar la contapartida en los  otros bancos), si es un deudor por venta o proveedor verificar en el listado de imputacion contable o en el listado de cliente y en el proveedores. Puede ser que los importes de las percepciones dentro de las facturas de marcado libre y melilog se paguen en efectivo (caja), por lo que si ves que hay dos importas iguales sumando y restando en la cuenta, y que la suma de todos esos importes coincide con el total de las percepciones de la factura de ese mes, el ingreso de dinero va a ir a caja, y el egreso de dinero va a ir a proveedores. Regla de imputación: por defecto Movimientos a identificar. Verificar la contrapartida en los otros bancos: si es cuenta propia → la cuenta del banco de contrapartida. Si es un cliente del listado → Deudores por ventas."
+      },
+      {
+        "concepto": "Ingreso de dinero excepcional",
+        "cuenta": "Reclamos a identificar",
+        "tratamiento": "Reclamos hechos, que queden como \"a identificar\" porque depende del origen del reclamo"
+      },
+      {
+        "concepto": "Pago",
+        "cuenta": "Gastos de publicidad",
+        "tratamiento": "Cuando sean pagos a: canva, facebook o google"
+      },
+      {
+        "concepto": "Pago",
+        "cuenta": "Proveedores",
+        "tratamiento": "Cruza la informacion de las facturas de Mercado Libre y Melilog en el listado de imputacion contable, y si coinciden los importes con las percepciones de esas facturas, sumarlos en la cuenta proveedores. Lo que no tenes que verificarlon en el reporte de facturacion del mes correspondiente"
+      },
+      {
+        "concepto": "Pago de servicios Municipalidad de General Pueyrredon",
+        "cuenta": "Tasa de seguridad e higiene a pagar",
+        "tratamiento": "Si tiene disponible algun detalle para verificar si es el pago mensual del impuesto o la cuota de un plan, mandalo a la cuenta que corresponda que puede ser \"Tasa de Seguridad e Higiene a Pagar\" o \"Plan de Tasa de Seguridad e Higiene a Pagar\". Si no se puede ifentificar, mandar a \"Tasa de Seguridad e Higiene - a identificar\"  Regla de imputación: por defecto Tasa de seguridad e higiene a pagar. Si es la cuota de un plan, o no se puede identificar, → Tasa de Seguridad e Higiene a identificar."
+      },
+      {
+        "concepto": "Retiro de Dinero",
+        "cuenta": "Movimientos a identificar",
+        "tratamiento": "Cuando el banco de origen/destino es otra cuenta del mismo titular es un traspaso de fondos entre cuentas propias. Concilialo contra la salida registrada en la cuenta bancaria de origen, no lo cargues a ventas ni a ningún ingreso, cargalo a la cuenta del banco correspondiente. Cuando puedas verificar que es un proveedor, la cuenta es \"proveedores\", si el destinatario es un socio la cuenta es \"cuenta particular nombre del socio\" y sino dejalo como \"A identificar\"  Regla de imputación: por defecto Movimientos a identificar. Si es cuenta propia → la cuenta del banco de contrapartida. Si es un proveedor del listado → Proveedores. Si es un retiro personal → Cuenta particular."
+      },
+      {
+        "concepto": "Bonificación por envío",
+        "cuenta": "Fletes",
+        "tratamiento": ""
+      },
+      {
+        "concepto": "Costo por ofrecer cuotas",
+        "cuenta": "Gastos y comisiones bancarias",
+        "tratamiento": ""
+      },
+      {
+        "concepto": "Dinero Recibido",
+        "cuenta": "Movimientos a identificar",
+        "tratamiento": "Puede ser transferencias entre cuentas propias (verificar la contapartida en los  otros bancos), si es un deudor por venta o proveedor verificar en el listado de imputacion contable o en el listado de cliente y en el proveedores  Regla de imputación: mismo criterio que Ingreso de Dinero. Se mantiene como concepto separado."
+      },
+      {
+        "concepto": "Movimiento General",
+        "cuenta": "Movimientos a identificar",
+        "tratamiento": "Si tenes disponible el reporte de cargos, vinculalo a la cuenta principal este movimiento (ej: si es una anulacion de cargo por vender, va a la cuenta \"comisiones y gastos bancarios\"). Si no podes identificarlo, sumalo en una cuenta que sea \"movimientos Puede ser que los importes de las percepciones dentro de las facturas de marcado libre y melilog se paguen en efectivo (caja), por lo que si ves que hay dos importas iguales sumando y restando en la cuenta, y que la suma de todos esos importes coincide con el total de las percepciones de la factura de ese mes, el movimiento general va a ir a caja, y el egreso de dinero va a ir a proveedores. a identificar\"."
+      },
+      {
+        "concepto": "Acreditación de Dinero Plus Creditos",
+        "cuenta": "Préstamo Mercado Pago",
+        "tratamiento": "Tanto la creditacion del prestamos como el pago de la cuota que vayan en dos filas separadas y que no se neteen los importes porque mas que vayan a la misma cuenta."
+      },
+      {
+        "concepto": "Pago de cuota Créditos de Mercado Pago",
+        "cuenta": "Préstamo Mercado Pago",
+        "tratamiento": "Tanto la creditacion del prestamos como el pago de la cuota que vayan en dos filas separadas y que no se neteen los importes porque mas que vayan a la misma cuenta."
+      },
+      {
+        "concepto": "Cargo por campaña de publicidad de Product Ads",
+        "cuenta": "Gastos de publicidad",
+        "tratamiento": "Cuando este dentro del reporte de facturacion este concepto cargarlo a la cuenta indicada, no a proveedores"
+      },
+      {
+        "concepto": "Cargo por mantenimiento de Mi página",
+        "cuenta": "Gastos y comisiones bancarias",
+        "tratamiento": "Cuando este dentro del reporte de facturacion este concepto cargarlo a la cuenta indicada, no a proveedores"
+      },
+      {
+        "concepto": "Percepción de Impuesto al Valor Agregado Régimen General - Mercado Crédito",
+        "cuenta": "Percepciones de IVA sufridas",
+        "tratamiento": ""
+      },
+      {
+        "concepto": "Percepción Impuesto a los IIBB - Mercado Crédito",
+        "cuenta": "Percepciones de IIBB - jurisdicción",
+        "tratamiento": "Si tiene percepciones de distintas provincias hacer un total por cada una"
+      },
+      {
+        "concepto": "Regla de lectura del extracto",
+        "cuenta": "Trabaja sobre el excel pero vincula el numero de \"operacion relacionada\" con el  numero de \"ID de la operación\" del pdf y traeme la descripcion del movimiento. Agregalo en una columna aparte. En el detalle de movimientos, traer el concepto tanto del excel como el del pdf (este ultimo es mas detallado).",
+        "tratamiento": ""
+      }
+    ],
+    "nacion": [
+      {
+        "concepto": "IMP AL DEB/CRED (Gravamen Ley 25413 s/débitos y s/créditos)",
+        "cuenta": "Impuesto a los débitos y créditos a cuenta de ganancias",
+        "tratamiento": "Totalizado al final del resumen, separado en débitos y créditos pero sumá ambos como un solo impuesto del período."
+      },
+      {
+        "concepto": "DEUDORES POR VENTA (LIQ+PAGOS NACIO, PAGO CON TRANSF, ACRED PR-ADEL+PAGOSNACION)",
+        "cuenta": "Deudores por ventas",
+        "tratamiento": "Es la acreditación que hace el banco por ventas cobradas con tarjeta o POS propio (Nativa). No lo cargues directo a ventas: va a deudores por ventas hasta conciliarlo con el resumen de tarjeta/POS correspondiente."
+      },
+      {
+        "concepto": "Transferencia enviada (sin identificar) (DEB.TRAN.INTERB-LINK, DB CREDIN TRANS-LINKCIA)",
+        "cuenta": "Proveedores a identificar",
+        "tratamiento": "Cuando el extracto no permite identificar al destinatario, no la imputes a un gasto definitivo: dejala en cuenta puente y consultá al cliente antes de cerrar el mes. Regla de imputación: Proveedores a identificar. No se fuerza a una cuenta de gasto: se consulta al cliente antes de cerrar el mes."
+      },
+      {
+        "concepto": "VER - Transferencia/Cobro sin identificar (TRANSF.INT.DIST, DEBIN)",
+        "cuenta": "Deudores por ventas a identificar",
+        "tratamiento": "Mismo criterio que las salientes sin identificar: no es necesariamente venta, dejarlo pendiente de clasificación hasta confirmar el origen con el cliente. Regla de imputación: Deudores por ventas a identificar. No es necesariamente una venta."
+      },
+      {
+        "concepto": "COMISIONES Y GASTOS BANCARIOS (COMIS.TRANSF.NE24, COMIS.DE COMPROMISO, COMISION PAQUETES)",
+        "cuenta": "Gastos y comisiones bancarias",
+        "tratamiento": "Es un gasto por el uso del banco. El IVA es al 21% y se deja separado del gasto junto con las percepciones de IVA e IIBB relacionadas."
+      },
+      {
+        "concepto": "INTERESES NEGATIVOS",
+        "cuenta": "Intereses negativos",
+        "tratamiento": "Interés por saldo deudor o descubierto. Es un gasto financiero, dejalo separado de comisiones y gastos operativos, con su IVA al 10,5% asociado."
+      },
+      {
+        "concepto": "IVA sobre comisiones bancarias (I.V.A. BASE)",
+        "cuenta": "IVA crédito fiscal 21%",
+        "tratamiento": "IVA sobre las comisiones y gastos del banco. Siempre al 21%. Se separa del gasto que lo genera."
+      },
+      {
+        "concepto": "IVA sobre intereses (I.V.A. BASE)",
+        "cuenta": "IVA crédito fiscal 10,5%",
+        "tratamiento": "IVA sobre los intereses por saldo deudor o descubierto. Siempre al 10,5%. Se separa del interés que lo genera."
+      },
+      {
+        "concepto": "RETENCION IVA (RETEN. I.V.A. RG.2408)",
+        "cuenta": "Retenciones de IVA sufridas",
+        "tratamiento": "Retención de IVA que practica el banco sobre acreditaciones de tarjeta/cobranzas. Se toma a cuenta del IVA a pagar del período, no es un gasto."
+      },
+      {
+        "concepto": "Proveedores (transferencia saliente identificada por CUIT)",
+        "cuenta": "Proveedores",
+        "tratamiento": "Consultar el CUIT que suele figurar junto al concepto. Si coincide con un proveedor del listado, sumarlo a proveedores; si no, dejarlo separado con la identificación de quien es."
+      },
+      {
+        "concepto": "PAGO TC (DB PM/TOT RESUMEN TCORP, DEB. LIQ VISA O DEB/MAD)",
+        "cuenta": "Tarjetas de crédito a pagar",
+        "tratamiento": "Es el pago del resumen de tarjeta de crédito visto desde la cuenta bancaria, no un gasto en sí mismo. Conciliar contra el resumen de la tarjeta correspondiente para no duplicar con el detalle de consumos."
+      },
+      {
+        "concepto": "Transferencia entre cuentas propias (enviada o recibida, hacia/desde Mercado Pago u otro banco)",
+        "cuenta": "Transferencias entre cuentas propias - [Banco X]",
+        "tratamiento": "Movimiento de fondos entre cuentas del mismo titular, hacia o desde otro banco o Mercado Pago. Regla de imputación: «Transferencias entre cuentas propias - [Banco X]», con el código contable del banco contraparte. Si no se confirman los tres datos del cruce (banco contraparte, fecha razonable de acreditación e importe exacto), no se fuerza: va a Movimientos a identificar."
+      },
+      {
+        "concepto": "Pago Impuestos (INGR.BRUTOS/SELLOS BS.AS.)",
+        "cuenta": "Impuestos a identificar",
+        "tratamiento": "Débito identificado como pago de impuesto provincial. Imputar contra la cuenta del impuesto correspondiente, no como gasto bancario. Regla de imputación: por defecto Impuestos a identificar. Si es IIBB → IIBB a pagar; si es sellos → Impuestos y tasas."
+      },
+      {
+        "concepto": "Honorarios (débito identificado por el concepto)",
+        "cuenta": "Honorarios profesionales",
+        "tratamiento": "Cuando el propio concepto del extracto identifica el destino, imputar directo a esta cuenta en vez de a Proveedores."
+      },
+      {
+        "concepto": "Publicidad (débito identificado por el concepto)",
+        "cuenta": "Gastos de publicidad",
+        "tratamiento": "Cuando el propio concepto del extracto identifica el destino, imputar directo a esta cuenta en vez de a Proveedores."
+      },
+      {
+        "concepto": "Tarjeta de crédito – Pago a Proveedores (resumen de tarjeta, consumo identificado)",
+        "cuenta": "Gastos a identificar",
+        "tratamiento": "Cuando el detalle del resumen de tarjeta permite identificar al comercio como proveedor habitual, imputar directo a esa cuenta corriente cruzando contra IVA Compras, en vez de a gastos generales. Regla de imputación: por defecto Gastos a identificar. Sólo va a Proveedores si el consumo matchea una factura ya cargada en IVA Compras del período; si no, se imputa como gasto para no duplicarlo."
+      },
+      {
+        "concepto": "Tarjeta de crédito – Viáticos y Movilidad (combustible, peajes, hospedaje)",
+        "cuenta": "Gastos a identificar",
+        "tratamiento": "Agrupar todos los consumos de rubro transporte/viaje de la tarjeta corporativa en esta cuenta, separados del resto de gastos. Decisión del estudio: no se abre una cuenta de Viáticos y movilidad. Estos consumos van a Gastos a identificar y se agrupan por rubro en el detalle."
+      },
+      {
+        "concepto": "Tarjeta de crédito – consumo sin clasificar / comercio no identificable",
+        "cuenta": "Movimientos a identificar",
+        "tratamiento": "Si el nombre de comercio del resumen no permite determinar el rubro del gasto, no lo fuerces a una cuenta definitiva: dejalo pendiente y consultá con el cliente el destino real antes de cerrar la conciliación. Regla de imputación: Movimientos a identificar. No se fuerza una cuenta definitiva."
+      },
+      {
+        "concepto": "HS. BANCOS / HS. CANJE ZONAL (crédito)",
+        "cuenta": "Deudores por ventas a identificar",
+        "tratamiento": "Cheque de terceros depositado, cobrado por cámara (48 hs / canje) en la cuenta corriente. No confundir con el resumen de tarjeta de crédito. Si el importe coincide con facturas de venta del listado, la imputación es Deudores por ventas."
+      },
+      {
+        "concepto": "HS. BANCOS / HS. CANJE ZONAL (débito)",
+        "cuenta": "Proveedores a identificar",
+        "tratamiento": "Cheque propio pagado por cámara en la cuenta corriente. Si el importe coincide con facturas de compra del listado, la imputación es Proveedores."
+      },
+      {
+        "concepto": "Control de saldos",
+        "cuenta": "Saldo inicial: se controla contra el saldo final del extracto del período anterior. No lleva asiento.",
+        "tratamiento": ""
+      }
+    ],
+    "credicoop": [
+      {
+        "concepto": "Impuesto Ley 25.413 Alic Gral s/Débitos (y s/Créditos si figura)",
+        "cuenta": "Impuesto a los débitos y créditos a cuenta de ganancias",
+        "tratamiento": "Imputarlo a Impuesto al credito a cuenta de ganancias."
+      },
+      {
+        "concepto": "Servicio Módulo NyP / Servicio de Mantenimiento de Cuenta / Comisiones varias",
+        "cuenta": "Gastos y comisiones bancarias",
+        "tratamiento": "Es el gasto mensual por el paquete de cuenta. El IVA débito fiscal 21%, la Percepción IVA RG 2408 y la Percepción de IIBB aparecen como renglones separados el mismo día — no van sumados al gasto, se abren cada uno en su propia cuenta."
+      },
+      {
+        "concepto": "I.V.A. – Débito Fiscal 21% (sobre comisiones y gastos)",
+        "cuenta": "IVA crédito fiscal 21%",
+        "tratamiento": "Pese a llamarse 'Débito Fiscal' en el extracto (es débito fiscal para el banco), para el cliente es IVA crédito fiscal por el gasto bancario que lo genera. Separarlo de la comisión."
+      },
+      {
+        "concepto": "I.V.A. – Débito Fiscal 10,5% (alícuota reducida, típico sobre intereses)",
+        "cuenta": "IVA crédito fiscal 10,5%",
+        "tratamiento": "Asociado a los Intereses por Saldo Deudor (el interés por descubierto tributa IVA al 10,5%, no al 21%). Cargarlo aparte, no mezclarlo con el IVA 21% de comisiones."
+      },
+      {
+        "concepto": "Percepción IVA RG 2408 s/Comis-Gastos",
+        "cuenta": "Percepciones de IVA sufridas",
+        "tratamiento": "Percepción que el banco practica sobre sus propias comisiones. Va como percepción de IVA a favor del cliente, separada del IVA crédito fiscal de la comisión."
+      },
+      {
+        "concepto": "Percep Ingr Brutos Bs.As.",
+        "cuenta": "Percepciones de IIBB - banco",
+        "tratamiento": "Percepción de Ingresos Brutos Buenos Aires sobre créditos/débitos o comisiones. Confirmar jurisdicción/Convenio Multilateral antes de dar por buena la provincia."
+      },
+      {
+        "concepto": "Impuesto de Sellos – Buenos Aires",
+        "cuenta": "Impuestos y tasas",
+        "tratamiento": "Imputarlo a Comisiones y gastos bancarios. Decisión del estudio: el impuesto de sellos va a Impuestos y tasas, no a comisiones y gastos bancarios."
+      },
+      {
+        "concepto": "Intereses por Saldo Deudor",
+        "cuenta": "Intereses negativos",
+        "tratamiento": "Interés por girar en descubierto en cuenta corriente, liquidado junto con su IVA al 10,5% y el sello correspondiente. Cargarlo a intereses negativos."
+      },
+      {
+        "concepto": "Transferencia Inmediata e/Ctas. Propias",
+        "cuenta": "Transferencias entre cuentas propias - [Banco X]",
+        "tratamiento": "Transferencia entre cuentas del mismo titular (mismo CUIT en el detalle, aunque sea de otro banco). Verificar el CUIT antes de tratarla como propia. Regla de imputación: «Transferencias entre cuentas propias - [Banco X]», con el código contable del banco contraparte. No se usa cuenta puente. Si no se confirman los tres datos del cruce (banco contraparte, fecha razonable de acreditación e importe exacto), no se fuerza: va a Movimientos a identificar."
+      },
+      {
+        "concepto": "Débito automático de canon de leasing (Nuevo Sistema de Créditos / CTAS CREDITOS)",
+        "cuenta": "Leasing a pagar",
+        "tratamiento": "Es la cuota (canon) de un contrato de leasing financiero de un bien de uso, no un préstamo ni un gasto corriente. Buscar el comprobante de imputación del leasing (viene aparte, discrimina capital/canon, seguro, IVA e IVA percepción RG 2408): cargar el canon neto a cancelación del pasivo por leasing y devengar el interés implícito como gasto financiero. Nunca tratarlo como gasto corriente ni comisión bancaria. Regla de imputación: la cuota va a Leasing a pagar. El seguro, el IVA y la percepción RG 2408 del comprobante de imputación se abren cada uno en su cuenta. El alta del bien de uso se registra fuera de la conciliación bancaria."
+      },
+      {
+        "concepto": "Leasing – Cobro de Patentes (débito periódico separado del canon)",
+        "cuenta": "Impuestos y tasas",
+        "tratamiento": "El banco cobra la patente del vehículo en leasing por débito automático, aparte del canon mensual. No sumarlo al canon: imputarlo a Patentes. Suele aparecer cada 2 meses, no todos los meses."
+      },
+      {
+        "concepto": "Débito/Crédito Automático – Tarjeta (Cabal/Visa/Mastercard) propia del banco",
+        "cuenta": "Tarjetas de crédito a pagar",
+        "tratamiento": "Es el pago del resumen de la tarjeta propia del banco por débito automático. Conciliar el importe contra el 'SU PAGO' del resumen de la tarjeta del mismo período; si no coincide, marcarlo como pagado por otro medio."
+      },
+      {
+        "concepto": "Consumos del resumen de tarjeta de crédito (compras a comercios, con o sin cuotas)",
+        "cuenta": "Gastos a identificar",
+        "tratamiento": "Clasificar cada consumo por rubro/proveedor igual que una factura de compra. El IVA de la compra no está discriminado en el resumen: solo corresponde computarlo si el cliente tiene la factura A del proveedor. Regla de imputación: por defecto Gastos a identificar. Nunca Proveedores como valor por defecto. Sólo se imputa a Proveedores el consumo que matchea una factura ya cargada en IVA Compras del período (si no, se duplicaría el gasto). Si el rubro se identifica, reimputar a la cuenta de rubro correspondiente: Gastos de servicios, Gastos de publicidad, Fletes, Honorarios profesionales, Seguros pagados, Bienes de uso."
+      },
+      {
+        "concepto": "Interés de Financiación (saldo financiado de tarjeta) + IVA 21% sobre ese interés",
+        "cuenta": "Intereses negativos",
+        "tratamiento": "Aparece cuando no se pagó el saldo total. Cargar el interés a gastos financieros y el IVA asociado a IVA Crédito Fiscal, separados de los consumos."
+      },
+      {
+        "concepto": "Impuesto de Sellos sobre financiación de tarjeta de crédito",
+        "cuenta": "Impuestos y tasas",
+        "tratamiento": "Se genera cuando hay saldo financiado o compras en cuotas del banco en la tarjeta. Imputar a impuestos, separado del interés. Decisión del estudio: el impuesto de sellos va a Impuestos y tasas."
+      },
+      {
+        "concepto": "Caja de Ahorro en dólares (USD) — cuenta en moneda extranjera",
+        "cuenta": "Banco moneda extranjera",
+        "tratamiento": "Llevarla siempre como cuenta contable propia en dólares, nunca mezclada ni convertida dentro de la caja en pesos. Aunque no tenga movimientos, controlar el saldo en USD contra el resumen."
+      },
+      {
+        "concepto": "Retiro en efectivo / extracción en cajero",
+        "cuenta": "Caja",
+        "tratamiento": "Extracción por cajero o ventanilla. Regla de imputación: siempre Caja, se pueda o no identificar contra un ingreso a caja de la empresa."
+      }
+    ],
+    "macro": [
+      {
+        "concepto": "IMP.LEY 25413 (débitos y créditos en cuenta / débitos por consumos y pagos de tarjeta)",
+        "cuenta": "Impuesto a los débitos y créditos a cuenta de ganancias",
+        "tratamiento": "Imputarlo a Impuesto al credito a cuenta de ganancias."
+      },
+      {
+        "concepto": "Comisiones y gastos bancarios (mantenimiento de cuenta, gestión de resumen)",
+        "cuenta": "Gastos y comisiones bancarias",
+        "tratamiento": "Gasto por el uso del banco. El IVA es al 21% y se deja separado, junto con las percepciones de IIBB y de IVA que suelen venir pegadas a la misma línea."
+      },
+      {
+        "concepto": "ACREDITACION DE INTERESES / CAPITALIZACION AH (interés de caja de ahorro)",
+        "cuenta": "Intereses ganados",
+        "tratamiento": "Imputarlo a intereses positivos/ganados."
+      },
+      {
+        "concepto": "TRANSFERENCIA CUENTA PROPIA (débito/crédito)",
+        "cuenta": "Transferencias entre cuentas propias - [Banco X]",
+        "tratamiento": "Pases de fondos entre cuentas del mismo titular. No es ingreso ni gasto. Regla de imputación: «Transferencias entre cuentas propias - [Banco X]», con el código contable del banco contraparte. Si no se confirman los tres datos del cruce (banco contraparte, fecha razonable de acreditación e importe exacto), no se fuerza: va a Movimientos a identificar."
+      },
+      {
+        "concepto": "Reintegro/cashback por consumo con tarjeta de débito o Modo",
+        "cuenta": "Otros ingresos a identificar",
+        "tratamiento": "No es una venta ni un ingreso gravado. Se deja identificado como reintegro y, si el gasto original está en la misma cuenta, idealmente se netea contra ese gasto. Regla de imputación: por defecto Otros ingresos a identificar. Si se identifica que es un recupero, reintegro o bonificación, va contra la cuenta que lo generó restando su saldo."
+      },
+      {
+        "concepto": "Transferencia saliente a tercero identificado por CUIT/razón social",
+        "cuenta": "Proveedores",
+        "tratamiento": "Consultar el CUIT o razón social junto al concepto. Si coincide con un proveedor, sumarlo a proveedores; si no, dejarlo separado (puede ser gasto personal del titular en cuentas de persona física)."
+      },
+      {
+        "concepto": "Suscripción/rescate a Fondo Común de Inversión propio",
+        "cuenta": "Fondos comunes de inversión",
+        "tratamiento": "Movimiento entre la cuenta y un FCI del mismo titular. No es ingreso ni gasto: tratarlo igual que una transferencia entre cuentas propias."
+      },
+      {
+        "concepto": "Consumos en comercios de la tarjeta (restaurantes, supermercados, combustible, indumentaria)",
+        "cuenta": "Gastos a identificar",
+        "tratamiento": "Salvo que el comercio o rubro indique claramente gasto de la actividad, tratarlo como consumo particular no deducible. Revisar rubro por rubro antes de asumir que todo es gasto del estudio/actividad. Regla de imputación: por defecto Cuenta particular. Si el rubro indica claramente gasto de la actividad → Gastos a identificar, y de ahí a la cuenta de rubro que corresponda."
+      },
+      {
+        "concepto": "Impuesto de Sellos (cargo mensual sobre el resumen de tarjeta de crédito)",
+        "cuenta": "Impuestos y tasas",
+        "tratamiento": "Imputar a comisiones y gastos bancarios. Decisión del estudio: el impuesto de sellos va a Impuestos y tasas."
+      },
+      {
+        "concepto": "Compra en cuotas repetida mes a mes con el mismo importe (mismo comercio)",
+        "cuenta": "Gastos a identificar",
+        "tratamiento": "Cuando el mismo comercio e importe se repiten en varios resúmenes seguidos, es una compra en cuotas: identificar la cuota 01 para el detalle completo. Si es proveedor del listado cruzar con IVA compras; si parece gasto de mobiliario/refacción, confirmar destino con el cliente. Regla de imputación: por defecto Gastos a identificar hasta ubicar la cuota 01 y ver el detalle completo. Si es mobiliario o refacción → Bienes de uso. Nunca Proveedores como valor por defecto."
+      },
+      {
+        "concepto": "Pago de póliza de seguro debitado en la tarjeta",
+        "cuenta": "Seguros pagados",
+        "tratamiento": "Pago de prima de seguro debitado directo en el resumen de tarjeta. Imputar a gastos de seguros; si la póliza es anual, evaluar prorrateo."
+      },
+      {
+        "concepto": "Ajuste sin comercio ni rubro identificado (recurrente en resumen de tarjeta)",
+        "cuenta": "Movimientos a identificar",
+        "tratamiento": "Ajuste técnico del resumen sin comercio asociado. Dejarlo separado como 'a identificar'; si el importe es significativo, pedir al banco/cliente el detalle de cupones."
+      },
+      {
+        "concepto": "Concepto sin desglose / consumo agrupado del resumen (un solo ítem grande sin apertura por comercio ni rubro)",
+        "cuenta": "Movimientos a identificar",
+        "tratamiento": "Cuando el extracto trae un movimiento importante como una sola línea sin desglosar (suele pasar con compras grandes en cuotas cuyo detalle no viene completo en el PDF), no forzar una cuenta contable: dejarlo separado como 'a identificar' y pedir el detalle de cupones al banco o al cliente. Es un patrón que se repite con distintos clientes y bancos, no es exclusivo de este."
+      },
+      {
+        "concepto": "Intereses de financiación por saldo en cuotas / pago mínimo (TNA/TEM informada en el resumen)",
+        "cuenta": "Intereses negativos",
+        "tratamiento": "Si el cliente financia el saldo (no paga el total), el resumen liquida intereses. Van a gastos financieros, con el IVA sobre esos intereses separado del IVA de comisiones."
+      },
+      {
+        "concepto": "Percepción de IVA RG 4240 (pagos con tarjeta a proveedores/comercios)",
+        "cuenta": "Percepciones de IVA sufridas",
+        "tratamiento": "Cuando aparece discriminada, es percepción de IVA que se computa como crédito fiscal propio, separado del IVA de comisiones. Si no se ve discriminada, puede venir consolidada en otro informe fiscal del banco: pedirlo si la operatoria con tarjeta es relevante."
+      },
+      {
+        "concepto": "Retención/percepción de Ganancias RG 5617 sobre operatoria con tarjetas",
+        "cuenta": "Retenciones de Ganancias sufridas",
+        "tratamiento": "Si el resumen no la muestra discriminada no descartarla sin más: verificar contra el certificado de retención o resumen anual del banco antes de cerrar el período."
+      },
+      {
+        "concepto": "Seguro de saldo deudor / seguro de vida sobre saldo financiado, debitado en la tarjeta",
+        "cuenta": "Gastos y comisiones bancarias",
+        "tratamiento": "Cargo de seguro contratado por el banco con una aseguradora sobre saldos financiados. Tratarlo como gasto bancario más, separado de las comisiones de mantenimiento."
+      },
+      {
+        "concepto": "SU PAGO EN PESOS (pago del saldo del resumen anterior, aplicado como débito al inicio del período)",
+        "cuenta": "Tarjetas de crédito a pagar",
+        "tratamiento": "Es la cancelación del saldo del resumen anterior, no un gasto nuevo: cancela el pasivo ya reconocido el mes anterior. No duplicar tomando pago y consumos del mismo período como cosas distintas."
+      },
+      {
+        "concepto": "Caja de ahorro en dólares u otra cuenta sin movimientos en el período",
+        "cuenta": "Banco moneda extranjera",
+        "tratamiento": "Cuando el extracto no trae movimientos y el saldo se mantiene constante, igual corresponde dejarla listada con su saldo inicial y final para que la conciliación cierre contra el balance del cliente."
+      }
+    ],
+    "santander": [
+      {
+        "concepto": "Pago del resumen (débito en cta cte, transferencia o 'SU PAGO EN PESOS')",
+        "cuenta": "Tarjetas de crédito a pagar",
+        "tratamiento": "Cancela total o parcialmente la deuda del resumen anterior. Si se debita de una cuenta del mismo banco, verificar que el movimiento aparezca en el extracto de esa cuenta; si no aparece, igual se registra la cancelación de la deuda de tarjeta. Regla de imputación: la fila imputa la cancelación del pasivo de tarjeta. La contrapartida es la cuenta bancaria desde la que se pagó."
+      },
+      {
+        "concepto": "Consumo propio / gasto personal del titular (tarjeta de persona física)",
+        "cuenta": "Cuenta particular",
+        "tratamiento": "Cuando la tarjeta es de persona física y el consumo es personal (Uber, supermercado, indumentaria, restaurantes, streaming, etc.), se imputa a cuenta particular. No genera crédito fiscal de IVA ni gasto deducible en Ganancias, aunque el resumen discrimine IVA."
+      },
+      {
+        "concepto": "Consumos afectados a la actividad (instalaciones, muebles y útiles, mantenimiento, insumos de oficina)",
+        "cuenta": "Gastos a identificar",
+        "tratamiento": "Separar por rubro y cruzar contra la factura del proveedor en el IVA Compras del período para tomar el crédito fiscal; sin factura a nombre de la actividad no corresponde cómputo de IVA ni deducción. Regla de imputación: por defecto Gastos a identificar. Nunca Proveedores como valor por defecto. Si el rubro se identifica, reimputar: instalaciones y muebles y útiles → Bienes de uso; el resto → la cuenta de rubro que corresponda. Sin factura a nombre de la actividad no corresponde cómputo de IVA ni deducción."
+      },
+      {
+        "concepto": "Impuesto de sellos sobre resumen de tarjeta",
+        "cuenta": "Impuestos y tasas",
+        "tratamiento": "Se cobra solo en resúmenes con consumos o saldo. Se totaliza aparte, separado de comisiones y del resto de impuestos, no se prorratea entre los consumos. Decisión del estudio: el impuesto de sellos va a Impuestos y tasas."
+      },
+      {
+        "concepto": "Intereses compensatorios / financiación de saldo",
+        "cuenta": "Intereses negativos",
+        "tratamiento": "Corresponden a financiación de saldos o planes de cuotas con interés; se cargan como gasto financiero separado de los consumos y del IVA de compras."
+      },
+      {
+        "concepto": "Percepción de IIBB sobre resumen de tarjeta",
+        "cuenta": "Percepciones de IIBB - banco",
+        "tratamiento": "Se registra como pago a cuenta del impuesto sobre ingresos brutos del titular o de la sociedad según a nombre de quién esté la tarjeta; se totaliza aparte."
+      },
+      {
+        "concepto": "Percepción de IVA sobre consumos de tarjeta (RG 4240)",
+        "cuenta": "Percepciones de IVA sufridas",
+        "tratamiento": "Cuando el resumen la discrimina, es pago a cuenta del IVA del titular, se computa en la posición de IVA del período. Se totaliza por separado, no se suma al IVA de facturas de proveedores."
+      },
+      {
+        "concepto": "Retención de Impuesto a las Ganancias sobre resumen de tarjeta (RG 5617)",
+        "cuenta": "Retenciones de Ganancias sufridas",
+        "tratamiento": "Cuando aparece, es retención a cuenta del Impuesto a las Ganancias del titular; se acumula con las demás retenciones de Ganancias sufridas del período, no se compensa contra IVA ni IIBB."
+      },
+      {
+        "concepto": "Comisiones y cargos de mantenimiento de tarjeta / seguros asociados",
+        "cuenta": "Gastos y comisiones bancarias",
+        "tratamiento": "Gasto por mantenimiento de la tarjeta (renovación de plástico, seguro de vida del titular). Separado de los consumos por rubro, con su IVA al 21% y percepciones relacionadas discriminadas aparte."
+      },
+      {
+        "concepto": "PAGO TARJETA DE CREDITO",
+        "cuenta": "Tarjetas de crédito a pagar",
+        "tratamiento": "Debito en la CUENTA CORRIENTE (no en el resumen de la propia tarjeta) que cancela el pasivo de tarjeta de credito. El detalle de consumos se analiza aparte, en el resumen de la tarjeta (filas anteriores de esta solapa)."
+      },
+      {
+        "concepto": "Control de saldos",
+        "cuenta": "Saldo anterior del resumen de tarjeta: es la deuda ya contabilizada el mes anterior. No se vuelve a cargar.",
+        "tratamiento": ""
+      },
+      {
+        "concepto": "Control de saldos",
+        "cuenta": "Resumen sin movimientos (saldo inicial = saldo = 0): no corresponde asiento. Igual se deja constancia de que el ciclo se revisó y cerró en cero, para no confundirlo con un resumen faltante.",
+        "tratamiento": ""
+      },
+      {
+        "concepto": "Control de saldos",
+        "cuenta": "Saldo final del resumen: resultado de la conciliación del mes. Pasa a ser el saldo inicial del resumen siguiente. No lleva asiento.",
+        "tratamiento": ""
+      }
+    ],
+    "supervielle": [
+      {
+        "concepto": "Consumos con factura de proveedor (cruzan con IVA Compras)",
+        "cuenta": "Gastos a identificar",
+        "tratamiento": "Si el consumo matchea con una factura cargada en IVA Compras del período, se imputa a la cuenta de gasto o proveedor que corresponda por rubro. Primero cruzar contra IVA Compras antes de cargar como gasto personal. Regla de imputación: por defecto Gastos a identificar. Sólo va a Proveedores si el consumo matchea una factura ya cargada en IVA Compras del período; si no matchea, es consumo propio (fila siguiente) o gasto sin identificar."
+      },
+      {
+        "concepto": "Consumo propio (sin factura de proveedor del cliente)",
+        "cuenta": "Cuenta particular",
+        "tratamiento": "Consumo de la tarjeta sin correlato en el IVA Compras del cliente (compras personales, pasajes, etc.) se carga como consumo propio, no como gasto deducible."
+      },
+      {
+        "concepto": "Impuesto de sellos sobre el resumen de tarjeta",
+        "cuenta": "Impuestos y tasas",
+        "tratamiento": "Se carga íntegro por el total que figura en el resumen (no lleva IVA ni se prorratea). Se registra en fila separada del consumo propio y de las comisiones. Decisión del estudio: el impuesto de sellos va a Impuestos y tasas."
+      },
+      {
+        "concepto": "Percepción de IVA en tarjeta (RG 4240 u otra)",
+        "cuenta": "Percepciones de IVA sufridas",
+        "tratamiento": "Cuando el resumen discrimina esta percepción, se carga como crédito fiscal a cuenta de IVA, separado del consumo y de IIBB. Si el resumen no la trae, la fila queda en cero, no se estima."
+      },
+      {
+        "concepto": "Percepción de Ingresos Brutos (IIBB) en tarjeta",
+        "cuenta": "Percepciones de IIBB - banco",
+        "tratamiento": "Se toma el importe que informa el resumen y se carga a cuenta del impuesto provincial del titular, separado de sellos y de IVA. Solo si el resumen trae la línea discriminada."
+      },
+      {
+        "concepto": "Retención de Ganancias en tarjeta (RG 5617)",
+        "cuenta": "Retenciones de Ganancias sufridas",
+        "tratamiento": "Si el resumen informa esta retención, se carga en fila propia como retención a cuenta del titular. Fila prevista aunque en algunos períodos quede en cero."
+      },
+      {
+        "concepto": "Comisiones y gastos bancarios de la tarjeta",
+        "cuenta": "Gastos y comisiones bancarias",
+        "tratamiento": "Comisiones de mantenimiento, renovación de plástico u otro cargo propio de la tarjeta se cargan como gasto bancario, junto con su IVA si el resumen lo discrimina."
+      },
+      {
+        "concepto": "Intereses de financiación o compensatorios de tarjeta",
+        "cuenta": "Intereses negativos",
+        "tratamiento": "Intereses por saldo financiado o pago fuera de término se cargan como gasto financiero, separados del consumo propio."
+      },
+      {
+        "concepto": "Pago del resumen desde una cuenta bancaria",
+        "cuenta": "Tarjetas de crédito a pagar",
+        "tratamiento": "El pago del total del resumen (débito automático o transferencia) cancela el Saldo Inicial de la tarjeta, sea desde una cuenta propia de este banco o de otro banco del mismo titular. Regla de imputación: la fila imputa la cancelación del pasivo de tarjeta. La contrapartida es la cuenta bancaria desde la que se pagó."
+      },
+      {
+        "concepto": "Transferencia entre cuentas propias del titular sin desglose suficiente (a identificar)",
+        "cuenta": "Movimientos a identificar",
+        "tratamiento": "Cuando entra un ingreso desde otra cuenta del mismo titular sin más detalle que el banco de origen, y ese ingreso se aplica al pago de la tarjeta, se trata como movimiento de paso: no es venta ni gasto, es fondeo interno. Regla de imputación: la cuenta es la del banco de contrapartida. Si no se identifica, queda en Movimientos a identificar."
+      },
+      {
+        "concepto": "Débito automático recurrente sin comercio identificable",
+        "cuenta": "Movimientos a identificar",
+        "tratamiento": "Débitos con código de comercio no descifrable que se repiten mes a mes y no matchean ninguna factura de IVA Compras se cargan provisoriamente como consumo propio, marcados para confirmar con el cliente. Regla de imputación: por defecto Cuenta particular, marcado para confirmar con el cliente."
+      },
+      {
+        "concepto": "DEBITO AUTOMATICO",
+        "cuenta": "Seguros pagados",
+        "tratamiento": "Debito automatico en la CUENTA CORRIENTE (no en el resumen de tarjeta) cuyo detalle incluye \"SEGU\": es el pago de una poliza de seguro, cuenta de resultado. Si el detalle NO incluye \"SEGU\", no aplica esta fila - queda en la cuenta generica de debitos automaticos sin identificar. Regla de imputación: sólo aplica si el detalle incluye «SEGU». Si no lo incluye → Movimientos a identificar."
+      }
+    ],
+    "icbc": [
+      {
+        "concepto": "Impuesto Ley 25413 (débitos y créditos bancarios)",
+        "cuenta": "Impuesto a los débitos y créditos a cuenta de ganancias",
+        "tratamiento": "Puede aparecer como ajuste/devolución puntual en cuentas casi sin actividad en vez de como débito por movimiento. Cargar igual que en los demás bancos: totalizar al final del período, separando débitos y créditos/devoluciones si aparecen ambos."
+      },
+      {
+        "concepto": "IVA sobre comisión de mantenimiento de tarjeta",
+        "cuenta": "IVA crédito fiscal 21%",
+        "tratamiento": "Calculado al 21% sobre la Comisión de Mantenimiento de Tarjeta. Cargar junto con la comisión que lo genera, igual criterio que en los demás bancos."
+      },
+      {
+        "concepto": "Comisión de mantenimiento de tarjetas (paquete) y percepciones asociadas",
+        "cuenta": "Gastos y comisiones bancarias",
+        "tratamiento": "Cargo fijo mensual del paquete de tarjetas. Cargarlo junto con su IVA al 21% y las percepciones que lo acompañan (Percepción IIBB Servicios Digitales, Percepción IVA RG4240, Percepción Ganancias RG5617), separado de otros gastos bancarios."
+      },
+      {
+        "concepto": "Impuesto de Sellos (resúmenes de tarjeta de crédito)",
+        "cuenta": "Impuestos y tasas",
+        "tratamiento": "Línea fija mensual presente en los resúmenes de tarjeta. Cargar como impuesto/gasto del período, separado de la comisión y de su IVA. Decisión del estudio: el impuesto de sellos va a Impuestos y tasas."
+      }
+    ]
+  },
+  "clientes": {
+    "Wertheimer Matias": "Particularidades de Wertheimer Matias (no generalizables a otros clientes) Grupo Alcance de datos Reconciliación Reconciliación Reconciliación Reconciliación Movimientos sin clasificar",
+    "Hiltrama": "Particularidades de Hiltrama (no generalizables a otros clientes) Grupo Alcance general Estructura del archivo Particularidades del rubro Particularidades del rubro Sensible - uso interno Préstamos",
+    "NSI": "Particularidades de NSI - Netti Sortino Ingenieria SA (no generalizables a otros clientes) Grupo Alcance de datos Fuentes complementarias Fuentes complementarias Plazo Fijo Transferencias BIP Fuentes complementarias",
+    "Zaid Corp SA": "Particularidades de Zaid Corp SA (no generalizables a otros clientes) Grupo Alcance de datos Fuentes complementarias Fuentes complementarias Entrega",
+    "Kabedos": "Particularidades de Kabedos (no generalizables a otros clientes) Grupo Alcance general Archivo y ubicacion Formato numerico Particularidades del rubro Particularidades del rubro Codigo de cuenta pendiente",
+    "Policel": "Particularidades Ligore Martin  Pagos a \"Facturante\" Pago "
+  },
+  "origen": "\\\\TANGOSRV\\Compartido\\CLIENTES\\zzInstrucciones\\Conceptos Bancos 2.xlsx"
+}

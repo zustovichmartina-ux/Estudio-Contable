@@ -293,17 +293,36 @@ def consolidar_carpeta(
     destino: str | Path | None = None,
     glob_pat: str = "Caratula_*.pdf",
 ) -> Path:
-    """Procesa todos los PDF Caratula_*.pdf de la carpeta y genera el Excel."""
+    """Procesa todos los PDF Caratula_*.pdf de la carpeta (también subcarpetas) y genera el Excel."""
     carpeta = Path(carpeta or DEFAULT_DIR)
     destino = Path(destino or (carpeta / DEFAULT_OUT.name))
-    pdfs = sorted(carpeta.glob(glob_pat))
+    pdfs = sorted({*carpeta.glob(glob_pat), *carpeta.rglob(glob_pat)})
+    # Windows: .PDF.pdf / Car_*.PDF
+    extra = [
+        p
+        for p in carpeta.rglob("*")
+        if p.is_file()
+        and p.suffix.lower() == ".pdf"
+        and p.name.lower().startswith(("caratula_", "car_"))
+    ]
+    pdfs = sorted(
+        set(pdfs) | set(extra),
+        key=lambda p: (1 if "anteriores" in str(p).lower() else 0, str(p).lower()),
+    )
     if not pdfs:
         raise FileNotFoundError(f"No hay {glob_pat} en {carpeta}")
+    vistos: set[str] = set()
     registros = []
     for pdf in pdfs:
         rec = parse_caratula(pdf)
-        if rec:
-            registros.append(rec)
+        if not rec:
+            continue
+        key = re.sub(r"\D", "", str(rec.get("liquidacion") or "")) or pdf.stem.lower()
+        if key in vistos:
+            continue
+        vistos.add(key)
+        rec["archivo"] = str(pdf.relative_to(carpeta)) if carpeta in pdf.parents else pdf.name
+        registros.append(rec)
     if not registros:
         raise RuntimeError("No se pudo leer ninguna carátula")
     return escribir_excel_consolidado(registros, destino)

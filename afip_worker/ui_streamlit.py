@@ -30,7 +30,7 @@ from afip_worker.registry import (
 _ACTION_LABELS = {
     "emitir_fcc": "Emitir facturas (FCC)",
     "bajar_veps": "Descargar VEPs",
-    "bajar_comprobantes": "Descargar comprobantes",
+    "bajar_comprobantes": "Descargar Comprobantes en Línea",
 }
 
 _STATUS_BADGE = {
@@ -109,8 +109,9 @@ def _badge_acceso_local(cuit: str, razon: str = "") -> tuple[str, str]:
 def render_arca_module() -> None:
     """Módulo top-level ARCA: encolar + cola + registry (sin ejecutar AFIP)."""
     st.caption(
-        "ARCA **solo encola** trabajos. El worker local (PC RECEPCION) abre Chrome/AFIP. "
-        "Las claves viven solo en el autofill de Chrome — nunca en Excel ni en esta web."
+        "Esta web es para **todo el estudio**: cualquiera encola desde acá. "
+        "AFIP se ejecuta solo en la PC RECEPCION (Chrome + autofill). "
+        "Las claves nunca van a Excel ni a esta web."
     )
     remote = _remote()
     if remote:
@@ -234,6 +235,13 @@ def _render_encolar(remote: RemoteWorker | None) -> None:
             hasta = st.date_input("Período hasta", value=date.today(), key="arca_job_hasta")
         params["periodo_desde"] = desde.isoformat()
         params["periodo_hasta"] = hasta.isoformat()
+        if action == "bajar_comprobantes":
+            params["analizar_monotributo"] = st.checkbox(
+                "Al terminar, analizar recategorización (período facturado, recibos, NC)",
+                value=True,
+                key="arca_job_analizar_mono",
+                help="El worker arma el papel de trabajo de monotributo con los PDF bajados.",
+            )
 
     if st.button("Encolar", type="primary", key="arca_job_enqueue"):
         if not cuit.strip() or not razon.strip():
@@ -255,7 +263,7 @@ def _render_encolar(remote: RemoteWorker | None) -> None:
                         plantilla_name=plantilla_name,
                     )
                     st.success(f"Encolado en RECEPCION `{job.get('id')}`")
-                    st.caption("El worker local lo toma solo. Solo frena si el CUIT dice **Pedir acceso**.")
+                    st.caption("Lo toma la PC RECEPCION sola. El resto del estudio no tiene que abrir AFIP. Solo frena si el CUIT dice **Pedir acceso**.")
                     st.json(job)
                 else:
                     ensure_cuit_registered(cuit, razon)
@@ -269,7 +277,8 @@ def _render_encolar(remote: RemoteWorker | None) -> None:
                     path = enqueue_job(job_obj)
                     st.success(f"Encolado `{job_obj.id}` → `{path.name}`")
                     st.caption(
-                        "El worker local lo toma solo. Solo frena si el CUIT dice **Pedir acceso**."
+                        "Lo toma la PC RECEPCION sola. El resto del estudio no tiene que abrir AFIP. "
+                        "Solo frena si el CUIT dice **Pedir acceso**."
                     )
                     st.json(job_obj.to_dict())
             except (ValueError, RemoteError) as exc:
@@ -306,6 +315,28 @@ def _render_cola(remote: RemoteWorker | None) -> None:
             }
         )
     st.dataframe(rows, use_container_width=True, hide_index=True)
+
+    done_mono = [
+        j for j in rows_src
+        if j.get("status") == "done"
+        and str(j.get("action")) == "bajar_comprobantes"
+        and isinstance(j.get("result"), dict)
+        and (j.get("result") or {}).get("extra", {}).get("monotributo")
+    ]
+    if done_mono:
+        st.markdown("##### Recategorización lista (jobs ARCA)")
+        for j in done_mono[:8]:
+            info = ((j.get("result") or {}).get("extra") or {}).get("monotributo") or {}
+            xlsx = info.get("xlsx") or ""
+            st.info(
+                f"**{j.get('razon_social')}** ({j.get('cuit')}): "
+                f"{info.get('cantidad', 0)} comprobante(s) · neto ${float(info.get('neto') or 0):,.2f}"
+                + (f" · Excel `{xlsx}`" if xlsx else "")
+            )
+            errs = info.get("errores") or []
+            if errs:
+                with st.expander(f"Advertencias {j.get('id')}", expanded=False):
+                    st.dataframe(errs, use_container_width=True, hide_index=True)
 
     needs = [j for j in rows_src if j.get("status") == "needs_auth"]
     if needs:

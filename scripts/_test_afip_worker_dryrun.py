@@ -37,7 +37,12 @@ def main() -> int:
     specs = [
         ("emitir_fcc", {"ruta_destino": str(dest), "plantilla_excel": "uploads/fake.xlsx", "fecha_emision": "2026-08-31"}),
         ("bajar_veps", {"ruta_destino": str(dest), "periodo_desde": "2026-08-01", "periodo_hasta": "2026-08-31"}),
-        ("bajar_comprobantes", {"ruta_destino": str(dest), "periodo_desde": "2026-08-01", "periodo_hasta": "2026-08-31"}),
+        ("bajar_comprobantes", {
+            "ruta_destino": str(dest),
+            "periodo_desde": "2026-08-01",
+            "periodo_hasta": "2026-08-31",
+            "analizar_monotributo": True,
+        }),
     ]
     ids = []
     for action, params in specs:
@@ -72,6 +77,10 @@ def main() -> int:
     assert len(done) == 3
     done_ids = {j.id for j in done}
     assert set(ids) == done_ids
+    cmpte = next(j for j in done if j.action == "bajar_comprobantes")
+    extra_mono = (cmpte.result.extra or {}).get("monotributo") or {}
+    assert extra_mono.get("cantidad") == 0
+    assert extra_mono.get("errores")
 
     # needs_auth: CUIT sin acceso (nuevo) → frena solo
     job_auth = create_job(

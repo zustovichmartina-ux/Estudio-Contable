@@ -43,6 +43,25 @@ def ensure_job_dirs(root: Path | None = None) -> Path:
     return root
 
 
+def login_lock_path(root: Path | None = None) -> Path:
+    return (root or jobs_root()) / ".login_lock"
+
+
+def acquire_login_lock(root: Path | None = None) -> None:
+    login_lock_path(root).write_text("login visible", encoding="utf-8")
+
+
+def release_login_lock(root: Path | None = None) -> None:
+    try:
+        login_lock_path(root).unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def login_in_progress(root: Path | None = None) -> bool:
+    return login_lock_path(root).exists()
+
+
 def uploads_dir() -> Path:
     d = _repo_root() / "uploads" / "afip"
     d.mkdir(parents=True, exist_ok=True)
@@ -59,6 +78,7 @@ class JobAuth:
 class JobResult:
     files: list[str] = field(default_factory=list)
     message: str = ""
+    extra: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -114,6 +134,7 @@ class Job:
             result=JobResult(
                 files=list(res_raw.get("files") or []),
                 message=str(res_raw.get("message") or ""),
+                extra=dict(res_raw.get("extra") or {}),
             ),
         )
 
@@ -270,9 +291,14 @@ def finish_job(
     ok: bool,
     message: str = "",
     files: list[str] | None = None,
+    extra: dict | None = None,
     root: Path | None = None,
 ) -> Path:
-    job.result = JobResult(files=list(files or []), message=message)
+    job.result = JobResult(
+        files=list(files or []),
+        message=message,
+        extra=dict(extra or {}),
+    )
     return move_job(job, "done" if ok else "error", root)
 
 

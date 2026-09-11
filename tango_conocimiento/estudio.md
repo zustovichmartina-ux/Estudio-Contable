@@ -17,10 +17,12 @@ Códigos válidos del template (ejemplos): `SUELDOS`, `SUELDOSRES`, `VARIOS`, `V
 
 Mapeo del estudio al importar:
 
-- IVA, IIBB, IIBB_ARBA, IIBB_CM03, TISH/TSH, CM, BANCO → **VARIOS**
+- IVA, IIBB, IIBB_ARBA, IIBB_CM03, TISH/TSH, CM → **VARIOS**
+- BANCO (conciliación) → **CN**
 - SUELDOS → **SUELDOS**
 
 Motivo IVA→VARIOS: en muchas empresas el tipo `IVA` no está habilitado para Contabilidad y Tango rechaza la importación.
+Motivo BANCO→CN: así lo define el instructivo de asientos / Conceptos Bancos (Clase Básico, tipo CN, moneda PES, fecha último día del mes).
 
 Para determinación mensual *dentro* de Tango (no el Excel de la web) el estudio usa tipos propios: `DETIVA`, `DETIIBB`, `DETTISH` (ver guía de modelos).
 
