@@ -1,5 +1,6 @@
 """Aplicación Streamlit — Estudio Contable."""
 
+import base64
 import copy
 import html
 import json
@@ -153,6 +154,7 @@ from completar_cuadro_bancario import (
 
 BASE_DIR = Path(__file__).resolve().parent
 LOGO_ESTUDIO_PATH = BASE_DIR / "assets" / "estudio-zona-guemes-wordmark-oscuro.png"
+AVATARES_DIR = BASE_DIR / "assets" / "avatares"
 DATA_PLANES_DIR = BASE_DIR / "data" / "planes_cuentas"
 # Canónico compartido en la red del estudio (mismo T: que biblioteca/borradores).
 PLANES_RED_DIR = Path(r"T:\Estudio Contable") / "planes_cuentas"
@@ -478,6 +480,24 @@ st.markdown(
         margin: 0 0 1.25rem 0;
         padding: 0.15rem 0 1.05rem 0;
         border-bottom: 1px solid var(--ec-line);
+    }
+    .ec-saludo-fila {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    .ec-saludo-wrap {
+        width: 88px;
+        height: 88px;
+        flex-shrink: 0;
+    }
+    .ec-saludo-avatar {
+        width: 88px;
+        height: 88px;
+        object-fit: cover;
+        border-radius: 50%;
+        background: #EEF2FF;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
     }
     .ec-pagehead-hola,
     .stMarkdown p.ec-pagehead-hola {
@@ -1032,6 +1052,35 @@ def _nombre_saludo() -> str:
     return _titulo_nombre_propio(nombre.split()[0])
 
 
+def _clave_avatar(usuario: str, nombre: str = "") -> str:
+    login = str(usuario or "").strip().lower()
+    primero = str(nombre or "").strip().lower().split()[0] if nombre else ""
+    if login in {"guada", "guadi"} or primero in {"guada", "guadi"}:
+        return "guada"
+    return login or primero
+
+
+def _ruta_avatar(usuario: str, nombre: str = "") -> Path | None:
+    clave = _clave_avatar(usuario, nombre)
+    if not clave:
+        return None
+    ruta = AVATARES_DIR / f"{clave}.png"
+    return ruta if ruta.is_file() else None
+
+
+def _html_saludo_avatar(usuario: str, nombre: str = "") -> str:
+    ruta = _ruta_avatar(usuario, nombre)
+    if ruta is None:
+        return ""
+    src = "data:image/png;base64," + base64.b64encode(ruta.read_bytes()).decode("ascii")
+    alt = html.escape(_titulo_nombre_propio((nombre or usuario).split()[0] if (nombre or usuario) else "saludo"))
+    return (
+        f'<div class="ec-saludo-wrap">'
+        f'<img class="ec-saludo-avatar" src="{src}" alt="{alt}">'
+        f"</div>"
+    )
+
+
 def _render_titulo_estudio(ventana: str | None = None) -> None:
     """Título de pantalla: saludo + qué se hace acá."""
     clave = str(ventana or "").strip() or "login"
@@ -1060,13 +1109,25 @@ def _render_titulo_estudio(ventana: str | None = None) -> None:
         if kicker
         else ""
     )
+    avatar = _html_saludo_avatar(
+        str(st.session_state.get("usuario_oficina") or ""),
+        str(st.session_state.get("usuario_oficina_nombre") or ""),
+    )
+    saludo_html = (
+        f'<div class="ec-saludo-fila">{avatar}<div>'
+        if avatar
+        else "<div>"
+    )
+    cierre = "</div></div>" if avatar else "</div>"
     st.markdown(
         f"""
         <div class="ec-pagehead">
+          {saludo_html}
           <p class="ec-pagehead-hola">{html.escape(linea_hola)}</p>
           {kicker_html}
           <p class="ec-pagehead-title">{html.escape(titulo)}</p>
           <p class="ec-pagehead-sub">{html.escape(sub)}</p>
+          {cierre}
         </div>
         """,
         unsafe_allow_html=True,
