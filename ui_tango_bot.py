@@ -2,7 +2,9 @@
 """Chat del agente Tango: responde, formula y lee capturas."""
 from __future__ import annotations
 
+import json
 import os
+import re
 from pathlib import Path
 
 import streamlit as st
@@ -90,40 +92,54 @@ div.stMarkdown:has(.tango-sug-label) + div [data-testid="stVerticalBlockBorderWr
     opacity: 1 !important;
 }
 [data-testid="stBottomBlockContainer"] {
-    background: var(--ec-night, #0B0D10) !important;
+    background: #F4F6FA !important;
     padding-bottom: 0.85rem !important;
 }
 [data-testid="stChatInput"] {
-    background: #14161A !important;
-    border: 1px solid var(--ec-charcoal, #1C1E22) !important;
+    background: #E8EAED !important;
+    border: 1px solid #CBD5E1 !important;
     border-radius: 16px !important;
     box-shadow: none !important;
+    color: #0F172A !important;
 }
 [data-testid="stChatInput"] > div,
-[data-testid="stChatInput"] .stChatInputContainer {
-    background: transparent !important;
+[data-testid="stChatInput"] .stChatInputContainer,
+[data-testid="stChatInput"] [data-baseweb="base-input"],
+[data-testid="stChatInput"] [data-baseweb="textarea"] {
+    background: #E8EAED !important;
     border: none !important;
     box-shadow: none !important;
     border-radius: 16px !important;
+    color: #0F172A !important;
 }
 [data-testid="stChatInput"] textarea,
 [data-testid="stChatInput"] [data-testid="stChatInputTextArea"],
 [data-testid="stChatInput"] input,
-[data-testid="stChatInput"] [data-baseweb="textarea"] textarea {
-    color: var(--ec-ink, #F4F4F5) !important;
+[data-testid="stChatInput"] [data-baseweb="textarea"] textarea,
+[data-testid="stChatInput"] [data-baseweb="input"] input {
+    color: #0F172A !important;
+    background: transparent !important;
     font-size: 0.95rem !important;
-    caret-color: var(--ec-lagoon, #2563EB) !important;
+    caret-color: #2563EB !important;
+    -webkit-text-fill-color: #0F172A !important;
 }
 [data-testid="stChatInput"] textarea::placeholder,
 [data-testid="stChatInput"] [data-baseweb="textarea"] textarea::placeholder {
-    color: var(--ec-muted, #9CA3AF) !important;
+    color: #475569 !important;
     opacity: 1 !important;
+    -webkit-text-fill-color: #475569 !important;
 }
 [data-testid="stChatInput"] button {
-    background: var(--ec-lagoon, #2563EB) !important;
+    background: #2563EB !important;
     color: #FFFFFF !important;
     border: none !important;
     border-radius: 10px !important;
+}
+[data-testid="stChatInput"] [data-testid="stChatInputFileUploadMessage"],
+[data-testid="stChatInput"] [data-testid="stFileUploadDropzone"],
+[data-testid="stChatInput"] [class*="uploadedFile"] {
+    color: #0F172A !important;
+    background: #F8FAFC !important;
 }
 </style>
 """
@@ -132,9 +148,48 @@ div.stMarkdown:has(.tango-sug-label) + div [data-testid="stVerticalBlockBorderWr
 _PLACEHOLDERS = {
     "xai-...", "xai-", "...", "sk-ant-...", "sk-ant-", "sk-...", "PEGAR_CLAVE",
 }
+_SECRETS_PATH = Path(__file__).resolve().parent / ".streamlit" / "secrets.toml"
+
+
+def _guardar_clave_xai(clave: str) -> None:
+    """Guarda la clave para TODO el estudio (cualquier usuario). No va a GitHub."""
+    texto = (clave or "").strip().strip('"').strip("'")
+    if not texto.startswith("xai-") or texto in _PLACEHOLDERS or len(texto) < 20:
+        return
+    _SECRETS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    actual = ""
+    if _SECRETS_PATH.exists():
+        actual = _SECRETS_PATH.read_text(encoding="utf-8")
+    linea = f"XAI_API_KEY = {json.dumps(texto)}\n"
+    modelo = 'XAI_MODEL = "grok-4.6"\n'
+    if re.search(r"^XAI_API_KEY\s*=", actual, re.M):
+        actual = re.sub(r"^XAI_API_KEY\s*=.*$", linea.rstrip(), actual, count=1, flags=re.M)
+    else:
+        actual = linea + actual
+    if not re.search(r"^XAI_MODEL\s*=", actual, re.M):
+        actual = modelo + actual
+    _SECRETS_PATH.write_text(actual.lstrip("\n") if actual.startswith("\n") else actual, encoding="utf-8")
+    os.environ["XAI_API_KEY"] = texto
+    os.environ.setdefault("XAI_MODEL", "grok-4.6")
+
+
+def _secrets_disco() -> dict:
+    if not _SECRETS_PATH.exists():
+        return {}
+    try:
+        import tomllib
+        data = tomllib.loads(_SECRETS_PATH.read_bytes())
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
 
 
 def _secret(nombre: str) -> str:
+    disco = _secrets_disco().get(nombre)
+    if disco:
+        texto = str(disco).strip().strip('"').strip("'")
+        if texto and texto not in _PLACEHOLDERS:
+            return texto
     try:
         val = st.secrets.get(nombre)
         if val:
@@ -227,6 +282,8 @@ def render_tango_bot() -> None:
     pasted = str(st.session_state.get("tango_api_key") or "").strip()
     if pasted in _PLACEHOLDERS:
         pasted = ""
+    if pasted.startswith("xai-"):
+        _guardar_clave_xai(pasted)
     secret_muerto = bool(st.session_state.get("tango_clave_invalida")) and not pasted
     for nombre in (
         "ANTHROPIC_API_KEY",
@@ -265,15 +322,16 @@ def render_tango_bot() -> None:
 
     def _panel_ia() -> None:
         if hay_ia and not st.session_state.get("tango_clave_invalida"):
-            st.success(f"**Grok activo** (`{model}`). Ya podés preguntar como en el chat de Grok.")
-        elif st.session_state.get("tango_clave_invalida"):
+            st.caption("Grok está activo para todo el estudio.")
+            return
+        if st.session_state.get("tango_clave_invalida"):
             st.error(
-                "**Grok está apagado.** La clave de xAI de la nube no vale. "
+                "**Grok está apagado.** La clave no vale. "
                 "Pegá una nueva abajo y tocá Activar Grok."
             )
         else:
-            st.error("**Grok está apagado.** Sin clave de xAI este chat responde con lo del estudio.")
-        st.caption("Pegá acá la clave de Grok. No la escribas en el chat de abajo. Queda en tu sesión.")
+            st.error("**Grok está apagado.** Pegá la clave de xAI para activarlo.")
+        st.caption("Pegá acá la clave de Grok. Queda guardada en esta PC, no en GitHub.")
         clave = st.text_input(
             "Clave Grok (xAI)",
             type="password",
@@ -286,6 +344,8 @@ def render_tango_bot() -> None:
             if texto.startswith("xai-") or texto.startswith("sk-ant-") or texto.startswith("sk-"):
                 st.session_state.tango_api_key = texto
                 st.session_state.tango_clave_invalida = False
+                if texto.startswith("xai-"):
+                    _guardar_clave_xai(texto)
                 st.rerun()
             else:
                 st.warning("La clave de Grok empieza con xai-.")
