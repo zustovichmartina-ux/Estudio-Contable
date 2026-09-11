@@ -157,7 +157,7 @@ def usuario_bloqueado_oficina(usuario: str) -> int:
 
 _PIN_EQUIPO_OFICINA = "3278"
 _EQUIPO_OFICINA = (
-    ("guada", "Guada"),
+    ("guada", "Guadi"),
     ("tobi", "Tobi"),
     ("sol", "Sol"),
     ("mauri", "Mauri"),

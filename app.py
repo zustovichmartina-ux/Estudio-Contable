@@ -478,6 +478,17 @@ st.markdown(
         padding: 0.15rem 0 1.05rem 0;
         border-bottom: 1px solid var(--ec-line);
     }
+    .ec-pagehead-hola,
+    .stMarkdown p.ec-pagehead-hola {
+        margin: 0 0 0.45rem 0 !important;
+        font-family: var(--ec-display) !important;
+        font-size: 1.25rem !important;
+        font-weight: 650 !important;
+        letter-spacing: -0.02em !important;
+        text-transform: none !important;
+        color: var(--ec-ink) !important;
+        line-height: 1.2 !important;
+    }
     .ec-pagehead-kicker,
     .stMarkdown p.ec-pagehead-kicker {
         margin: 0 0 0.28rem 0 !important;
@@ -703,6 +714,25 @@ st.markdown(
         border-radius: 16px;
         background: linear-gradient(120deg, #0B1C33 0%, #1E3A8A 55%, #2563EB 100%);
         color: #FFFFFF;
+    }
+    .ec-hero p.ec-hero-hola,
+    .stMarkdown p.ec-hero-hola {
+        font-family: var(--ec-display) !important;
+        font-size: 2rem !important;
+        font-weight: 650 !important;
+        color: #FFFFFF !important;
+        text-transform: none !important;
+        margin: 0 !important;
+        letter-spacing: -0.03em !important;
+        line-height: 1.15 !important;
+    }
+    .ec-hero p.ec-hero-sub,
+    .stMarkdown p.ec-hero-sub {
+        color: rgba(255, 255, 255, 0.9) !important;
+        margin: 0.45rem 0 0 0 !important;
+        font-size: 0.98rem !important;
+        text-transform: none !important;
+        line-height: 1.35 !important;
     }
     .ec-titulo {
         margin: 0.05rem 0 0.85rem 0;
@@ -996,6 +1026,30 @@ def _resumen_biblioteca_sociedad_activa() -> tuple[int, dict[str, list], int, di
     return total_asi, por_imp, total_bco, por_banco
 
 
+_APODOS_SALUDO = {
+    "guada": "Guadi",
+    "guadi": "Guadi",
+}
+
+
+def _titulo_nombre_propio(texto: str) -> str:
+    """Nombres propios con mayúscula inicial: Mauri, Marti, Guadi."""
+    plano = str(texto or "").strip()
+    if not plano:
+        return ""
+    partes: list[str] = []
+    for token in re.split(r"(\s+|-)", plano):
+        if not token or token.isspace() or token == "-":
+            partes.append(token)
+            continue
+        apodo = _APODOS_SALUDO.get(token.lower())
+        if apodo:
+            partes.append(apodo)
+            continue
+        partes.append(token[:1].upper() + token[1:].lower())
+    return "".join(partes)
+
+
 def _nombre_saludo() -> str:
     nombre = str(
         st.session_state.get("usuario_oficina_nombre")
@@ -1003,24 +1057,43 @@ def _nombre_saludo() -> str:
         or ""
     ).strip()
     if not nombre:
-        return "estudio"
-    return nombre.split()[0]
+        return ""
+    return _titulo_nombre_propio(nombre.split()[0])
 
 
 def _render_titulo_estudio(ventana: str | None = None) -> None:
-    """Título de pantalla: cliente + qué se hace acá."""
+    """Título de pantalla: saludo + qué se hace acá."""
     clave = str(ventana or "").strip() or "login"
+    if clave == "login":
+        st.markdown(
+            """
+            <div class="ec-hero">
+              <p class="ec-hero-hola">Hola Estudio Trujillo!</p>
+              <p class="ec-hero-sub">Elegí tu usuario para empezar</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        return
     titulo, sub = _VENTANA_HEADER.get(clave, (clave, "Estudio Contable"))
-    kicker = "Estudio Contable"
+    hola = _nombre_saludo()
+    linea_hola = f"Hola {hola}!" if hola else "Hola Estudio Trujillo!"
+    kicker = ""
     sid = st.session_state.get(_SOCiedad_KEY)
     if sid:
         cli = db.obtener_cliente(sid)
         if cli and cli.get("nombre"):
             kicker = str(cli.get("nombre"))
+    kicker_html = (
+        f'<p class="ec-pagehead-kicker">{html.escape(kicker)}</p>'
+        if kicker
+        else ""
+    )
     st.markdown(
         f"""
         <div class="ec-pagehead">
-          <p class="ec-pagehead-kicker">{html.escape(kicker)}</p>
+          <p class="ec-pagehead-hola">{html.escape(linea_hola)}</p>
+          {kicker_html}
           <p class="ec-pagehead-title">{html.escape(titulo)}</p>
           <p class="ec-pagehead-sub">{html.escape(sub)}</p>
         </div>
@@ -1110,7 +1183,7 @@ def _render_barra_superior_cuenta() -> None:
 
     with col_menu:
         with st.popover("☰ Menú", key="ec_toolbar_menu", width="content"):
-            st.caption(f"Usuario: **{nombre_u}**")
+            st.caption(f"Usuario: **{_titulo_nombre_propio(str(nombre_u))}**")
             if st.button("Cerrar sesión", use_container_width=True, key="btn_logout_oficina"):
                 _cerrar_sesion_oficina()
                 st.rerun()
@@ -13468,7 +13541,7 @@ def _pantalla_login_oficina() -> None:
     elegido = st.selectbox(
         "Usuario",
         options=list(opciones.keys()),
-        format_func=lambda x: opciones[x],
+        format_func=lambda x: _titulo_nombre_propio(opciones[x]),
         key="login_usuario_select",
     )
     pin = st.text_input(
@@ -13496,7 +13569,7 @@ def _pantalla_login_oficina() -> None:
                 st.error("Usuario o PIN incorrecto.")
             return
         st.session_state.usuario_oficina = ok["usuario"]
-        st.session_state.usuario_oficina_nombre = ok["nombre"]
+        st.session_state.usuario_oficina_nombre = _titulo_nombre_propio(ok["nombre"])
         st.session_state.usuario_oficina_admin = bool(ok.get("es_admin"))
         st.session_state._persistencia_hidratada = False
         st.rerun()
@@ -13518,14 +13591,14 @@ def _pantalla_login_oficina() -> None:
         objetivo = st.selectbox(
             "Usuario a recuperar",
             options=list(opciones.keys()),
-            format_func=lambda x: opciones[x],
+            format_func=lambda x: _titulo_nombre_propio(opciones[x]),
             key="recup_usuario_objetivo",
         )
         mapa_admin = {u["usuario"]: str(u["nombre"] or u["usuario"]).strip() for u in admins}
         admin_elegido = st.selectbox(
             "Administrador que autoriza",
             options=list(mapa_admin.keys()),
-            format_func=lambda x: mapa_admin[x],
+            format_func=lambda x: _titulo_nombre_propio(mapa_admin[x]),
             key="recup_usuario_admin",
         )
         pin_admin = st.text_input(
@@ -13577,7 +13650,7 @@ def _seccion_usuarios_oficina() -> None:
             pd.DataFrame([
                 {
                     "Usuario": u["usuario"],
-                    "Nombre": u["nombre"],
+                    "Nombre": _titulo_nombre_propio(u["nombre"]),
                     "Admin": "Sí" if u.get("es_admin") else "No",
                     "Activo": "Sí" if u.get("activo") else "No",
                 }
