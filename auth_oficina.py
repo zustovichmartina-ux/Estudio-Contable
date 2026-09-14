@@ -169,6 +169,12 @@ _EQUIPO_OFICINA = (
     ("marti", "Marti"),
 )
 _EQUIPO_LOGINS = {login for login, _nombre in _EQUIPO_OFICINA}
+# Apodos que alguien cargó en Secrets / alta manual. Mismo humano; el login
+# canónico es la clave. Si no se apagan, el combo de entrada muestra dos
+# veces el mismo nombre (p. ej. Guadi + Guadi).
+_EQUIPO_ALIASES = {
+    "guadi": "guada",
+}
 _ROLES_GENERICOS_OFICINA = ("recepcion", "contador", "auxiliar")
 _EQUIPO_PIN_LISTO = False
 
@@ -223,7 +229,7 @@ def _aplicar_usuarios_desde_secrets() -> int:
     aplicados = 0
     for u in definidos:
         user = u["usuario"]
-        if not user or user in _EQUIPO_LOGINS:
+        if not user or user in _EQUIPO_LOGINS or user in _EQUIPO_ALIASES:
             continue
         existente = obtener_usuario_oficina(user)
         if existente is None:
@@ -272,7 +278,7 @@ def sembrar_equipo_oficina(*, forzar_pin: bool = False) -> int:
             kwargs["pin"] = _PIN_EQUIPO_OFICINA
         actualizar_usuario_oficina(int(existente["id"]), **kwargs)
         aplicados += 1
-    for extra in _ROLES_GENERICOS_OFICINA:
+    for extra in (*_ROLES_GENERICOS_OFICINA, *_EQUIPO_ALIASES):
         viejo = obtener_usuario_oficina(extra)
         if viejo and viejo.get("activo"):
             actualizar_usuario_oficina(int(viejo["id"]), activo=False)
