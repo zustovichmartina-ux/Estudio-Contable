@@ -15,8 +15,10 @@ from ..naming import (
     nombre_vep,
 )
 from .comprobantes import run_bajar_comprobantes_live
+from .fcc import run_emitir_fcc_live
 from .portal_iva import run_bajar_portal_iva_live
 from .result import ActionResult
+from .veps import run_bajar_veps_live
 
 __all__ = ["ActionResult", "run_action", "DISPATCH", "run_bajar_portal_iva", "run_bajar_comprobantes"]
 
@@ -37,7 +39,7 @@ def run_emitir_fcc(job: Job, *, dry_run: bool = True) -> ActionResult:
             message=f"[dry-run] emitir_fcc → {fake} (sin AFIP)",
             files=[str(fake)],
         )
-    return ActionResult(ok=False, message="emitir_fcc real: pendiente Playwright")
+    return run_emitir_fcc_live(job)
 
 
 def run_bajar_veps(job: Job, *, dry_run: bool = True) -> ActionResult:
@@ -55,7 +57,7 @@ def run_bajar_veps(job: Job, *, dry_run: bool = True) -> ActionResult:
             message=f"[dry-run] bajar_veps período {periodo} → {fake}",
             files=[str(fake)],
         )
-    return ActionResult(ok=False, message="bajar_veps real: pendiente Playwright")
+    return run_bajar_veps_live(job)
 
 
 def _analizar_monotributo_si_pide(job: Job, result: ActionResult) -> ActionResult:

@@ -126,6 +126,19 @@ def main() -> int:
 
     shutil.rmtree(tmp, ignore_errors=True)
     print("PASS dry-run 4 jobs + needs_auth")
+
+    from afip_worker.auth import check_session_ready
+    from afip_worker.jobs import create_job as _cj
+
+    live_job = _cj(
+        cuit="20-11111111-1",
+        razon_social="Sin permiso previo",
+        action="bajar_comprobantes",
+        params={"ruta_destino": "/tmp", "periodo_desde": "2026-08-01", "periodo_hasta": "2026-08-31"},
+    )
+    live_chk = check_session_ready(live_job, dry_run=False)
+    assert live_chk.ready, live_chk
+    print("PASS live intenta AFIP aunque el CUIT no esté Listo")
     return 0
 
 

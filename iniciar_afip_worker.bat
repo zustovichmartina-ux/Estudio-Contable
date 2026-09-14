@@ -1,8 +1,8 @@
 @echo off
-REM Worker AFIP autonomo + API para Streamlit Cloud (tunel Cloudflare).
-REM Dejar esta ventana abierta en RECEPCION.
+REM Worker AFIP autonomo + API (Chrome oculto). Solo iniciar_afip_sesion.bat usa Chrome visible.
 cd /d "%~dp0"
-echo [AFIP worker] API + cola. Ctrl+C para detener.
+set AFIP_CHROME_HEADED=0
+echo [AFIP worker] API + cola en segundo plano. Ctrl+C para detener.
 python -m afip_worker.main --live --serve --interval 3
 echo.
 echo Si aparecio una URL trycloudflare, pegala en Streamlit Secrets (AFIP_WORKER_URL).

@@ -13,6 +13,8 @@ from playwright.sync_api import Locator, Page, TimeoutError as PlaywrightTimeout
 from ..browser import login_timeout_ms
 from ..jobs import Job, jobs_root, normalizar_cuit
 from ..naming import iso_to_ddmmyyyy
+from ..password_vault import lookup_afip_password
+from ..registry import mark_ready
 from .result import ActionResult
 
 LOG = logging.getLogger("afip_worker.session")
@@ -90,15 +92,16 @@ def _is_blocker(page: Page) -> bool:
     except Exception:
         return False
     keys = (
-        "captcha",
         "recaptcha",
-        "token",
-        "aplicación ciud",
-        "codigo de 6",
-        "código de 6",
-        "autenticación",
+        "aplicación ciudadana",
+        "aplicacion ciudadana",
+        "código de 6 dígitos",
+        "codigo de 6 dígitos",
+        "ingresá el código",
+        "ingresa el codigo",
         "segundo factor",
         "clave temporal",
+        "token de seguridad",
     )
     return any(k in text for k in keys)
 
@@ -119,6 +122,7 @@ def _login_afip(page: Page, job: Job) -> ActionResult | None:
             page.goto(LOGIN_URL, wait_until="domcontentloaded")
     if _is_portal(page) and not _is_login(page):
         LOG.info("sesión AFIP ya abierta (segundo plano)")
+        _marcar_listo(job)
         return None
 
     digits = _cuit_digits(job)
@@ -134,6 +138,7 @@ def _login_afip(page: Page, job: Job) -> ActionResult | None:
         user.first.press("Tab")
     except PlaywrightTimeout:
         if _is_portal(page):
+            _marcar_listo(job)
             return None
         return ActionResult(
             needs_auth=True,
@@ -152,17 +157,36 @@ def _login_afip(page: Page, job: Job) -> ActionResult | None:
     page.wait_for_timeout(1_200)
 
     pwd = page.locator("#F1\\:password, input[type='password']").first
+    filled_from_vault = False
     try:
         if pwd.count():
             pwd.click(force=True)
             page.wait_for_timeout(400)
+            # 1) intento autofill del Chrome del worker
             page.keyboard.press("ArrowDown")
             page.keyboard.press("Enter")
-            LOG.info("reingreso automático (autofill, %ss)", login_timeout_ms() // 1000)
+            page.wait_for_timeout(500)
+            current = ""
+            try:
+                current = (pwd.input_value() or "").strip()
+            except Exception:
+                current = ""
+            if not current:
+                secret = lookup_afip_password(job.cuit)
+                if secret:
+                    pwd.fill(secret)
+                    filled_from_vault = True
+                    LOG.info("reingreso automatico (vault Edge/Chrome)")
+                    _try_submit_password(page)
+                else:
+                    LOG.info("reingreso automatico (autofill, %ss)", login_timeout_ms() // 1000)
+            else:
+                LOG.info("reingreso automatico (autofill OK)")
     except Exception:
         pass
 
-    steps = max(8, login_timeout_ms() // 1000)
+    # timeout corto si ya llenamos desde vault
+    steps = 20 if filled_from_vault else max(8, login_timeout_ms() // 1000)
     logged_in = False
     for _ in range(steps):
         if _is_portal(page) and not _is_login(page):
@@ -177,18 +201,30 @@ def _login_afip(page: Page, job: Job) -> ActionResult | None:
             return ActionResult(
                 needs_auth=True,
                 ok=False,
-                message="AFIP pidió 2FA. Completalo una vez con iniciar_afip_sesion.bat; después reingresa solo.",
+                message="AFIP pidio 2FA. Completalo una vez en RECEPCION; despues reingresa solo.",
             )
         return ActionResult(
             needs_auth=True,
             ok=False,
             message=(
-                "No pude reingresar solo (falta clave guardada en el Chrome del worker). "
-                "Una vez en RECEPCION: iniciar_afip_sesion.bat y aceptá 'guardar contraseña'."
+                "No pude reingresar solo (sin clave en autofill Edge/Chrome para este CUIT). "
+                "Guardala una vez en Edge (AFIP) o avisame el CUIT para cargarla."
             ),
         )
     _maybe_elegir_representado(page, job)
+    _marcar_listo(job)
     return None
+
+
+def _marcar_listo(job: Job) -> None:
+    try:
+        mark_ready(
+            job.cuit,
+            razon_social=job.razon_social,
+            note="Login AFIP OK en RECEPCION (worker)",
+        )
+    except Exception:
+        LOG.warning("no pude marcar CUIT Listo tras login")
 
 
 def _try_submit_password(page: Page) -> None:
@@ -224,14 +260,40 @@ def _maybe_elegir_representado(page: Page, job: Job) -> None:
 
 
 def _elegir_empresa(page: Page, job: Job) -> None:
-    for text in (job.razon_social, normalizar_cuit(job.cuit), _cuit_digits(job)):
+    """Click the represented company on RCEL (not the header user label)."""
+    razon = (job.razon_social or "").strip()
+    cuit_fmt = normalizar_cuit(job.cuit)
+    cuit_d = _cuit_digits(job)
+    # Prefer an explicit button/link in the represent panel.
+    candidates: list = []
+    if razon:
+        candidates.extend(
+            [
+                page.get_by_role("button", name=re.compile(re.escape(razon), re.I)),
+                page.locator("button, a, [role='button']").filter(has_text=re.compile(re.escape(razon), re.I)),
+            ]
+        )
+    for text in (cuit_fmt, cuit_d, razon):
         if not (text or "").strip():
             continue
-        loc = page.get_by_text(str(text), exact=False)
+        candidates.append(page.get_by_text(str(text), exact=False))
+    for loc in candidates:
         try:
-            if loc.count() and loc.first.is_visible():
-                loc.first.click(timeout=4_000)
-                page.wait_for_timeout(1_000)
+            if loc.count() == 0:
+                continue
+            # Prefer a control that is NOT the top "Usuario:" label.
+            for i in range(min(loc.count(), 6)):
+                el = loc.nth(i)
+                if not el.is_visible():
+                    continue
+                try:
+                    box_txt = (el.inner_text(timeout=800) or "").strip()
+                except Exception:
+                    box_txt = ""
+                if box_txt.lower().startswith("usuario"):
+                    continue
+                el.click(timeout=4_000)
+                page.wait_for_timeout(1_200)
                 return
         except Exception:
             continue

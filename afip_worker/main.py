@@ -15,6 +15,7 @@ if str(_ROOT) not in sys.path:
 
 from afip_worker.actions import run_action
 from afip_worker.auth import check_session_ready
+from afip_worker.browser import close_browser
 from afip_worker.jobs import (
     claim_next,
     ensure_job_dirs,
@@ -56,6 +57,29 @@ def process_one(*, dry_run: bool = True, root: Path | None = None) -> bool:
     write_job(job, root)
 
     result = run_action(job, dry_run=dry_run)
+    msg = result.message or ""
+    retryable = (
+        not dry_run
+        and not result.ok
+        and not result.needs_auth
+        and any(
+            token in msg
+            for token in (
+                "TargetClosed",
+                "Timeout AFIP",
+                "sesión ha expirado",
+                "sesion ha expirado",
+                "Forbidden",
+                "no tiene permiso",
+                "don't have permission",
+            )
+        )
+    )
+    if retryable:
+        LOG.warning("reintento %s: %s", job.id, msg)
+        close_browser()
+        result = run_action(job, dry_run=dry_run)
+
     if result.needs_auth:
         mark_needs_auth(job, result.message, root)
         LOG.warning("needs_auth %s: %s", job.id, result.message)

@@ -31,11 +31,11 @@ from afip_worker.registry import (
 _ACTION_LABELS = {
     "bajar_comprobantes": "Descargar Comprobantes en Línea",
     "bajar_portal_iva": "Descargar Portal IVA (compras / ventas)",
-    "emitir_fcc": "Emitir facturas (FCC) — próximamente",
-    "bajar_veps": "Descargar VEPs — próximamente",
+    "emitir_fcc": "Emitir facturas (FCC)",
+    "bajar_veps": "Descargar VEPs",
 }
 _ACTIONS_UI = ("bajar_comprobantes", "bajar_portal_iva", "emitir_fcc", "bajar_veps")
-_ACTIONS_LIVE = frozenset({"bajar_comprobantes", "bajar_portal_iva"})
+_ACTIONS_LIVE = frozenset(_ACTIONS_UI)
 
 _STATUS_BADGE = {
     "pending": "En cola",
@@ -96,6 +96,10 @@ def _ruta_sugerida(razon: str, hasta: date | None = None, action: str = "") -> s
         if not slug:
             return rf"\\TANGOSRV\Compartido\CLIENTES\...\Impuestos\Portal IVA\{mes}"
         return rf"\\TANGOSRV\Compartido\CLIENTES\{slug}\Impuestos\Portal IVA\{mes}"
+    if action == "bajar_veps":
+        if not slug:
+            return rf"\\TANGOSRV\Compartido\CLIENTES\...\Impuestos\VEPs\{mes}"
+        return rf"\\TANGOSRV\Compartido\CLIENTES\{slug}\Impuestos\VEPs\{mes}"
     if not slug:
         return rf"\\TANGOSRV\Compartido\CLIENTES\...\Facturas\{mes}"
     return rf"\\TANGOSRV\Compartido\CLIENTES\{slug}\Facturas\{mes}"
@@ -178,8 +182,9 @@ def _cuit_rows(remote: RemoteWorker | None) -> list[dict[str, Any]]:
 def render_arca_module() -> None:
     """Módulo top-level ARCA: encolar + cola + registry (sin ejecutar AFIP)."""
     st.caption(
-        "Cualquiera del estudio encola acá. AFIP corre solo en la PC RECEPCION "
-        "(Chrome + autofill). Las claves nunca van a Excel ni a esta web."
+        "Cualquiera del estudio encola acá. AFIP lo navega RECEPCION sola "
+        "(Chrome + clave ya guardada). Nadie más necesita permiso en AFIP. "
+        "Las claves nunca van a Excel ni a esta web."
     )
     remote = _remote()
     if remote:
@@ -283,20 +288,15 @@ def _render_encolar(remote: RemoteWorker | None) -> None:
         )
         requested_by = _solicitado_por()
         st.caption(f"Lo pide **{requested_by}**.")
-        if action not in _ACTIONS_LIVE:
-            st.warning(
-                "FCC y VEPs todavía no entran a ARCA. "
-                "Hoy en RECEPCION corren **Comprobantes en Línea** y **Portal IVA**."
-            )
 
     label, note = _lookup_acceso(cuit, rows)
     if label == "Listo":
         st.success(f"Acceso: **{label}** — {note}")
     elif label == "Pedir acceso":
-        st.warning(f"Acceso: **{label}** — {note}")
         st.info(
-            "CUIT nuevo o sin sesión: el admin abre AFIP en RECEPCION (2FA una vez) "
-            "y lo marca Listo en **CUITs / acceso**."
+            f"Acceso: **primera vez** — RECEPCION entra sola a AFIP. "
+            "Nadie del estudio necesita permiso fiscal. "
+            "Solo se frena si AFIP pide 2FA (lo ves en Cola)."
         )
     elif label:
         st.info(f"Acceso: **{label}** — {note}")
@@ -361,6 +361,10 @@ def _render_encolar(remote: RemoteWorker | None) -> None:
                 "Baja CSV/PDF de compras y ventas (Portal IVA; si hace falta, Mis Comprobantes) "
                 r"a Impuestos\Portal IVA\MM-YYYY. No presenta la DDJJ."
             )
+        elif action == "bajar_veps":
+            st.caption(
+                r"Baja los VEPs del período a Impuestos\VEPs\MM-YYYY."
+            )
 
     sugerida = _ruta_sugerida(razon, hasta_ruta, action)
     ruta = st.text_input(
@@ -380,11 +384,6 @@ def _render_encolar(remote: RemoteWorker | None) -> None:
             st.error("Falta la razón social.")
         elif action == "emitir_fcc" and not (params.get("plantilla_excel") or plantilla_b64):
             st.error("Subí la plantilla Excel para emitir FCC.")
-        elif action not in _ACTIONS_LIVE:
-            st.error(
-                "Esa acción todavía no entra a ARCA. "
-                "Elegí **Descargar Comprobantes en Línea** o **Descargar Portal IVA**."
-            )
         else:
             try:
                 if remote:
@@ -400,8 +399,8 @@ def _render_encolar(remote: RemoteWorker | None) -> None:
                     jid = str(job.get("id") or "")
                     st.success(f"Encolado en RECEPCION: {jid}")
                     st.caption(
-                        "Lo toma la PC RECEPCION sola. El resto del estudio no abre AFIP. "
-                        "Solo frena si el CUIT dice **Pedir acceso**. Miralo en la pestaña Cola."
+                        "Lo toma RECEPCION sola. El resto del estudio no abre AFIP ni necesita "
+                        "permiso fiscal. Si AFIP pide 2FA, aparece en Cola."
                     )
                 else:
                     ensure_cuit_registered(cuit, razon)
@@ -416,7 +415,7 @@ def _render_encolar(remote: RemoteWorker | None) -> None:
                     st.success(f"Encolado: {job_obj.id}")
                     st.caption(
                         "En esta PC queda en la cola local. En la nube, RECEPCION lo toma sola. "
-                        "Solo frena si el CUIT dice **Pedir acceso**. Miralo en la pestaña Cola."
+                        "Si AFIP pide 2FA, aparece en Cola."
                     )
             except (ValueError, RemoteError) as exc:
                 st.error(str(exc))

@@ -17,12 +17,10 @@ class AuthCheck:
 
 def check_session_ready(job: Job, *, dry_run: bool = True) -> AuthCheck:
     """
-    Registry:
-      - CUIT nuevo → needs_admin (UI muestra Pedir acceso).
-      - ready → Chrome autofill OK.
-    Worker (dry-run o live):
-      - ready → actúa solo.
-      - needs_admin / unknown / force_needs_auth → needs_auth (solo ahí pide admin).
+    Dry-run: respeta el registry (CUIT nuevo → needs_auth).
+    Live: el worker intenta AFIP solo (clave en Chrome/Edge de RECEPCION).
+    No hace falta que cada persona del estudio tenga permiso en AFIP.
+    Solo frena si AFIP pide 2FA de verdad o force_needs_auth.
     """
     ensure_cuit_registered(job.cuit, job.razon_social)
 
@@ -40,13 +38,16 @@ def check_session_ready(job: Job, *, dry_run: bool = True) -> AuthCheck:
 
     entry = get_cuit(job.cuit)
 
-    # Autónomo: si el CUIT está Listo, sigue solo (dry-run o live).
-    # Solo frena y pide admin cuando no hay acceso AFIP.
+    if not dry_run:
+        return AuthCheck(
+            ready=True,
+            status="ready",
+            note="live: RECEPCION entra a AFIP sola (sin permiso de cada usuaria)",
+        )
+
     if entry and entry.status == "ready":
         note = entry.note or "Registry: ready (Chrome autofill)"
-        if dry_run:
-            note = f"dry-run + {note}"
-        return AuthCheck(ready=True, status="ready", note=note)
+        return AuthCheck(ready=True, status="ready", note=f"dry-run + {note}")
 
     status = entry.status if entry else "needs_admin"
     note = (

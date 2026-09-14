@@ -124,6 +124,10 @@ def _scope(page: Page) -> Any:
 
 
 def _abrir_comprobantes_en_linea(page: Page, job: Job) -> bool:
+    if _pagina_elegir_empresa(page):
+        _elegir_empresa(page, job)
+        if _en_rcel(page) or _wait_rcel(page):
+            return True
     if _en_rcel(page):
         return True
     buscador = page.locator(
@@ -155,6 +159,24 @@ def _abrir_comprobantes_en_linea(page: Page, job: Job) -> bool:
         return _en_rcel(host) or _wait_rcel(host)
 
     LOG.warning("no encontré el servicio Comprobantes en línea en el portal")
+
+    # Fallback: open RCEL URL directly (session cookies) then pick empresa.
+    for url in (
+        "https://serviciosweb.afip.gob.ar/clavefiscal/ws/fe/rcel/default.aspx",
+        "https://fe.afip.gob.ar/rcel/jsp/index.jsp",
+    ):
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=45_000)
+            page.wait_for_timeout(1_500)
+            host = _active(page)
+            if _is_forbidden(host):
+                continue
+            if _pagina_elegir_empresa(host):
+                _elegir_empresa(host, job)
+            if _en_rcel(host) or _wait_rcel(host):
+                return True
+        except Exception as exc:
+            LOG.warning("RCEL direct goto failed %s: %s", url, exc)
     return False
 
 
@@ -169,6 +191,17 @@ def _click_rcel_link(page: Page) -> bool:
     )
 
 
+def _pagina_elegir_empresa(page: Page) -> bool:
+    try:
+        body = page.locator("body").inner_text(timeout=3_000)
+    except Exception:
+        return False
+    return bool(
+        re.search(r"Seleccione\s+la\s+Empresa\s+a\s+representar", body, re.I)
+        or re.search(r"Empresa\s+a\s+representar", body, re.I)
+    )
+
+
 def _en_rcel(page: Page) -> bool:
     if _is_forbidden(page):
         return False
@@ -176,8 +209,12 @@ def _en_rcel(page: Page) -> bool:
         body = page.locator("body").inner_text(timeout=3_000)
     except Exception:
         return False
+    if _pagina_elegir_empresa(page):
+        return False
     if re.search(r"Mis\s+Comprobantes", body, re.I) and "Generar Comprobantes" not in body:
         return False
+    if re.search(r"RCEL", body, re.I) and _RE_MENU.search(body):
+        return True
     return bool(_RE_MENU.search(body))
 
 
@@ -230,20 +267,38 @@ def _descargar_consultas(
 
 
 def _valores_punto_venta(scope: Any) -> list[str]:
+    """Only the real Punto de Venta select. Prefer 'Todos' once; never scrape unrelated selects."""
     sel = scope.get_by_label(re.compile(r"punto de venta", re.I))
     if sel.count() == 0:
-        labeled = scope.locator("select")
-        sel = labeled.first if labeled.count() else sel
-    if sel.count() == 0:
+        # labeled nearby
+        for s in scope.locator("select").all():
+            try:
+                lab = (s.evaluate(
+                    "(el) => (el.labels && el.labels[0] && el.labels[0].innerText) || el.getAttribute('aria-label') || ''"
+                ) or "").lower()
+            except Exception:
+                lab = ""
+            if "punto" in lab and "venta" in lab:
+                sel = s
+                break
+        else:
+            return [""]
+    if hasattr(sel, "count") and sel.count() == 0:
         return [""]
-    options = sel.locator("option")
+    options = sel.locator("option") if hasattr(sel, "locator") else sel.locator("option")
+    # normalize to locator of select element
+    if hasattr(sel, "count") and sel.count() >= 1:
+        select_el = sel.first
+    else:
+        select_el = sel
+    options = select_el.locator("option")
     vals: list[str] = []
     todos = ""
     for i in range(options.count()):
         opt = options.nth(i)
         val = (opt.get_attribute("value") or "").strip()
         text = (opt.inner_text() or "").strip().lower()
-        if not val or val in {"-1", "0"} or "seleccione" in text:
+        if not val or val in {"-1"} or "seleccione" in text:
             continue
         if "todos" in text:
             todos = val
@@ -251,6 +306,10 @@ def _valores_punto_venta(scope: Any) -> list[str]:
         vals.append(val)
     if todos:
         return [todos]
+    # Mono / single PV: leave default (empty) rather than iterating dozens.
+    if len(vals) > 8:
+        LOG.info("demasiados PV (%s); uso el default de la pantalla", len(vals))
+        return [""]
     return vals or [""]
 
 
@@ -298,9 +357,18 @@ def _buscar_y_bajar(
     if body and _RE_NO_RES.search(body):
         return ""
 
+    # Empty results table (headers only) is OK for that month/PV.
+    if _listado_vacio(scope, body):
+        LOG.info("sin comprobantes %s pv=%s", desde[:7], pv or "-")
+        return ""
+
     n = _bajar_pdfs_listado(_active(page), scope, job, dest, tmp_dl, saved)
-    if n == 0 and body and not _RE_NO_RES.search(body):
-        return f"{desde}: vi el listado pero no pude bajar PDFs"
+    if n == 0:
+        # Try bulk export of electronic duplicates when row icons fail.
+        if _exportar_duplicados_todos(_active(page), scope, dest, tmp_dl, saved):
+            return ""
+        if body and not _RE_NO_RES.search(body) and not _listado_vacio(scope, body):
+            return f"{desde}: vi el listado pero no pude bajar PDFs"
     return ""
 
 
@@ -357,12 +425,89 @@ def _pv_nro_de_fila(text: str) -> tuple[int | None, int | None]:
         return None, None
 
 
+
+def _listado_vacio(scope: Any, body: str = "") -> bool:
+    text = body or ""
+    try:
+        if not text:
+            text = scope.locator("body").inner_text(timeout=3_000)
+    except Exception:
+        text = text or ""
+    if text and _RE_NO_RES.search(text):
+        return True
+    # RCEL empty result: headers present, no Ver/export row icons with data
+    rows = scope.locator("table tbody tr")
+    try:
+        n = rows.count()
+    except Exception:
+        n = 0
+    if n == 0:
+        # some RCEL tables have no tbody
+        rows = scope.locator("table tr")
+        try:
+            n = rows.count()
+        except Exception:
+            n = 0
+        # header-only => roughly 1-2 rows
+        if n <= 2 and re.search(r"Fecha\s*Emisi", text, re.I):
+            return True
+    data = 0
+    for i in range(min(n, 30)):
+        try:
+            rtxt = rows.nth(i).inner_text(timeout=800)
+        except Exception:
+            continue
+        if not rtxt.strip():
+            continue
+        low = rtxt.lower()
+        if "fecha" in low and "tipo" in low:
+            continue
+        if re.search(r"\d{2}/\d{2}/\d{4}", rtxt):
+            data += 1
+    return data == 0 and bool(re.search(r"Fecha\s*Emisi", text, re.I))
+
+
+def _exportar_duplicados_todos(
+    page: Page,
+    scope: Any,
+    dest: Path,
+    tmp_dl: Path,
+    saved: list[str],
+) -> bool:
+    before = {p.name for p in tmp_dl.glob("*")} if tmp_dl.exists() else set()
+    clicked = _click_first(
+        page,
+        [
+            scope.get_by_role("button", name=re.compile(r"Exportar Duplicados Electr[oó]nicos", re.I)),
+            scope.get_by_text(re.compile(r"Exportar Duplicados Electr[oó]nicos\s*\(Todos\)", re.I)),
+            scope.locator("input[value*='Duplicados' i], button:has-text('Duplicados')"),
+        ],
+    )
+    if not clicked:
+        return False
+    page.wait_for_timeout(3_500)
+    got = False
+    for f in sorted(tmp_dl.glob("*"), key=lambda x: x.stat().st_mtime, reverse=True):
+        if f.name in before:
+            continue
+        if f.stat().st_size < 200:
+            continue
+        target = dest / f.name
+        shutil.copyfile(f, target)
+        saved.append(str(target))
+        got = True
+        LOG.info("export bulk %s", target.name)
+    return got
+
+
 def _icono_pdf(row: Locator) -> Locator | None:
     candidates = [
-        row.locator("a[title*='Imprimir' i], a[title*='Ver' i], a[title*='PDF' i]"),
-        row.locator("img[alt*='Imprimir' i], img[alt*='Ver' i], img[title*='Imprimir' i]"),
-        row.locator("input[type='image'], input[src*='imprimir' i], input[src*='printer' i]"),
-        row.get_by_role("link", name=re.compile(r"imprimir|ver|pdf", re.I)),
+        row.locator("a[title*='Imprimir' i], a[title*='Ver' i], a[title*='PDF' i], a[title*='Duplicado' i]"),
+        row.locator("img[alt*='Imprimir' i], img[alt*='Ver' i], img[title*='Imprimir' i], img[title*='Ver' i]"),
+        row.locator("input[type='image'], input[src*='imprimir' i], input[src*='printer' i], input[src*='ver' i]"),
+        row.locator("a[href*='pdf' i], a[href*='imprimir' i], a[onclick*='imprimir' i], a[onclick*='pdf' i]"),
+        row.get_by_role("link", name=re.compile(r"imprimir|ver|pdf|duplicado", re.I)),
+        row.locator("td").nth(-4).locator("a, input, img"),  # columna Ver típica
     ]
     for loc in candidates:
         try:
