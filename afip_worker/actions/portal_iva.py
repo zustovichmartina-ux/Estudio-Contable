@@ -254,11 +254,11 @@ def materializar_descarga(
                     )
                     target = dest / target_name
                     target.parent.mkdir(parents=True, exist_ok=True)
-                    if target.exists() and target.stat().st_size > 200:
+                    if target.exists() and target.stat().st_size > 0:
                         out.append(str(target))
                         continue
                     target.write_bytes(zf.read(info))
-                    if target.exists() and target.stat().st_size > 50:
+                    if target.exists() and target.stat().st_size > 0:
                         out.append(str(target))
             return out
         except zipfile.BadZipFile:
@@ -637,7 +637,7 @@ def _bajar_pdfs_filas(
         else:
             filename = f"comprobante_{i + 1:03d}.pdf"
         target = dest / filename
-        if target.exists() and target.stat().st_size > 500:
+        if target.exists() and target.stat().st_size > 0:
             if str(target) not in saved:
                 saved.append(str(target))
             continue

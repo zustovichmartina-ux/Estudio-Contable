@@ -401,13 +401,13 @@ def guardar_descarga(
 
 def copiar_si_nuevo(src: Path, dest: Path) -> str | None:
     dest.parent.mkdir(parents=True, exist_ok=True)
-    if dest.exists() and dest.stat().st_size > 200:
+    if dest.exists() and dest.stat().st_size > 0:
         return str(dest)
     try:
         shutil.copyfile(src, dest)
     except OSError as exc:
         LOG.warning("no pude copiar %s → %s: %s", src, dest, exc)
         return None
-    if dest.exists() and dest.stat().st_size > 50:
+    if dest.exists() and dest.stat().st_size > 0:
         return str(dest)
     return None

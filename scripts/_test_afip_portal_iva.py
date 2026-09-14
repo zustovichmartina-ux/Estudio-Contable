@@ -6,6 +6,7 @@ import io
 import sys
 import tempfile
 import zipfile
+from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
@@ -21,6 +22,7 @@ from afip_worker.actions.portal_iva import (
     nombre_destino_descarga,
 )
 from afip_worker.jobs import ACTIONS, create_job
+from afip_worker.ui_streamlit import _ACTIONS_LIVE, _ruta_sugerida
 
 
 def _job(tmp: Path, **params):
@@ -116,6 +118,15 @@ def test_create_job_rechaza_action_inventada() -> None:
     raise AssertionError("esperaba ValueError")
 
 
+def test_ruta_sugerida_portal_iva() -> None:
+    assert "bajar_portal_iva" in _ACTIONS_LIVE
+    assert "bajar_comprobantes" in _ACTIONS_LIVE
+    ruta = _ruta_sugerida("4 GOMAS SA", date(2026, 9, 14))
+    assert ruta.endswith(r"\4 GOMAS SA\Facturas\09-2026")
+    portal = _ruta_sugerida("4 GOMAS SA", date(2026, 8, 31), "bajar_portal_iva")
+    assert portal.endswith(r"\4 GOMAS SA\Impuestos\Portal IVA\08-2026")
+
+
 def main() -> int:
     test_action_en_tuple()
     test_nombres_y_boton_presentar()
@@ -124,6 +135,7 @@ def main() -> int:
         test_materializar_zip_csv(tmp)
         test_dry_run_no_abre_chrome(tmp)
     test_create_job_rechaza_action_inventada()
+    test_ruta_sugerida_portal_iva()
     print("PASS portal_iva helpers + dry-run")
     return 0
 
