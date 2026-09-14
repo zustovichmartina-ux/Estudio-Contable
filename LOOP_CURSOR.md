@@ -26,6 +26,24 @@ El worker **pollea solo** `jobs/pending` cada ~3 s. La web en Streamlit Cloud **
 
 Secrets Cloud: `AFIP_WORKER_URL` + `AFIP_WORKER_TOKEN` (ver `jobs/cloud_bridge.txt` al arrancar).
 
+## Túnel Cloudflare estable (recomendado)
+
+Sin config extra el worker abre un **túnel rápido** (`*.trycloudflare.com`): la URL cambia en cada restart y hay que actualizar Secrets. Para una URL fija, crear **una vez** un túnel con nombre:
+
+1. Instalar: `winget install --id Cloudflare.cloudflared`
+2. Login (elige el dominio de Cloudflare): `cloudflared tunnel login`
+3. Crear: `cloudflared tunnel create afip-worker`  
+   Copia el JSON de credenciales a `jobs/cloudflared/<UUID>.json` (gitignored). En Windows, si no lo encuentra, usá ruta absoluta en `credentials-file`.
+4. Hostname público, una de estas:
+   - DNS: `cloudflared tunnel route dns afip-worker afip-worker.TU-DOMINIO.com`
+   - o en Cloudflare Zero Trust → Networks → Tunnels → Public hostname → origen `http://127.0.0.1:8765`
+5. Copiar `jobs/cloudflared/config.yml.example` → `jobs/cloudflared/config.yml` y completar UUID + hostname.  
+   Alternativa: `AFIP_CLOUDFLARED_CONFIG` (ruta al YAML) y/o `AFIP_TUNNEL_HOSTNAME` (URL pública).  
+   Token de Zero Trust: `AFIP_CLOUDFLARED_TOKEN` + `AFIP_TUNNEL_HOSTNAME` (sin YAML).
+6. Arrancar `iniciar_afip_worker.bat`. Pegar **una vez** URL + token de `jobs/cloud_bridge.txt` en Streamlit Secrets. Al reiniciar el worker la URL no cambia.
+
+No subir `jobs/cloudflared/*.json` ni `config.yml` al repo. El token de la API (`AFIP_WORKER_TOKEN`) sigue siendo obligatorio.
+
 ## Auth (regla dura)
 
 - Registry `jobs/cuit_registry.json`: `ready | needs_admin | unknown | failed`.

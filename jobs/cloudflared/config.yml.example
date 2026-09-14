@@ -1,0 +1,17 @@
+# Túnel Cloudflare con nombre (URL estable para Streamlit Secrets).
+#
+# 1. Copiá este archivo a config.yml en esta misma carpeta (gitignored).
+# 2. Reemplazá TU_TUNNEL_UUID y el hostname público.
+# 3. Poné el JSON de credenciales en esta carpeta (también gitignored).
+#    En Windows, si cloudflared no lo encuentra, usá la ruta absoluta.
+# 4. `service` debe coincidir con el --port del worker (default 8765).
+#
+# No subas config.yml ni el JSON al repo.
+
+tunnel: TU_TUNNEL_UUID
+credentials-file: jobs/cloudflared/TU_TUNNEL_UUID.json
+
+ingress:
+  - hostname: afip-worker.TU-DOMINIO.com
+    service: http://127.0.0.1:8765
+  - service: http_status:404

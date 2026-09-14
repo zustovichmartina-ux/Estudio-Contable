@@ -120,8 +120,8 @@ def render_arca_module() -> None:
         else:
             st.error(
                 "No se llega al worker. En la PC RECEPCION dejá abierto "
-                "`iniciar_afip_worker.bat` y actualizá `AFIP_WORKER_URL` en Secrets "
-                "si el túnel cambió de URL."
+                "`iniciar_afip_worker.bat`. Si usás túnel rápido, actualizá "
+                "`AFIP_WORKER_URL` en Secrets cuando cambie la URL."
             )
         st.caption(f"Cola remota: `{st.secrets.get('AFIP_WORKER_URL')}`")
     else:

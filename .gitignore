@@ -112,6 +112,9 @@ jobs/needs_auth/*
 jobs/.login_lock
 jobs/.worker_token
 jobs/cloud_bridge.txt
+jobs/cloudflared/*
+!jobs/cloudflared/.gitkeep
+!jobs/cloudflared/config.yml.example
 jobs/worker.log
 jobs/worker.log.err
 jobs/chrome_afip/
