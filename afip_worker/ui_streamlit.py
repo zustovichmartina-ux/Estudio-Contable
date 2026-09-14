@@ -30,11 +30,12 @@ from afip_worker.registry import (
 
 _ACTION_LABELS = {
     "bajar_comprobantes": "Descargar Comprobantes en Línea",
+    "bajar_portal_iva": "Descargar Portal IVA (compras / ventas)",
     "emitir_fcc": "Emitir facturas (FCC) — próximamente",
     "bajar_veps": "Descargar VEPs — próximamente",
 }
-_ACTIONS_UI = ("bajar_comprobantes", "emitir_fcc", "bajar_veps")
-_ACTIONS_LIVE = frozenset({"bajar_comprobantes"})
+_ACTIONS_UI = ("bajar_comprobantes", "bajar_portal_iva", "emitir_fcc", "bajar_veps")
+_ACTIONS_LIVE = frozenset({"bajar_comprobantes", "bajar_portal_iva"})
 
 _STATUS_BADGE = {
     "pending": "En cola",
@@ -88,9 +89,13 @@ def _carpeta_cliente(razon: str) -> str:
     return re.sub(r"\s+", " ", t)
 
 
-def _ruta_sugerida(razon: str, hasta: date | None = None) -> str:
+def _ruta_sugerida(razon: str, hasta: date | None = None, action: str = "") -> str:
     mes = (hasta or date.today()).strftime("%m-%Y")
     slug = _carpeta_cliente(razon)
+    if action == "bajar_portal_iva":
+        if not slug:
+            return rf"\\TANGOSRV\Compartido\CLIENTES\...\Impuestos\Portal IVA\{mes}"
+        return rf"\\TANGOSRV\Compartido\CLIENTES\{slug}\Impuestos\Portal IVA\{mes}"
     if not slug:
         return rf"\\TANGOSRV\Compartido\CLIENTES\...\Facturas\{mes}"
     return rf"\\TANGOSRV\Compartido\CLIENTES\{slug}\Facturas\{mes}"
@@ -281,7 +286,7 @@ def _render_encolar(remote: RemoteWorker | None) -> None:
         if action not in _ACTIONS_LIVE:
             st.warning(
                 "FCC y VEPs todavía no entran a ARCA. "
-                "Hoy lo que corre en RECEPCION es **Descargar Comprobantes en Línea**."
+                "Hoy en RECEPCION corren **Comprobantes en Línea** y **Portal IVA**."
             )
 
     label, note = _lookup_acceso(cuit, rows)
@@ -351,8 +356,13 @@ def _render_encolar(remote: RemoteWorker | None) -> None:
                 key="arca_job_analizar_mono",
                 help="El worker arma el papel de trabajo de monotributo con los PDF bajados.",
             )
+        elif action == "bajar_portal_iva":
+            st.caption(
+                "Baja CSV/PDF de compras y ventas (Portal IVA; si hace falta, Mis Comprobantes) "
+                r"a Impuestos\Portal IVA\MM-YYYY. No presenta la DDJJ."
+            )
 
-    sugerida = _ruta_sugerida(razon, hasta_ruta)
+    sugerida = _ruta_sugerida(razon, hasta_ruta, action)
     ruta = st.text_input(
         "Ruta destino (UNC)",
         placeholder=sugerida,
@@ -372,7 +382,8 @@ def _render_encolar(remote: RemoteWorker | None) -> None:
             st.error("Subí la plantilla Excel para emitir FCC.")
         elif action not in _ACTIONS_LIVE:
             st.error(
-                "Esa acción todavía no entra a ARCA. Elegí **Descargar Comprobantes en Línea**."
+                "Esa acción todavía no entra a ARCA. "
+                "Elegí **Descargar Comprobantes en Línea** o **Descargar Portal IVA**."
             )
         else:
             try:

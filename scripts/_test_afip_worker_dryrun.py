@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Test dry-run: encola 3 jobs (una por acción) y verifica movimiento de carpetas."""
+"""Test dry-run: encola 4 jobs (una por acción) y verifica movimiento de carpetas."""
 from __future__ import annotations
 
 import os
@@ -43,6 +43,11 @@ def main() -> int:
             "periodo_hasta": "2026-08-31",
             "analizar_monotributo": True,
         }),
+        ("bajar_portal_iva", {
+            "ruta_destino": str(dest),
+            "periodo_desde": "2026-08-01",
+            "periodo_hasta": "2026-08-31",
+        }),
     ]
     ids = []
     for action, params in specs:
@@ -57,9 +62,9 @@ def main() -> int:
         ids.append(job.id)
         print("enqueued", job.id, action)
 
-    assert len(list_jobs("pending", tmp)) == 3
+    assert len(list_jobs("pending", tmp)) == 4
 
-    for _ in range(3):
+    for _ in range(4):
         ok = process_one(dry_run=True, root=tmp)
         assert ok, "esperaba un job pending"
 
@@ -74,13 +79,17 @@ def main() -> int:
     assert len(running) == 0, running
     assert len(error) == 0, [e.result.message for e in error]
     assert len(needs) == 0
-    assert len(done) == 3
+    assert len(done) == 4
     done_ids = {j.id for j in done}
     assert set(ids) == done_ids
     cmpte = next(j for j in done if j.action == "bajar_comprobantes")
     extra_mono = (cmpte.result.extra or {}).get("monotributo") or {}
     assert extra_mono.get("cantidad") == 0
     assert extra_mono.get("errores")
+
+    portal = next(j for j in done if j.action == "bajar_portal_iva")
+    assert "[dry-run] bajar_portal_iva" in portal.result.message
+    assert any("Compras.csv" in f for f in portal.result.files)
 
     # needs_auth: CUIT sin acceso (nuevo) → frena solo
     job_auth = create_job(
@@ -116,7 +125,7 @@ def main() -> int:
     print("needs_auth OK (force)", job_force.id)
 
     shutil.rmtree(tmp, ignore_errors=True)
-    print("PASS dry-run 3 jobs + needs_auth")
+    print("PASS dry-run 4 jobs + needs_auth")
     return 0
 
 

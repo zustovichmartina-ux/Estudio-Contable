@@ -6,11 +6,19 @@ from datetime import date as _date
 from pathlib import Path
 
 from ..jobs import Job, limpiar_ruta
-from ..naming import nombre_comprobante, nombre_fcc, nombre_vep
+from ..naming import (
+    dest_portal_iva,
+    meses_del_periodo,
+    nombre_comprobante,
+    nombre_fcc,
+    nombre_portal_iva_csv,
+    nombre_vep,
+)
 from .comprobantes import run_bajar_comprobantes_live
+from .portal_iva import run_bajar_portal_iva_live
 from .result import ActionResult
 
-__all__ = ["ActionResult", "run_action", "DISPATCH"]
+__all__ = ["ActionResult", "run_action", "DISPATCH", "run_bajar_portal_iva", "run_bajar_comprobantes"]
 
 
 def _destino(job: Job) -> Path:
@@ -129,10 +137,46 @@ def run_bajar_comprobantes(job: Job, *, dry_run: bool = True) -> ActionResult:
     return _analizar_monotributo_si_pide(job, result)
 
 
+def run_bajar_portal_iva(job: Job, *, dry_run: bool = True) -> ActionResult:
+    dest = _destino(job)
+    desde = str(job.params.get("periodo_desde") or "")[:10]
+    hasta = str(job.params.get("periodo_hasta") or job.params.get("periodo") or "")[:10]
+    if not desde:
+        periodo = str(job.params.get("periodo") or "")[:7]
+        if len(periodo) == 7 and periodo[4] == "-":
+            desde = f"{periodo}-01"
+            hasta = desde
+    if dry_run:
+        files: list[str] = []
+        rango: list[tuple[str, str]] = []
+        if desde and hasta:
+            try:
+                rango = meses_del_periodo(desde, hasta)
+            except ValueError:
+                rango = []
+        if not rango:
+            folder = dest_portal_iva(str(dest), desde or "0000-01-01")
+            files.append(str(folder / nombre_portal_iva_csv("compras")))
+            files.append(str(folder / nombre_portal_iva_csv("ventas")))
+        else:
+            for mes_desde, _mes_hasta in rango:
+                folder = dest_portal_iva(str(dest), mes_desde)
+                files.append(str(folder / nombre_portal_iva_csv("compras")))
+                files.append(str(folder / nombre_portal_iva_csv("ventas")))
+        return ActionResult(
+            ok=True,
+            message=f"[dry-run] bajar_portal_iva {desde}→{hasta} → {files[0]}",
+            files=files,
+            extra={"fuente": "dry-run", "manual_fallback": ""},
+        )
+    return run_bajar_portal_iva_live(job)
+
+
 DISPATCH = {
     "emitir_fcc": run_emitir_fcc,
     "bajar_veps": run_bajar_veps,
     "bajar_comprobantes": run_bajar_comprobantes,
+    "bajar_portal_iva": run_bajar_portal_iva,
 }
 
 

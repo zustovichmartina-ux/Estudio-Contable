@@ -93,7 +93,7 @@ def loop(*, dry_run: bool = True, interval: float = 3.0, once: bool = False, roo
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Worker AFIP (cola jobs/)")
     parser.add_argument("--dry-run", action="store_true", default=True, help="Sin AFIP real (default si no hay --live)")
-    parser.add_argument("--live", action="store_true", help="Comprobantes en Línea en segundo plano (sesión persistente)")
+    parser.add_argument("--live", action="store_true", help="Chrome/AFIP en segundo plano (RCEL y Portal IVA)")
     parser.add_argument("--once", action="store_true", help="Procesar un solo job y salir")
     parser.add_argument("--interval", type=float, default=3.0, help="Segundos entre polls")
     parser.add_argument("--jobs-root", type=str, default="", help="Override AFIP_JOBS_ROOT")

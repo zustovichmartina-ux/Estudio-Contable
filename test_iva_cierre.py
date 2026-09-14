@@ -1851,6 +1851,33 @@ def test_arca_dryrun_analizar_monotributo_deja_nota():
   print("OK test_arca_dryrun_analizar_monotributo_deja_nota")
 
 
+def test_arca_dryrun_portal_iva_no_abre_chrome():
+  import tempfile
+  from unittest.mock import patch
+  from afip_worker.actions import run_bajar_portal_iva
+  from afip_worker.jobs import create_job
+
+  dest = Path(tempfile.mkdtemp())
+  job = create_job(
+      cuit="27-42043034-0",
+      razon_social="Test Portal",
+      action="bajar_portal_iva",
+      params={
+          "ruta_destino": str(dest),
+          "periodo_desde": "2026-08-01",
+          "periodo_hasta": "2026-08-31",
+      },
+  )
+  with patch("afip_worker.actions.portal_iva.chrome_context") as mock_ctx:
+      mock_ctx.side_effect = AssertionError("dry-run no debe abrir Chrome")
+      result = run_bajar_portal_iva(job, dry_run=True)
+  mock_ctx.assert_not_called()
+  assert result.ok
+  assert "[dry-run] bajar_portal_iva" in result.message
+  assert any("Compras.csv" in f for f in result.files)
+  print("OK test_arca_dryrun_portal_iva_no_abre_chrome")
+
+
 def test_arca_ui_helpers_prefijan_sin_json_crudo():
   from datetime import date as _date
 
@@ -1868,6 +1895,8 @@ def test_arca_ui_helpers_prefijan_sin_json_crudo():
   )
   ruta = _ruta_sugerida("4 GOMAS SA", _date(2026, 9, 14))
   assert ruta.endswith(r"\4 GOMAS SA\Facturas\09-2026")
+  portal = _ruta_sugerida("4 GOMAS SA", _date(2026, 8, 31), "bajar_portal_iva")
+  assert portal.endswith(r"\4 GOMAS SA\Impuestos\Portal IVA\08-2026")
   assert _fmt_dt("2026-09-14T09:02:00") == "14/09/2026 09:02"
   print("OK test_arca_ui_helpers_prefijan_sin_json_crudo")
 
@@ -2008,6 +2037,7 @@ if __name__ == "__main__":
     test_proyeccion_monotributo_fijo_vs_rodante()
     test_conceptos_bancos_debito_no_toma_regla_credito()
     test_arca_dryrun_analizar_monotributo_deja_nota()
+    test_arca_dryrun_portal_iva_no_abre_chrome()
     test_arca_ui_helpers_prefijan_sin_json_crudo()
     test_gate_asiento_bloquea_desbalance_y_99999()
     test_motor_match_debil_no_queda_ok()
