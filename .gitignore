@@ -99,6 +99,8 @@ data/secure/
 *.url
 
 # AFIP job queue (JSON runtime + plantillas subidas; keep folder structure)
+jobs/archive/*
+!jobs/archive/.gitkeep
 jobs/pending/*
 !jobs/pending/.gitkeep
 jobs/running/*

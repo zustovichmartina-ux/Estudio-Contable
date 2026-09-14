@@ -38,7 +38,7 @@ def jobs_root() -> Path:
 
 def ensure_job_dirs(root: Path | None = None) -> Path:
     root = root or jobs_root()
-    for name in ("pending", "running", "needs_auth", "done", "error"):
+    for name in ("pending", "running", "needs_auth", "done", "error", "archive"):
         (root / name).mkdir(parents=True, exist_ok=True)
     return root
 
@@ -306,6 +306,48 @@ def mark_needs_auth(job: Job, note: str = "", root: Path | None = None) -> Path:
     job.auth = JobAuth(status="needs_admin", note=note)
     job.result = JobResult(message=note or "Se requiere login AFIP / 2FA del admin")
     return move_job(job, "needs_auth", root)
+
+
+def archive_job(job: Job, root: Path | None = None) -> Path:
+    """Saca el JSON del tablero. El estado queda grabado adentro."""
+    root = root or jobs_root()
+    ensure_job_dirs(root)
+    dest = root / "archive" / f"{job.id}.json"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(
+        json.dumps(job.to_dict(), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    for st in STATUSES:
+        old = job_path(job, st, root)
+        if old.exists() and old.resolve() != dest.resolve():
+            try:
+                old.unlink()
+            except OSError:
+                pass
+    return dest
+
+
+def archive_cumplidas(job: Job, root: Path | None = None) -> int:
+    """Al cumplir una tarea, limpia reintentos viejos del mismo cliente y acción."""
+    root = root or jobs_root()
+    cuit_k = re.sub(r"\D", "", job.cuit or "")
+    n = 0
+    for other in list(list_jobs(root=root)):
+        if other.status in {"pending", "running"}:
+            continue
+        same = (
+            other.id == job.id
+            or (
+                re.sub(r"\D", "", other.cuit or "") == cuit_k
+                and other.action == job.action
+            )
+        )
+        if not same:
+            continue
+        archive_job(other, root)
+        n += 1
+    return n
 
 
 def clear_queue(root: Path | None = None, *, statuses: tuple[Status, ...] | None = None) -> int:

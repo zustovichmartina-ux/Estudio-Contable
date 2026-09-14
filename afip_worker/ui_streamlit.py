@@ -39,6 +39,7 @@ _ACTION_LABELS = {
 _ACTIONS_UI = ("bajar_comprobantes", "bajar_portal_iva", "emitir_fcc", "bajar_veps")
 _ACTIONS_LIVE = frozenset(_ACTIONS_UI)
 
+_OPEN_STATUSES = frozenset({"pending", "running", "error", "needs_auth"})
 _STATUS_BADGE = {
     "pending": "En cola",
     "running": "En curso",
@@ -531,7 +532,9 @@ def _watch_tareas() -> None:
 
 
 def _render_cola() -> None:
-    st.caption("Se actualiza sola cada 5 segundos. Te avisa acá cuando la tarea está ejecutada.")
+    st.caption(
+        "Solo lo que falta hacer. Si la tarea ya se cumplió, el contador vuelve a 0."
+    )
     _render_cola_live()
 
 
@@ -544,22 +547,21 @@ def _render_cola_live() -> None:
     rows_src = _fetch_jobs()
     if rows_src is None:
         return
-    n_pending = sum(1 for j in rows_src if j.get("status") == "pending")
-    n_running = sum(1 for j in rows_src if j.get("status") == "running")
-    n_auth = sum(1 for j in rows_src if j.get("status") == "needs_auth")
-    n_done = sum(1 for j in rows_src if j.get("status") == "done")
-    n_error = sum(1 for j in rows_src if j.get("status") == "error")
-    c1, c2, c3, c4, c5 = st.columns(5)
+    abiertos = [j for j in rows_src if str(j.get("status")) in _OPEN_STATUSES]
+    n_pending = sum(1 for j in abiertos if j.get("status") == "pending")
+    n_running = sum(1 for j in abiertos if j.get("status") == "running")
+    n_auth = sum(1 for j in abiertos if j.get("status") == "needs_auth")
+    n_error = sum(1 for j in abiertos if j.get("status") == "error")
+    c1, c2, c3, c4 = st.columns(4)
     c1.metric("En cola", n_pending)
     c2.metric("En curso", n_running)
-    c3.metric("Listas", n_done)
-    c4.metric("Error", n_error)
-    c5.metric("Falta 2FA", n_auth)
-    if not rows_src:
-        st.info("Sin trabajos todavía.")
+    c3.metric("Error", n_error)
+    c4.metric("Falta 2FA", n_auth)
+    if not abiertos:
+        st.success("Nada pendiente.")
         return
     rows = []
-    for j in reversed(rows_src):
+    for j in reversed(abiertos):
         result = j.get("result") or {}
         rows.append(
             {
@@ -596,7 +598,7 @@ def _render_cola_live() -> None:
                 with st.expander(f"Advertencias {j.get('id')}", expanded=False):
                     st.dataframe(errs, use_container_width=True, hide_index=True)
 
-    needs = [j for j in rows_src if j.get("status") == "needs_auth"]
+    needs = [j for j in abiertos if j.get("status") == "needs_auth"]
     if needs:
         st.warning(
             f"**{len(needs)} trabajo(s) esperan 2FA.** "

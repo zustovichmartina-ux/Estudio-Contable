@@ -24,6 +24,7 @@ from afip_worker.jobs import (
     login_in_progress,
     mark_needs_auth,
     write_job,
+    archive_cumplidas,
 )
 from afip_worker.notify import aviso_tarea
 from afip_worker.server import start_api_thread
@@ -104,6 +105,8 @@ def process_one(*, dry_run: bool = True, root: Path | None = None) -> bool:
         extra=getattr(result, "extra", None) or {},
         root=root,
     )
+    if result.ok and not dry_run:
+        archive_cumplidas(job, root)
     LOG.info(
         "%s %s: %s",
         "done" if result.ok else "error",
