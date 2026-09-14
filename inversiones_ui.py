@@ -123,15 +123,37 @@ def _detectar_tipo(instrumento: str) -> str:
 # Sección principal
 # ────────────────────────────────────────────────────────────────────────
 
+@st.cache_resource(show_spinner=False)
+def _asegurar_tablas_inversiones() -> bool:
+    """Red de seguridad: crea (si hace falta) las tablas de Inversiones y
+    siembra el TC BNA histórico, por si ``database.inicializar_bd()`` no
+    llegó a esta parte (p. ej. si algo previo en esa función global tira una
+    excepción y corta la secuencia antes de llegar a Inversiones — así se
+    vio el error "no such table: inversiones_tc_bna" en un despliegue nuevo).
+    Todas las sentencias que corre son CREATE TABLE IF NOT EXISTS / ALTER con
+    manejo de "ya existe", así que es seguro llamarlo siempre — y
+    ``@st.cache_resource`` además asegura que solo se ejecute una vez por
+    proceso corriendo, no en cada rerun."""
+    with db.obtener_conexion() as conn:
+        idb.inicializar_tablas_inversiones(conn)
+        conn.commit()
+    idb.sembrar_tc_bna_default()
+    return True
+
+
 def seccion_inversiones_arg() -> None:
     """Renderiza la pestaña Inversiones."""
+    _asegurar_tablas_inversiones()
     st.subheader("📈 Inversiones")
-    tab_carga, tab_dep, tab_pat, tab_mov = st.tabs(
-        ["Carga de datos", "Depuración", "Patrimonio", "Movimientos"]
+    tab_carga, tab_usd, tab_dep, tab_pat, tab_mov = st.tabs(
+        ["Carga de datos", "Tenencia USD", "Depuración", "Patrimonio", "Movimientos"]
     )
 
     with tab_carga:
         _tab_carga_datos()
+
+    with tab_usd:
+        _tab_tenencia_usd()
 
     with tab_dep:
         _tab_depuracion()
@@ -597,6 +619,39 @@ def _tabla_operaciones(cliente: dict, periodo: str) -> None:
             st.rerun()
 
 
+def _tab_tenencia_usd() -> None:
+    clientes = db.listar_clientes()
+    if not clientes:
+        st.warning("Todavía no hay clientes cargados en el estudio.")
+        return
+
+    opciones = {f"{c['nombre']} ({c['cuit']})": c for c in clientes}
+    nombre_sel = st.selectbox("Cliente", list(opciones.keys()), key="usd_cli_sel")
+    cliente = opciones[nombre_sel]
+
+    st.caption(
+        "Acá se arma la tenencia de dólares del cliente: cada compra o "
+        "recepción de USD (MEP, oficial, informal, remesa) se carga como un "
+        "lote con su TC de origen. Esos lotes se van consumiendo por orden "
+        "PEPS (el más antiguo primero) a medida que se usan para pagar "
+        "compras en USD en Depuración — la tabla de abajo muestra cuánto de "
+        "cada lote ya se usó y cuánto queda disponible."
+    )
+
+    lotes_actuales = idb.listar_pool_usd(cliente["id"])
+    total_cargado = sum(l["cant_usd"] for l in lotes_actuales)
+    total_disponible = sum(l["disponible_usd"] for l in lotes_actuales)
+    total_usado = total_cargado - total_disponible
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("USD cargados (histórico)", f"USD {total_cargado:,.2f}".replace(",", "."))
+    m2.metric("USD ya utilizados", f"USD {total_usado:,.2f}".replace(",", "."))
+    m3.metric("USD disponibles (tenencia actual)", f"USD {total_disponible:,.2f}".replace(",", "."))
+    st.divider()
+
+    _pool_usd(cliente)
+
+
 def _tab_depuracion() -> None:
     clientes = db.listar_clientes()
     if not clientes:
@@ -616,12 +671,11 @@ def _tab_depuracion() -> None:
 
     st.caption(
         "Revisá cada instrumento: confirmá si la operación fue en ARS o USD. "
-        "Para compras en USD, asignale lotes del pool con su TC de origen — "
-        "las operaciones en ARS no requieren nada acá."
+        "Para compras en USD, asignale lotes del pool con su TC de origen "
+        "(cargados en la solapa «Tenencia USD») — las operaciones en ARS no "
+        "requieren nada acá."
     )
 
-    _pool_usd(cliente)
-    st.divider()
     _depuracion_por_instrumento(cliente, periodo)
 
 
