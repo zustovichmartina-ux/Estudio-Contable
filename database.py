@@ -210,11 +210,16 @@ def inicializar_bd() -> None:
         auth_oficina.inicializar_tabla_usuarios_oficina(conn)
         _inicializar_tablas_sueldos(conn)
         _inicializar_tablas_conciliacion(conn)
+        # Import local: evita ciclo de imports con database.py
+        import inversiones_db
+
+        inversiones_db.inicializar_tablas_inversiones(conn)
         conn.commit()
     auth_oficina.sembrar_usuarios_oficina_default()
     _sembrar_convenios_sueldos_default()
     _reset_cct_comercio_masivo_si_corresponde()
     sembrar_reglas_conciliacion_default()
+    inversiones_db.sembrar_tc_bna_default()
 
 
 def _reglas_cct_basicas() -> dict:

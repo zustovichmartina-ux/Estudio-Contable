@@ -31,6 +31,7 @@ from prestamos_listado_excel import (
 import auth_oficina
 import database as db
 from afip_worker.ui_streamlit import render_arca_module
+from inversiones_ui import seccion_inversiones_arg
 from cruce_facturas_arca import procesar_cruce_facturas_arca
 from procesador import (
     BANCOS_ARGENTINOS,
@@ -886,6 +887,7 @@ _VENTANAS_PRINCIPALES = (
     "Devengamiento de Impuestos",
     "Conciliación Bancaria",
     "Préstamos Financieros",
+    "Inversiones",
     "Herramientas",
     "Tango",
     "ARCA",
@@ -906,6 +908,10 @@ _VENTANA_HEADER = {
     "Préstamos Financieros": (
         "Préstamos",
         "Armá la auditoría de cuotas desde los PDF",
+    ),
+    "Inversiones": (
+        "Inversiones",
+        "Cargá operaciones, depurá el pool USD y armá el patrimonio",
     ),
     "Herramientas": (
         "Herramientas",
@@ -928,6 +934,7 @@ _VENTANA_NAV_LABELS = {
     "Devengamiento de Impuestos": "Devengamiento",
     "Conciliación Bancaria": "Conciliación",
     "Préstamos Financieros": "Préstamos",
+    "Inversiones": "Inversiones",
     "Herramientas": "Herramientas",
     "Tango": "Tango",
     "ARCA": "ARCA",
@@ -13832,6 +13839,7 @@ def main() -> None:
             - **Devengamientos de Fin de Mes**: solo Personas Jurídicas → Excel asientos Tango.
             - **Conciliación Bancaria**: extractos PDF + lista Tango → planilla Excel clonada.
             - **Préstamos Financieros**: auditoría de cuotas desde PDFs bancarios.
+            - **Inversiones**: carga de operaciones, depuración del pool USD y patrimonio (Ganancias / bienes personales).
             - **Herramientas**: recategorización monotributo; matcheo PDF + Tango; cuadro bancario; extractos; FCI FIFO; caja USD; liquidaciones; cruce facturas.
             - **Tango**: agente del estudio (responde, formula y lee capturas) con las ayudas Axoft y el export de sueldos.
             - **ARCA**: encola jobs AFIP (Comprobantes en Línea, Portal IVA, FCC/VEPs); el worker local ejecuta en Chrome. Sin claves en la web.
@@ -13860,6 +13868,8 @@ def main() -> None:
                 _seccion_conciliacion_bancaria_balance()
         elif ventana_activa == "Préstamos Financieros":
             _seccion_auditoria_prestamos()
+        elif ventana_activa == "Inversiones":
+            seccion_inversiones_arg()
         elif ventana_activa == "Tango":
             render_tango_bot()
         elif ventana_activa == "ARCA":

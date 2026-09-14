@@ -1,0 +1,8812 @@
+[
+ {
+  "ticker": "MTR",
+  "nombre": "A3 MERCADOS S.A. O",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "LOMA",
+  "nombre": "ACC.ORD. LOMA NEGR",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "CVH",
+  "nombre": "ACC.ORD.CABLEVISIO",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "RICH",
+  "nombre": "ACC.ORD.LABOR.RICH",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "AGRO",
+  "nombre": "AGROMETAL S.A.I. E",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "ALUA",
+  "nombre": "ALUAR S.A ORD 1 V",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "AUSO",
+  "nombre": "AUTOPISTAS DEL SOL",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "GAMI",
+  "nombre": "B-GAMING S.A. ACC.",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "BBAR",
+  "nombre": "BANCO BBVA ARG ESC",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "BHIP",
+  "nombre": "BANCO HIPOTECARIO",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "BMA.5",
+  "nombre": "BANCO MACRO S.A.",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "BMA",
+  "nombre": "BANCO MACRO S.A. B",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "BPAT",
+  "nombre": "BANCO PATAGONIA AC",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "VALO",
+  "nombre": "BCO DE VALORES ACC",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "BOLT",
+  "nombre": "BOLDT S.A. ACCIONE",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "BYMA",
+  "nombre": "BOLSAS Y MERCADOS",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "CGPA2",
+  "nombre": "CAMUZZI GAS PAMPE",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "CAPX",
+  "nombre": "CAPEX S.A. A 1 V. E",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "CARC",
+  "nombre": "CARBOCLOR S.A ESCR",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "CADO",
+  "nombre": "CARLOS CASADO ESC",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "CELU",
+  "nombre": "CELULOSA ARGENTINA",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "CECO2",
+  "nombre": "CENTRAL COSTANERA",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "CEPU",
+  "nombre": "CENTRAL PUERTO S.A",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "INTR",
+  "nombre": "CIA.INTRODUCTORA ABCCIONES 382,5 Pesos 1 30501290323 CIA. INTRODUCTORA DE BUENOS AIRES S.A.",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "CTIO",
+  "nombre": "CONSULTATIO ORD. 1",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "COUR",
+  "nombre": "CONTINENTAL URBANA",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "CRES",
+  "nombre": "CRESUD S.A. ORD.",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "DGCE",
+  "nombre": "DISTRIB GAS DEL CEN",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "DGCU2",
+  "nombre": "DISTRIBUIDORA DE G",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "DOME",
+  "nombre": "DOMEC S.A. - ORDIN",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "ECOG",
+  "nombre": "ECOGAS INV. CL.D 1",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "EDN",
+  "nombre": "EDENOR S.A. B 1 V",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "EDSH",
+  "nombre": "EDESA HOLDING SA 1",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "FERR",
+  "nombre": "FERRUM S.A. B ESC",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "FIPL",
+  "nombre": "FIPLASTO ESCRITURAL",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "REGE",
+  "nombre": "GARCIA REGUERA S.A",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "GARO",
+  "nombre": "GAROVAGLIO Y ZORR",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "GCDI",
+  "nombre": "GCDI S.A.",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "GRIM",
+  "nombre": "GRIMOLDI- B ORDS.",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "GCLA",
+  "nombre": "GRUPO CLARIN S.A. A",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "OEST",
+  "nombre": "GRUPO CONCESIONARI",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "GGAL",
+  "nombre": "GRUPO FINANCIERO",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "SUPV",
+  "nombre": "GRUPO SUPERVIELLE",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "HAVA",
+  "nombre": "HAVANNA HOLDING",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "HARG",
+  "nombre": "HOLCIM (ARGENTINA)",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "HSAT",
+  "nombre": "HOLDSAT ACC ORD ES",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "DYCA",
+  "nombre": "IEB CONSTRUCCIONES",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "PATA",
+  "nombre": "IMPORTADORA Y EXP",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "ROSE",
+  "nombre": "INST. ROSENBUSCH",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "INVJ",
+  "nombre": "INVERSORA JURAMEN",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "IRSA",
+  "nombre": "IRSA INVERSIONES Y",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "LEDE",
+  "nombre": "LEDESMA ORDINARIA",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "LONG",
+  "nombre": "LONGVIE S.A.- ORDS",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "METR",
+  "nombre": "METROGAS S.A. ESCRI",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "MIRG",
+  "nombre": "MIRGOR S.A.- ORDS.",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "MOLA5",
+  "nombre": "MOLINOS AGRO S.A.",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "MOLA",
+  "nombre": "MOLINOS AGRO S.A.",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "SEMI",
+  "nombre": "MOLINOS J.SEMINO E",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "MOLI",
+  "nombre": "MOLINOS RIO DE LA A P CCIONES 3435 Pesos 1 30500858628 MOLINOS RIO DE LA PLATA S.A.",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "MOLI5",
+  "nombre": "MOLINOS RIO DE LA A P CCIONES 4960 Pesos 1 30500858628 MOLINOS RIO DE LA PLATA S.A.",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "MORI",
+  "nombre": "MORIXE HNOS. S.A.",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "GBAN",
+  "nombre": "NATURGY BAN S.A. O",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "PAMP",
+  "nombre": "PAMPA ENERGIA S.A.",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "POLL",
+  "nombre": "POLLEDO S.A. ORD.",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "RAGH",
+  "nombre": "RAGHSA S.A. ACC ORD",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "RIGO",
+  "nombre": "RIGOLLEAU S.A.- OR",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "SAMI",
+  "nombre": "SAN MIGUEL S.A. ESC",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "COME",
+  "nombre": "SOCIEDAD COMERCIA",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "TECO2",
+  "nombre": "TELECOM ARGENTINA",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "TXAR",
+  "nombre": "TERNIUM ARG S.A.OR",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "TGNO4",
+  "nombre": "TRANS. GAS DEL NORT",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "TRAN",
+  "nombre": "TRANSENER S.A. ESCR",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "TGSU2",
+  "nombre": "TRANSPORTADORA DE",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "YPFD",
+  "nombre": "YPF S.A. ESCRIT. D",
+  "tipo": "accion"
+ },
+ {
+  "ticker": "TFU27",
+  "nombre": "B TIERRA DEL FUEGO USD 8,95% V17/04/27",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "PAY0",
+  "nombre": "B.REP.ARG PAR CJ.PRE05-DIS-QUASI USD2038",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TV24",
+  "nombre": "B.TESORO VINC USD VT.30/04/2024 C.G",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "PR17",
+  "nombre": "BONO CONSOLIDACION SR 10 V02/05/29",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TX26",
+  "nombre": "BONO DEL TESORO BONCER 2% 2026",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "BAD25",
+  "nombre": "BONO DEUD. S1 MUNI CBA V.03/12/25 UVA C",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "SFN27",
+  "nombre": "BONO INF VIAL PCIA DE SANTA FE CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TDN24",
+  "nombre": "BONO NACION MONEDA DUAL 29/11/2024",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TDA24",
+  "nombre": "BONO NACION MONEDA DUAL 30/04/2024",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TDJ24",
+  "nombre": "BONO NACION MONEDA DUAL 30/06/24",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TDG24",
+  "nombre": "BONO NACION MONEDA DUAL 30/08/2024",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TDE25",
+  "nombre": "BONO NACION MONEDA DUAL 31/01/2025",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TTD26",
+  "nombre": "BONO NACION TASA DUAL 15/12/26 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TTJ26",
+  "nombre": "BONO NACION TASA DUAL 30/06/26 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TTS26",
+  "nombre": "BONO NACION TASA DUAL15/09/26 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TTM26",
+  "nombre": "BONO NACION TASA DUAL16/03/26 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "CO27D",
+  "nombre": "BONO P. CORDOBA REGS V.01/02/2029",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "CO24D",
+  "nombre": "BONO P. CORDOBA REGS V.01/06/2027",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "CO21D",
+  "nombre": "BONO P. CORDOBA REGS V.10/12/2025",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "RND25",
+  "nombre": "BONO P. RIO NEGRO REGS 7,75% 10//03/2028",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "BC37E",
+  "nombre": "BONO PCIA BS AS REGS NEW EUR 2037 C",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "BA37D",
+  "nombre": "BONO PCIA BS AS REGS NEW US 2037 A",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "BB37D",
+  "nombre": "BONO PCIA BS AS REGS NEW US 2037 B",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "BC37D",
+  "nombre": "BONO PCIA BS AS REGS NEW US 2037 C",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "CH24D",
+  "nombre": "BONO PCIA CHACO REGS 3,50% V 18/02/2028",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "ERF25",
+  "nombre": "BONO PCIA ENTRE RIOS REGS 8,75% 08/08/28",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "SA24D",
+  "nombre": "BONO PCIA SALTA REGS 9,125% V 01/12/2027",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "PUL26",
+  "nombre": "BONO PCIA. CHUBUT 7,24% V.26/07/2030",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "NDT11",
+  "nombre": "BONO PCIA. DE NEUQUEN 8,625% V. 12/05/30",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "JUS2C",
+  "nombre": "BONO PCIA. JUJUY REGS 8,375% 20/3/2027",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "PMM29",
+  "nombre": "BONO PCIA.MENDOZA REGS 2.75% V.19/11/29",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "NDT25",
+  "nombre": "BONO PROV. NEUQUEN REGS VT 27/04/2030",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TZX26",
+  "nombre": "BONO REP ARG AJ CER V30/06/26 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TZX27",
+  "nombre": "BONO REP ARG AJ CER V30/06/27 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TZX28",
+  "nombre": "BONO REP ARG AJ CER V30/06/28 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TV25",
+  "nombre": "BONO REP ARG VINC USD V31/03/25",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TX25",
+  "nombre": "BONO REP ARG. AJUST 1.80% V.09/11/25 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "AL29",
+  "nombre": "BONO REP ARGENTINA USD 1% 2029",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "AL30",
+  "nombre": "BONO REP. ARGENTINA USD STEP UP 2030",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "AL35",
+  "nombre": "BONO REP. ARGENTINA USD STEP UP 2035",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "AE38",
+  "nombre": "BONO REP. ARGENTINA USD STEP UP 2038",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "AL41",
+  "nombre": "BONO REP. ARGENTINA USD STEP UP 2041",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TY30P",
+  "nombre": "BONO TES NAC TF V.30/05/2030 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TX31",
+  "nombre": "BONO TESORO AJ CER 2,50% V.30/11/31",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "T5X4",
+  "nombre": "BONO TESORO AJ CER 4,25% V13/12/24 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "T4X4",
+  "nombre": "BONO TESORO AJ. CER 4% V.14/10/24",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "T2X5",
+  "nombre": "BONO TESORO AJ. CER 4,25% V.14/02/25",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "T6X4",
+  "nombre": "BONO TESORO NAC AJ CER V20/05/24 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TZX25",
+  "nombre": "BONO TESORO NAC AJ CER V30/06/25 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TZXM5",
+  "nombre": "BONO TESORO NAC AJ CER V31/03/25 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TZXM7",
+  "nombre": "BONO TESORO NAC AJ CER V31/03/27 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "T15E7",
+  "nombre": "BONO TESORO NAC CAP V.15/01/27 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TO26",
+  "nombre": "BONO TESORO NAC. ARS 15.5% VTO 17/10/26",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "T13F6",
+  "nombre": "BONO TESORO NACI CAP V.13/02/26 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "T30J6",
+  "nombre": "BONO TESORO NACI CAP V.30/06/26 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "T17O5",
+  "nombre": "BONO TESORO NACI CAP V17/10/2025 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "T30E6",
+  "nombre": "BONO TESORO NACI CAP V30/01/26 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TZXO6",
+  "nombre": "BONO TESORO NACION AJ CER V30/10/26 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TZXY5",
+  "nombre": "BONO TESORO NACION AJ CER V30/5/25 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TZXO5",
+  "nombre": "BONO TESORO NACION AJ CER V31/10/25 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TZV25",
+  "nombre": "BONO TESORO NACIONAL 30/06/25 US CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "AN29",
+  "nombre": "BONO TESORO NACIONAL 6,50% 30/11/29 US",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "T30A7",
+  "nombre": "BONO TESORO NACIONAL CAPITALIZABLE 30/0",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "T31Y7",
+  "nombre": "BONO TESORO NACIONAL CAPITALIZABLE 31/0",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TC25P",
+  "nombre": "BONO TESORO NACIONAL CER 4% 27/04/2025",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TZXY7",
+  "nombre": "BONO TESORO NACIONAL CERO CUPON AJUSTA",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TZXA7",
+  "nombre": "BONO TESORO NACIONAL CERO CUPONCON AJU",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "T15D5",
+  "nombre": "BONO TESORO NACIONAL V15/12/25 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TZVD5",
+  "nombre": "BONO TESORO NACIONAL V15/12/25 US CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TZV26",
+  "nombre": "BONO TESORO NACIONAL V30/06/26 US CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TZXM6",
+  "nombre": "BONO TESORO NACIONAL V31/03/26 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TX28",
+  "nombre": "BONOS DEL TESORO BONCER 2.25% 2028",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TVY0",
+  "nombre": "BONOS GDP LINKED SECURITES USD 2035",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "PARP",
+  "nombre": "BONOS REP ARG A LA PAR STEP UP 2038",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "T2X4",
+  "nombre": "BONOS REP ARG AJ CER VT.26/07/24 C.G",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "DICP",
+  "nombre": "BONOS REP ARG C/DESCUENTO 5,83% 2033",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "CUAP",
+  "nombre": "BONOS REP ARG CUASI PAR 3,31% 2045",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "GE38",
+  "nombre": "BONOS REP. ARG. EUR STEP UP V.09/01/38",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "GE41",
+  "nombre": "BONOS REP. ARG. EUR STEP UP V.09/07/41",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "GD29",
+  "nombre": "BONOS REP. ARG. US 1% STEP UP V09/07/29",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "GD38",
+  "nombre": "BONOS REP. ARG. US STEP UP V.09/01/38",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "GD30",
+  "nombre": "BONOS REP. ARG. US STEP UP V.09/07/30",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "GD35",
+  "nombre": "BONOS REP. ARG. US STEP UP V.09/07/35",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "GD41",
+  "nombre": "BONOS REP. ARG. US STEP UP V.09/07/41",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "GD46",
+  "nombre": "BONOS REP. ARG. US STEP UP V.09/07/46",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "GE29",
+  "nombre": "BONOS REP.ARG EUR 0,5% STEP UP V09/07/29",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "PAP0",
+  "nombre": "BONOS REP.ARG. A LA PAR ARS 2010-2038",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "DIP0",
+  "nombre": "BONOS REP.ARG. DISCOUNTS ARS 2010-2033",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TB27",
+  "nombre": "BONTE BADLAR 0,70 V23/11/27 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "T2V4",
+  "nombre": "BONTE VINC USD 0,50 V30/09/24 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TG25",
+  "nombre": "BONTE VTO.23/08/2025 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TZXD5",
+  "nombre": "BONTES A DESC AJ CER V15/12/25",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TZXD6",
+  "nombre": "BONTES A DESC AJ CER V15/12/26",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TZXD7",
+  "nombre": "BONTES A DESC AJ CER V15/12/27",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "T4X5",
+  "nombre": "BONTES TEMATICO SOST AJ CER 23/05/25 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "BPOA8",
+  "nombre": "BOPREAL 4A VTO31/10/28 US CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "BPOB8",
+  "nombre": "BOPREAL 4B VTO31/10/28 US CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "BPOA7",
+  "nombre": "BOPREAL S. 1 A VTO31/10/27 US CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "BPOB7",
+  "nombre": "BOPREAL S. 1 B VTO31/10/27 US CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "BPOC7",
+  "nombre": "BOPREAL S. 1 C VTO31/10/27 US CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "BPOD7",
+  "nombre": "BOPREAL S. 1 D VTO31/10/27 US CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "BPJ25",
+  "nombre": "BOPREAL S.2 VTO30/06/25 US CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "BPY26",
+  "nombre": "BOPREAL S.3 VTO31/05/26 US CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "BPO28",
+  "nombre": "BOPREAL S.4 VTO31/10/28 US CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "CEDI",
+  "nombre": "CEDIN NO APLICADO",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "BAN25",
+  "nombre": "LT MUN. DE CORDOBA S.51 V14/11/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BNA26",
+  "nombre": "LT P NEUQUEN D1739/23 S1 CL1 V19/04/26 US",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "LBO24",
+  "nombre": "LT PCIA BS AS 91D V24/10/24 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "LBN24",
+  "nombre": "LT PCIA BS AS A DESC. V22/11/24 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "LBA25",
+  "nombre": "LT PCIA BS AS A DESC. V24/04/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "XBG25",
+  "nombre": "LT PCIA BS AS AJ CER A DESC. V21/08/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BBF25",
+  "nombre": "LT PCIA BS AS CAP V20/02/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BB2J5",
+  "nombre": "LT PCIA BS AS CAP V26/06/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "LBG25",
+  "nombre": "LT PCIA BSAS A DESC 56 DS V21/08/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "LBO25",
+  "nombre": "LT PCIA BSAS A DESC 63 DS V.23/10/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "LBL25",
+  "nombre": "LT PCIA BSAS A DESC 63 DS V24/07/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "LBD25",
+  "nombre": "LT PCIA BSAS A DESC 91 DS V.18/12/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "LBJ25",
+  "nombre": "LT PCIA BSAS A DESC V26/06/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BB2O5",
+  "nombre": "LT PCIA BSAS CAPIT 91 DS V.23/10/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BBG25",
+  "nombre": "LT PCIA BSAS CAPITALIZ V21/08/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BB2Y5",
+  "nombre": "LT PCIA BSAS CAPITALIZ V22/05/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BL6N4",
+  "nombre": "LT PCIA CHACO C.28(28 D)VT.15/11/24 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BL3F5",
+  "nombre": "LT PCIA CHACO CL.1 28 DS V14/02/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BL2S5",
+  "nombre": "LT PCIA CHACO CL.11 91 DS V12/09/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BLO25",
+  "nombre": "LT PCIA CHACO CL.12 91 DS V17/10/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BLJ24",
+  "nombre": "LT PCIA CHACO CL.13 28D V14/06/24 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BL2N5",
+  "nombre": "LT PCIA CHACO CL.14 88 DS V14/11/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BL4L4",
+  "nombre": "LT PCIA CHACO CL.16 28D V12/07/24 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BL2G4",
+  "nombre": "LT PCIA CHACO CL.17 63D V16/08/24 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BL3G4",
+  "nombre": "LT PCIA CHACO CL.19 35D V16/08//24 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BLA25",
+  "nombre": "LT PCIA CHACO CL.2 91 DS V18/04/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BLS24",
+  "nombre": "LT PCIA CHACO CL.20 63D V13/09/24 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BL3S4",
+  "nombre": "LT PCIA CHACO CL.22 28D V13/09//24 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BL3O4",
+  "nombre": "LT PCIA CHACO CL.25 VTO 18/10/24 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BLL25",
+  "nombre": "LT PCIA CHACO CL.3 182DS V18/07/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BL4D4",
+  "nombre": "LT PCIA CHACO CL.31 28DS V13/12/24 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BL2F5",
+  "nombre": "LT PCIA CHACO CL.32 91DS V14/02/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BLY25",
+  "nombre": "LT PCIA CHACO CL.33 182DS V16/05/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BL3E5",
+  "nombre": "LT PCIA CHACO CL.34 VTO 17/01/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BLM25",
+  "nombre": "LT PCIA CHACO CL.35 VTO 14/03/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BLJ25",
+  "nombre": "LT PCIA CHACO CL.36 VTO 13/06/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BL2Y5",
+  "nombre": "LT PCIA CHACO CL.4 91DS V16/05/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BLG25",
+  "nombre": "LT PCIA CHACO CL.5 182DS V15/08/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BU4J6",
+  "nombre": "LT PCIA CHUBUT S.113 V18/06/26 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BNM26",
+  "nombre": "LT PCIA NEUQUEN S1 C2 B V31/03/26 US CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BNO25",
+  "nombre": "LT PCIA NEUQUEN S4 CL2 VTO19/10/25 US CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BGD25",
+  "nombre": "LT PCIA RIO NEGRO S.1 V19/12/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "LBE26",
+  "nombre": "LT PROV. BUENOS AIRES A DESCUENTO 22/01/",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BL3D5",
+  "nombre": "LT PROV. CHACO CL.19 12/12/25",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BL3E6",
+  "nombre": "LT PROV. CHACO CL.20 16/01/26",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BLF26",
+  "nombre": "LT PROV. CHACO CL.21 13/02/26",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BL2Y6",
+  "nombre": "LT PROV. CHACO CL.23 15/05/26",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BLM26",
+  "nombre": "LT PROV. CHACO CL.24 13/03/26",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "BUM26",
+  "nombre": "LT PROV. CHUBUT S.114 13/03/26",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "X20Y4",
+  "nombre": "LT REP ARG AJ CER A DESC V20/05/24 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S27F6",
+  "nombre": "LT REP ARG CAP 182 DS V27/02/26 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S10L5",
+  "nombre": "LT REP ARG CAP V.10/07/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S16E6",
+  "nombre": "LT REP ARG CAP V.16/01/26 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S29Y6",
+  "nombre": "LT REP ARG CAP V.29/05/26 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "M31L5",
+  "nombre": "LT REP ARG TAMAR CAP 106 DS V31/07/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "M16E6",
+  "nombre": "LT REP ARG TAMAR CAP 151DS V16/01/26 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "M27F6",
+  "nombre": "LT REP ARG TAMAR CAP 182 DS V27/02/26 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "M10N5",
+  "nombre": "LT REP ARG TAMAR CAP 84DS V10/11/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "D16E6",
+  "nombre": "LT REP ARG VINC. AL US 16/01/26 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "D31O5",
+  "nombre": "LT REP ARG VINC. AL US CERO CUPON V.31/10",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S01L4",
+  "nombre": "LT REP ARGENTINA CAP V01/07/24",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S10N5",
+  "nombre": "LT REP ARGENTINA CAP V10/11/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S11N4",
+  "nombre": "LT REP ARGENTINA CAP V11/11/24 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S12L4",
+  "nombre": "LT REP ARGENTINA CAP V12/07/24 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S13S4",
+  "nombre": "LT REP ARGENTINA CAP V13/09/24 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S13D4",
+  "nombre": "LT REP ARGENTINA CAP V13/12/24 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S14J4",
+  "nombre": "LT REP ARGENTINA CAP V14/06/24",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S14O4",
+  "nombre": "LT REP ARGENTINA CAP V14/10/24",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S15G5",
+  "nombre": "LT REP ARGENTINA CAP V15/08/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S16G4",
+  "nombre": "LT REP ARGENTINA CAP V16/08/24 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S17E5",
+  "nombre": "LT REP ARGENTINA CAP V17/01/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S18J5",
+  "nombre": "LT REP ARGENTINA CAP V18/06/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S26L4",
+  "nombre": "LT REP ARGENTINA CAP V26/07/24",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S28F5",
+  "nombre": "LT REP ARGENTINA CAP V28/02/25",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S28N5",
+  "nombre": "LT REP ARGENTINA CAP V28/11/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S29G5",
+  "nombre": "LT REP ARGENTINA CAP V29/08/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S29N4",
+  "nombre": "LT REP ARGENTINA CAP V29/11/24",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S30J5",
+  "nombre": "LT REP ARGENTINA CAP V30/06/25 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S30G4",
+  "nombre": "LT REP ARGENTINA CAP V30/08/24",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S30S4",
+  "nombre": "LT REP ARGENTINA CAP V30/09/24 CG",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S31E5",
+  "nombre": "LT REP ARGENTINA CAP V31/01/25",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S31M5",
+  "nombre": "LT REP ARGENTINA CAP V31/03/25",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "M15D5",
+  "nombre": "LT REP. ARG. A TASA TAMAR VTO.15/12/25 C",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "CO32",
+  "nombre": "PROVINCE OF CORD REGS 9.750 02/07/32",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "PBA25",
+  "nombre": "T.D. PCIA. BUENOS AIRES V. 12/04/25 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "PBY26",
+  "nombre": "T.D. PCIA.BS.AS. T.V. V.05/05/26 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "PBY24",
+  "nombre": "T.D. PCIA.BS.AS. T.V. V.16/05/24 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "BDC28",
+  "nombre": "T.D.PUB.CIUD.DE BS.AS.V 22/2/28 C.23 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "PVC3O",
+  "nombre": "TD BANCO PROVINCIA BUENOS AIRES CL.3 25/",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "PVC4O",
+  "nombre": "TD BANCO PROVINCIA BUENOS AIRES CL.4 25/",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "PVC1O",
+  "nombre": "TD BCO PROV BSAS CL.1 V.29/05/26 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "PVC2O",
+  "nombre": "TD BCO PROV BSAS CL.2 V.29/05/26 US CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "BAO25",
+  "nombre": "TD GAR MUNI CORDOBA S1 V27/10/25 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "BAF27",
+  "nombre": "TD MUN. CORDOBA S.2 13/02/27",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "BAS26",
+  "nombre": "TD P MUNI CBA GAR 2024 S.1 09/09/26 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "PBG26",
+  "nombre": "TD PCIA BS AS AJ CER V21/08/26 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "PBJ26",
+  "nombre": "TD PCIA BS AS VTO.25/06/26 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "COY27",
+  "nombre": "TD PCIA CORDOBA CL.2 V24/05/27 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "COD7",
+  "nombre": "TD PCIA CORDOBA CL.4 V05/12/27 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "PMD25",
+  "nombre": "TD PCIA MDZA CL.1 AJ CER V/14/12/25 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "PMM27",
+  "nombre": "TD PCIA MDZA CL.2 AJ CER V/14/03/27 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "PMJ26",
+  "nombre": "TD PCIA MDZA TAMAR CL.1 V.20/06/26 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "PM2D4",
+  "nombre": "TD PCIA MENDOZA 2024 V21/12/24 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "PMJ25",
+  "nombre": "TD PCIA MENDOZA SVS V21/06/25 CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "CO2D7",
+  "nombre": "TD PROV. CORDOBA CL.5 05/12/27",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "CO26",
+  "nombre": "TD PUB.PCIA. CORDOBA 1 V.27/10/26 USD CG",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "BDC33",
+  "nombre": "TITULO DE DEUDA BUENOS AIRES, CITY 7,8 %",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "SFD34",
+  "nombre": "TITULO DE DEUDA DE GOV. PROV SANTA FE 8.",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TVPE",
+  "nombre": "VALORES NEG VINC PBI EUROS V.2035",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TVPA",
+  "nombre": "VALORES NEGOCIABLES VINC AL PBI USD 2035",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TVPP",
+  "nombre": "VALORES NEGOCIABLES VINC AL PBI V.2035",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "TVPY",
+  "nombre": "VALORES NEGOCIABLES VINC PBI USD V.2035",
+  "tipo": "bono"
+ },
+ {
+  "ticker": "ABT",
+  "nombre": "CEDEAR ABBOTT LABORATORIES",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ABBV",
+  "nombre": "CEDEAR ABBVIE INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ANF",
+  "nombre": "CEDEAR ABERCROMBIE & FITCH CO.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ACN",
+  "nombre": "CEDEAR ACCENTURE PLC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ADGO",
+  "nombre": "CEDEAR ADECOAGRO S.A.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ADBE",
+  "nombre": "CEDEAR ADOBE SYSTEMS INCORPORATED",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "AAP",
+  "nombre": "CEDEAR ADVANCE AUTO PARTS INC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "AMD",
+  "nombre": "CEDEAR ADVANCED MICRO DEVICES, INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "AEG",
+  "nombre": "CEDEAR AEGON N.V. A. REG SHARE",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "AEM",
+  "nombre": "CEDEAR AGNICO EAGLE MINES LTD",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ABNB",
+  "nombre": "CEDEAR AIRBNB INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "BABA",
+  "nombre": "CEDEAR ALIBABA GROUP HOLDING LIMITED",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "GOOGL",
+  "nombre": "CEDEAR ALPHABET INC. CL A",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "MO",
+  "nombre": "CEDEAR ALTRIA GROUP",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "AOCA",
+  "nombre": "CEDEAR ALUMINUM CORP OF CHINA",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "AMZN",
+  "nombre": "CEDEAR AMAZON.COM, INC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ABEV3",
+  "nombre": "CEDEAR AMBEV S.A",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ABEV",
+  "nombre": "CEDEAR AMBEV S.A.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "AMX",
+  "nombre": "CEDEAR AMERICA MOVIL, S.A.B. DE C.V.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "AAL",
+  "nombre": "CEDEAR AMERICAN AIRLINES GROUP INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "AIG",
+  "nombre": "CEDEAR AMERICAN INTERNATIONAL GROUP INC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "AMGN",
+  "nombre": "CEDEAR AMGEN INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ADI",
+  "nombre": "CEDEAR ANALOG DEVICES INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "AAPL",
+  "nombre": "CEDEAR APPLE INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "AMAT",
+  "nombre": "CEDEAR APPLIED MATERIALS INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ARCO",
+  "nombre": "CEDEAR ARCOS DORADOS HOLDINGS INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ARKK",
+  "nombre": "CEDEAR ARK INNOVATION",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ARM",
+  "nombre": "CEDEAR ARM HOLDINGS PLC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ASML",
+  "nombre": "CEDEAR ASML HOLDING NV (ASML)",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ASTS",
+  "nombre": "CEDEAR AST SPACEMOBILE INC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ALAB",
+  "nombre": "CEDEAR ASTERA LABS INC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "T",
+  "nombre": "CEDEAR AT & T INC.ESC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "TEAM",
+  "nombre": "CEDEAR ATLASSIAN CORPORATION (TEAM)",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ADP",
+  "nombre": "CEDEAR AUTOMATIC DATA PROCESSING INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "AVY",
+  "nombre": "CEDEAR AVERY DENNISON CORPORATION",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "AZN",
+  "nombre": "CEDEAR AZTRAZENECA PLC ADR",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "BIDU",
+  "nombre": "CEDEAR BAIDU, INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "BKR",
+  "nombre": "CEDEAR BAKER HUGHES CO.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "BBV",
+  "nombre": "CEDEAR BANCO BILBAO VIZCAYA SA ADR",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "BBD",
+  "nombre": "CEDEAR BANCO BRADESCO S.A.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "BBDC3",
+  "nombre": "CEDEAR BANCO BRADESCO S.A.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "BPA11",
+  "nombre": "CEDEAR BANCO BTG PACTUAL S.A. UNIT",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "BBAS3",
+  "nombre": "CEDEAR BANCO DO BRASIL S.A.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ITUB3",
+  "nombre": "CEDEAR BANCO ITAU UNIBANCO SA",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "BSBR",
+  "nombre": "CEDEAR BANCO SANTANDER (BRASIL) S.A.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SAN",
+  "nombre": "CEDEAR BANCO SANTANDER S.A.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "BA.C",
+  "nombre": "CEDEAR BANK OF AMERICA CORP.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "BCS",
+  "nombre": "CEDEAR BARCLAYS BANK PLC ADR",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "GOLD",
+  "nombre": "CEDEAR BARRICK GOLD CORP.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "BRKB",
+  "nombre": "CEDEAR BERKSHIRE HATHAWAY INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "BHP",
+  "nombre": "CEDEAR BHP BILLITON LIMITED",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "BIOX",
+  "nombre": "CEDEAR BIOCERES CROP SOLUTIONS CORP.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "BIIB",
+  "nombre": "CEDEAR BIOGEN INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "BITF",
+  "nombre": "CEDEAR BITFARMS LTD.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "BKNG",
+  "nombre": "CEDEAR BOOKING HOLDINGS INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "BP",
+  "nombre": "CEDEAR BP P.L.C.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "LND",
+  "nombre": "CEDEAR BRASILAGRO COM",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "BAK",
+  "nombre": "CEDEAR BRASKEM SA",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "BRFS",
+  "nombre": "CEDEAR BRF S.A.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "BMY",
+  "nombre": "CEDEAR BRISTOL M.SQUIBB CO.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "AVGO",
+  "nombre": "CEDEAR BROADCOM INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "BNG",
+  "nombre": "CEDEAR BUNGE LIMITED",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "AI",
+  "nombre": "CEDEAR C3.AI INC (AI)",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "CAH",
+  "nombre": "CEDEAR CARDINAL HEALTH INC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "CCL",
+  "nombre": "CEDEAR CARNIVAL CORP.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "CLS",
+  "nombre": "CEDEAR CELESTICA INC (CLS)",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "CX",
+  "nombre": "CEDEAR CEMEX S.A.B DE C.V.ADR",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "CAR",
+  "nombre": "CEDEAR CENDANT CORPORATION",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SCHW",
+  "nombre": "CEDEAR CHARLES SCHWAB CORP.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SBSP3",
+  "nombre": "CEDEAR CIA DE SANEAMIENTO BASICO DE SP SA",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SBS",
+  "nombre": "CEDEAR CIA SABESP",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "C",
+  "nombre": "CEDEAR CITIGROUP INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "KO",
+  "nombre": "CEDEAR COCA-COLA COMPANY",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "KOFM",
+  "nombre": "CEDEAR COCA-COLA FEMSA S.A.B. DE C.V.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "CDE",
+  "nombre": "CEDEAR COEUR MINING INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "COIN",
+  "nombre": "CEDEAR COINBASE GLOBAL INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "CL",
+  "nombre": "CEDEAR COLGATE PALMOLIVE COMPANY",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SID",
+  "nombre": "CEDEAR COMPANHIA SIDERURGICA NACIONAL",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "CSNA3",
+  "nombre": "CEDEAR COMPANHIA SIDERURGICA NACIONAL SA",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "CEG",
+  "nombre": "CEDEAR CONSTELLATION ENERGY CORPORATION (CEG)",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ELP",
+  "nombre": "CEDEAR COPEL",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "CRWV",
+  "nombre": "CEDEAR COREWEAVE INC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "GLW",
+  "nombre": "CEDEAR CORNING INCOPORATED ESC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "CAAP",
+  "nombre": "CEDEAR CORPORACION AMERICA AIRPORTS S.A",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "COST",
+  "nombre": "CEDEAR COSTCO WHOLSALE CORP",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "TCOM",
+  "nombre": "CEDEAR CTRIP.COM INTERNATIONAL, LTD.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "CVS",
+  "nombre": "CEDEAR CVS HEALTH CORP.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "DHR",
+  "nombre": "CEDEAR DANAHER CORP",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "AXP",
+  "nombre": "CEDEAR DE AMERICAN EXPRESS COMPANY",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "CAT",
+  "nombre": "CEDEAR DE CATERPILLAR INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "CVX",
+  "nombre": "CEDEAR DE CHEVRON CORPORATION",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "CSCO",
+  "nombre": "CEDEAR DE CISCO SYSTEMS INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "DD",
+  "nombre": "CEDEAR DE EI DU PONT DE NEMOURS AND COMP",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "XOM",
+  "nombre": "CEDEAR DE EXXON MOBIL CORPORATION",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "HON",
+  "nombre": "CEDEAR DE HONEYWELL INTERNATIONAL INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "MSFT",
+  "nombre": "CEDEAR DE MICROSOFT CORP.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "MMM",
+  "nombre": "CEDEAR DE MINNESOTA MINING & MANUFAC.CO.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "MSI",
+  "nombre": "CEDEAR DE MOTOROLA INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "PG",
+  "nombre": "CEDEAR DE PROCTER & GAMBLE",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "BA",
+  "nombre": "CEDEAR DE THE BOEING COMPANY",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "WMT",
+  "nombre": "CEDEAR DE WAL-MART INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "WFC",
+  "nombre": "CEDEAR DE WELLS FARGO & CO",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "DECK",
+  "nombre": "CEDEAR DECKERS OUTDOOR CORPORATION (DECK)",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "DE",
+  "nombre": "CEDEAR DEERE AND COMPANY",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "DAL",
+  "nombre": "CEDEAR DELTA AIR LINES INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "DESP",
+  "nombre": "CEDEAR DESPEGAR.COM CORP.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "DEO",
+  "nombre": "CEDEAR DIAGEO PLC ADR",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SPXL",
+  "nombre": "CEDEAR DIREXION DAILY S&P 500 BULL 3X",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "DOCU",
+  "nombre": "CEDEAR DOCUSING INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "DOW",
+  "nombre": "CEDEAR DOW INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "EBAY",
+  "nombre": "CEDEAR EBAY INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ECL",
+  "nombre": "CEDEAR ECOLAB INC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "EA",
+  "nombre": "CEDEAR ELECTRONIC ARTS INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "EBR",
+  "nombre": "CEDEAR ELETROBRAS",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "LLY",
+  "nombre": "CEDEAR ELI LILLY AND COMPANY",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "AKO.B",
+  "nombre": "CEDEAR EMBOTELLADORA ANDINA S.A.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ERJ",
+  "nombre": "CEDEAR EMBRAER",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "XLE",
+  "nombre": "CEDEAR ENERGY SELECT SECTOR SPDR FUND",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "E",
+  "nombre": "CEDEAR ENI SPA ADR ESC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "EFX",
+  "nombre": "CEDEAR EQUIFAX INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "EQNR",
+  "nombre": "CEDEAR EQUINOR ASA",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "IJH",
+  "nombre": "CEDEAR ETF ISHARES CORE S&P MID - CAP (IJH)",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "EWJ",
+  "nombre": "CEDEAR ETF ISHARES MSCI JAPAN (EWJ)",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SLV",
+  "nombre": "CEDEAR ETF ISHARES SILVER TRUST (SLV)",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "PSQ",
+  "nombre": "CEDEAR ETF PROSHARES SHORT QQQ (PSQ)",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "GLD",
+  "nombre": "CEDEAR ETF SPDR GOLD TRUST",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "VIG",
+  "nombre": "CEDEAR ETF VANGUARD DIVIDEND APPRECIATION (VIG)",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ETSY",
+  "nombre": "CEDEAR ETSY INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "FNMA",
+  "nombre": "CEDEAR FED NATL MORT - FANNIE MAE",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "FDX",
+  "nombre": "CEDEAR FEDEX CORP",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "RACE",
+  "nombre": "CEDEAR FERRARI NV",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "XLF",
+  "nombre": "CEDEAR FINANCIAL SELECT SECTOR SPDR FUND",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "FSLR",
+  "nombre": "CEDEAR FIRST SOLAR INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "CIBR",
+  "nombre": "CEDEAR FIRST TRUST NASDAQ CYBERSECURITY",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "FMX",
+  "nombre": "CEDEAR FOMENTO EC. MEXICANO FEMSA ADR",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "F",
+  "nombre": "CEDEAR FORD MOTOR CO",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "FCX",
+  "nombre": "CEDEAR FREEPORT MCMORAN INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "GRMN",
+  "nombre": "CEDEAR GARMIN LTD.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "GE",
+  "nombre": "CEDEAR GE AEROSPACE",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "GM",
+  "nombre": "CEDEAR GENERAL MOTORS CO.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "GPRK",
+  "nombre": "CEDEAR GEOPARK LTD.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "GGB",
+  "nombre": "CEDEAR GERDAU S.A.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "GILD",
+  "nombre": "CEDEAR GILEAD SCIENCES, INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "GSK",
+  "nombre": "CEDEAR GLAXO WELLCOME ESC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "URA",
+  "nombre": "CEDEAR GLOBAL X URANIUM ETF",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "GLOB",
+  "nombre": "CEDEAR GLOBANT S.A.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "GFI",
+  "nombre": "CEDEAR GOLD FIELDS LTD.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "GT",
+  "nombre": "CEDEAR GOODYEAR TIRE & RUBBER CO./THE",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "PAC",
+  "nombre": "CEDEAR GRUP. AEROPORTUARIO DEL PACIFICO",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ASR",
+  "nombre": "CEDEAR GRUP. AEROPORTUARIO DEL SURESTE",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "TV",
+  "nombre": "CEDEAR GRUPO TELEVISA SA ADR",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "HAL",
+  "nombre": "CEDEAR HALLIBURTON CO.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "HAPV3",
+  "nombre": "CEDEAR HAPVIDA PARTICIPACOES INVEST SA",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "HOG",
+  "nombre": "CEDEAR HARLEY DAVIDSON INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "HMY",
+  "nombre": "CEDEAR HARMONY GOLD MINING CO. LTD.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "HDB",
+  "nombre": "CEDEAR HDFC BANK LIMITED",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "HL",
+  "nombre": "CEDEAR HECLA MINING CO.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "HSY",
+  "nombre": "CEDEAR HERSHEY FOODS CORPORATION",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "HMC",
+  "nombre": "CEDEAR HONDA MOTOR CO. LTD",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "HWM",
+  "nombre": "CEDEAR HOWMET AEROSPACE INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "HPQ",
+  "nombre": "CEDEAR HP INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "HSBC",
+  "nombre": "CEDEAR HSBC HOLDING PLC ADR",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "HUT",
+  "nombre": "CEDEAR HUT 8 MINING CORP.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "IBN",
+  "nombre": "CEDEAR ICICI BANK LTD",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "INFY",
+  "nombre": "CEDEAR INFOSYS TECHNOLOGIES",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ING",
+  "nombre": "CEDEAR ING GROUP NV ADR",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "INTC",
+  "nombre": "CEDEAR INTEL CORPORATION",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "IBM",
+  "nombre": "CEDEAR INTERNATIONAL BUSINESS MACHINES CORPORATION",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "IFF",
+  "nombre": "CEDEAR INTERNATIONAL FLAVORS & FRAGANCE",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "IP",
+  "nombre": "CEDEAR INTERNATIONAL PAPER COMPANY",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ISRG",
+  "nombre": "CEDEAR INTUITIVE SURGICAL INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SPHQ",
+  "nombre": "CEDEAR INVERSCO S&P 500 QUALITY ETF (SPHQ)",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "QQQ",
+  "nombre": "CEDEAR INVESCO QQQ TRUST",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "VXX",
+  "nombre": "CEDEAR IPATH SERIES B S&P 500 VIX ETF",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "IREN",
+  "nombre": "CEDEAR IREN LTD",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "IBIT",
+  "nombre": "CEDEAR ISHARES BITCOIN TR (IBIT)",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "IEMG",
+  "nombre": "CEDEAR ISHARES CORE MSCI EMERG.MARK. ETF",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "IEUR",
+  "nombre": "CEDEAR ISHARES CORE MSCI EUROPE ETF",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ETHA",
+  "nombre": "CEDEAR ISHARES ETHEREUM TR ETF",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ACWI",
+  "nombre": "CEDEAR ISHARES MSCI ACWI ETF",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "EWZ",
+  "nombre": "CEDEAR ISHARES MSCI BRAZIL CAP",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "EFA",
+  "nombre": "CEDEAR ISHARES MSCI EAFE ETF (EFA)",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "EEM",
+  "nombre": "CEDEAR ISHARES MSCI EMERGING MARKET",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "IBB",
+  "nombre": "CEDEAR ISHARES NASDAQ BIOTECHNOLOGY ETF",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "IVW",
+  "nombre": "CEDEAR ISHARES S&P 500 GROWTH ETF",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "IVE",
+  "nombre": "CEDEAR ISHARES S&P 500 VALUE ETF",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "FXI",
+  "nombre": "CEDEAR ISHARES TRUST FTSE CHINA 25 IF (FXI)",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "IWM",
+  "nombre": "CEDEAR ISHARES TRUST RUSSELL 2000",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ITA",
+  "nombre": "CEDEAR ISHARES U.S. AEROPACE & DEFENSE ETF",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ITUB",
+  "nombre": "CEDEAR ITAU UNIBANCO HOLDING S.A.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "JPM",
+  "nombre": "CEDEAR J P MORGAN CO INC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "JBSS3",
+  "nombre": "CEDEAR JBS S.A.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "JD",
+  "nombre": "CEDEAR JD.COM, INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "JNJ",
+  "nombre": "CEDEAR JOHNSON & JOHNSON",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "DJNJ3",
+  "nombre": "CEDEAR JOHNSON & JOHNSON ADR VTO.2029",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "JMIA",
+  "nombre": "CEDEAR JUMIA TECHNOLOGIES AG",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "KB",
+  "nombre": "CEDEAR KB FINANCIAL GROUP INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "KMB",
+  "nombre": "CEDEAR KIMBERLY CLARK CORPORATION",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "KGC",
+  "nombre": "CEDEAR KINROSS GOLD CORP.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "PHG",
+  "nombre": "CEDEAR KONINKLIJE PHILIPS N.V.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "KEP",
+  "nombre": "CEDEAR KOREA ELECTRONIC POWER CORP.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "LRCX",
+  "nombre": "CEDEAR LAM RESEARCH CORP.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "LVS",
+  "nombre": "CEDEAR LAS VEGAS SANDS CORP.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "LAAC",
+  "nombre": "CEDEAR LITHIUM AMERICAS (ARGENTINA) CORP",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "LAC",
+  "nombre": "CEDEAR LITHIUM AMERICAS CORP",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ERIC",
+  "nombre": "CEDEAR LM ERICSSON TELEPHONE CO ESC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "RENT3",
+  "nombre": "CEDEAR LOCALIZA RENT A CAR S.A",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "LMT",
+  "nombre": "CEDEAR LOCKHEED MARTIN CORPORATION",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "LREN3",
+  "nombre": "CEDEAR LOJAS RENNER S.A.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "MGLU3",
+  "nombre": "CEDEAR MAGAZINE LUIZA S.A.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "MMC",
+  "nombre": "CEDEAR MARSH & MC LENNAN COMPANIES INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "MRVL",
+  "nombre": "CEDEAR MARVELL TECHNOLOGY INC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "MA",
+  "nombre": "CEDEAR MASTERCARD INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "MCD",
+  "nombre": "CEDEAR MCDONALDSS CORPORATION",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "MUX",
+  "nombre": "CEDEAR MCEWEN MINING INC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "MDT",
+  "nombre": "CEDEAR MEDTRONIC INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "MELI",
+  "nombre": "CEDEAR MERCADOLIBRE INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "MRK",
+  "nombre": "CEDEAR MERCK & CO INC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "META",
+  "nombre": "CEDEAR META PLATFORMS INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "MU",
+  "nombre": "CEDEAR MICRON TECHNOLOGY INC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "MSTR",
+  "nombre": "CEDEAR MICROSTRATEGY INC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "MUFG",
+  "nombre": "CEDEAR MITSUBISHI UFJ FINANCIAL GROUP",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "MFG",
+  "nombre": "CEDEAR MIZUHO FINANCIAL GROUP INC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "MRNA",
+  "nombre": "CEDEAR MODERNA INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "MDLZ",
+  "nombre": "CEDEAR MONDELEZ INTERNATIONAL, INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "NGG",
+  "nombre": "CEDEAR NATIONAL GRID TRANSCO ADR ESC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "NATU3",
+  "nombre": "CEDEAR NATURA COSMETICOS SA",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "NTES",
+  "nombre": "CEDEAR NETEASE, INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "NFLX",
+  "nombre": "CEDEAR NETFLIX, INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "NEM",
+  "nombre": "CEDEAR NEWMONT MINING CORP",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "NXE",
+  "nombre": "CEDEAR NEXGEN ENERGY",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "NKE",
+  "nombre": "CEDEAR NIKE INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "NIO",
+  "nombre": "CEDEAR NIO INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "NOKA",
+  "nombre": "CEDEAR NOKIA CORPORATION ESC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "NMR",
+  "nombre": "CEDEAR NOMURA HOLDINGS INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "NG",
+  "nombre": "CEDEAR NOVAGOLD RESOURCES INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "NVS",
+  "nombre": "CEDEAR NOVARTIS AG ADR",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "NU",
+  "nombre": "CEDEAR NU HOLDINGS LTD/CAYMAN ISLANDS",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "NUE",
+  "nombre": "CEDEAR NUCOR CORPORATION",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "NVDA",
+  "nombre": "CEDEAR NVIDIA CORPORATION",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "OXY",
+  "nombre": "CEDEAR OCCIDENTAL PETROLEUM CORP.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "OKLO",
+  "nombre": "CEDEAR OKLO INC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ORCL",
+  "nombre": "CEDEAR ORACLE CORPORATION",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ORAN",
+  "nombre": "CEDEAR ORANGE",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ORLY",
+  "nombre": "CEDEAR OREILLY AUTOMOTIVE INC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "PCAR",
+  "nombre": "CEDEAR PACCAR INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "PAGS",
+  "nombre": "CEDEAR PAGSEGURO DIGITAL LTD",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "PLTR",
+  "nombre": "CEDEAR PALANTIR TECHNOLOGIES INC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "PANW",
+  "nombre": "CEDEAR PALO ALTO NETWORKS INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "PAAS",
+  "nombre": "CEDEAR PAN AMERICAN SILVER CORP",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "PYPL",
+  "nombre": "CEDEAR PAYPAL HOLDINGS, INC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "PDD",
+  "nombre": "CEDEAR PDD HOLDINGS INC (PDD)",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "PEP",
+  "nombre": "CEDEAR PEPSICO INC. ESC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "PRIO3",
+  "nombre": "CEDEAR PETRO RIO S.A.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "PETR3",
+  "nombre": "CEDEAR PETROLEO BRASILEIRO S.A.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "PBR",
+  "nombre": "CEDEAR PETROLEO BRASILEIRO S.A. (PBR)",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "PFE",
+  "nombre": "CEDEAR PFIZER INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "PM",
+  "nombre": "CEDEAR PHILIP MORRIS INTERNATIONAL INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "PSX",
+  "nombre": "CEDEAR PHILLIPS 66",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "PINS",
+  "nombre": "CEDEAR PINTEREST INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "PBI",
+  "nombre": "CEDEAR PITNEY BOWES INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "PKS",
+  "nombre": "CEDEAR POSCO",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SH",
+  "nombre": "CEDEAR PROSHARES SHORT S&P500",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "TQQQ",
+  "nombre": "CEDEAR PROSHARES ULTRAPRO QQQ ETF",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "QCOM",
+  "nombre": "CEDEAR QUALCOMM INCORPORATED",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "BB",
+  "nombre": "CEDEAR RESEARCH IN MOTION LTD",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "RGTI",
+  "nombre": "CEDEAR RIGETTI COMPUTING (RGTI)",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "RIO",
+  "nombre": "CEDEAR RIO TINTO PLC -ADR",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "RIOT",
+  "nombre": "CEDEAR RIOT PLATFORMS INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "HOOD",
+  "nombre": "CEDEAR ROBINHOOD MARKETS INC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "RBLX",
+  "nombre": "CEDEAR ROBLOX CORP.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "RKLB",
+  "nombre": "CEDEAR ROCKET LAB CORP",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ROKU",
+  "nombre": "CEDEAR ROKU INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ROST",
+  "nombre": "CEDEAR ROSS STORES, INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "RTX",
+  "nombre": "CEDEAR RTX CORPORATION (RTX)",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SPGI",
+  "nombre": "CEDEAR S&P GLOBAL INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "CRM",
+  "nombre": "CEDEAR SALESFORCE.COM, INC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SATL",
+  "nombre": "CEDEAR SATELLOGIC INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SLB",
+  "nombre": "CEDEAR SCHLUMBERGER LIMITED",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SE",
+  "nombre": "CEDEAR SEA LTD.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "NOW",
+  "nombre": "CEDEAR SERVICENOW INC (NOW)",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SHPW",
+  "nombre": "CEDEAR SHAPEWAYS HOLDINGS INC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SHEL",
+  "nombre": "CEDEAR SHELL PLC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SHOP",
+  "nombre": "CEDEAR SHOPIFY INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SWKS",
+  "nombre": "CEDEAR SKYWORKS SOLUTIONS INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SNAP",
+  "nombre": "CEDEAR SNAP INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SNA",
+  "nombre": "CEDEAR SNAP-ON INCORPORATED",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SNOW",
+  "nombre": "CEDEAR SNOWFLAKE INC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SONY",
+  "nombre": "CEDEAR SONY CORPORATION",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SCCO",
+  "nombre": "CEDEAR SOUTHERN COPPER CORP.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "DIA",
+  "nombre": "CEDEAR SPDR DOW JONES INDUSTRIAL",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SPY",
+  "nombre": "CEDEAR SPDR S&P 500",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SPOT",
+  "nombre": "CEDEAR SPOTIFY TECHNOLOGY",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SQ",
+  "nombre": "CEDEAR SQUARE INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SBUX",
+  "nombre": "CEDEAR STARBUCKS CORP",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "STLA",
+  "nombre": "CEDEAR STELLANTIS NV",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "STNE",
+  "nombre": "CEDEAR STONECO LTD",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SDA",
+  "nombre": "CEDEAR SUNCAR TECHNOLOGY GROUP INC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SUZ",
+  "nombre": "CEDEAR SUZANO PAPEL E CELULOSE S.A.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SUZB3",
+  "nombre": "CEDEAR SUZANO S.A",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SYY",
+  "nombre": "CEDEAR SYSCO CORPORATION",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "TMUS",
+  "nombre": "CEDEAR T-MOBILE US INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "TSM",
+  "nombre": "CEDEAR TAIWAN SEMICONDUCTOR MANUF.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "TGT",
+  "nombre": "CEDEAR TARGET CORPORATION",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "VIV",
+  "nombre": "CEDEAR TELEFONICA BRASIL S.A.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "VIVT3",
+  "nombre": "CEDEAR TELEFONICA BRASIL S.A.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "TEFO",
+  "nombre": "CEDEAR TELEFONICA SA ESC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "TEM",
+  "nombre": "CEDEAR TEMPUS AI INC (TEM)",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "TEN",
+  "nombre": "CEDEAR TENARIS S.A. (ADS)",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "TXR",
+  "nombre": "CEDEAR TERNIUM S.A.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "TSLA",
+  "nombre": "CEDEAR TESLA, INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "TXN",
+  "nombre": "CEDEAR TEXAS INSTRUMENTS INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "BK",
+  "nombre": "CEDEAR THE BANK OF NEW YORK MELLON CORP.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "XLC",
+  "nombre": "CEDEAR THE COMMUNICATION SERVICES SELECT SECTOR SPDR FUND",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "XLY",
+  "nombre": "CEDEAR THE CONSUMER DISCRETIONARY SELECT SECTOR SPDR FUND",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "XLP",
+  "nombre": "CEDEAR THE CONSUMER STAPLES SELECT SECTOR SPDR FUND",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "GS",
+  "nombre": "CEDEAR THE GOLDMAN SACHS GROUP, INC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "XLV",
+  "nombre": "CEDEAR THE HEALTH CARE SELECT SECTOR SPDR FUND",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "HD",
+  "nombre": "CEDEAR THE HOME DEPOT INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "XLI",
+  "nombre": "CEDEAR THE INDUSTRIAL SELECT SECTOR SPDR FUND",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "XLB",
+  "nombre": "CEDEAR THE MATERIALS SELECT SECTOR SPDR FUND",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "MOS",
+  "nombre": "CEDEAR THE MOSAIC CO",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "XLRE",
+  "nombre": "CEDEAR THE REAL ESTATE SELECT SECTOR SPDR FUND",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "XLK",
+  "nombre": "CEDEAR THE TECHNOLOGY SELECT SECTOR SPDR FUND",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "DISN",
+  "nombre": "CEDEAR THE WALT DISNEY COMPANY",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "TMO",
+  "nombre": "CEDEAR THERMO FISHER SCIENTIFIC INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "TIMB",
+  "nombre": "CEDEAR TIM PARTICIPACES S.A.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "TIMS3",
+  "nombre": "CEDEAR TIM S.A.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "TJX",
+  "nombre": "CEDEAR TJX COMPANIES INC./THE",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "TTE",
+  "nombre": "CEDEAR TOTAL ENERGIES SE",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "TM",
+  "nombre": "CEDEAR TOYOTA MOTOR CORPORATION ADR",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "TRVV",
+  "nombre": "CEDEAR TRAVELLERS COS.INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "TRIP",
+  "nombre": "CEDEAR TRIPADVISOR, INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "TWLO",
+  "nombre": "CEDEAR TWILIO INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "JCI",
+  "nombre": "CEDEAR TYCO INTERNATIONAL LTD",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "USB",
+  "nombre": "CEDEAR U.S.BANCORP",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "UBER",
+  "nombre": "CEDEAR UBER TECHNOLOGIES INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "PATH",
+  "nombre": "CEDEAR UIPATH INC (PATH)",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "UGP",
+  "nombre": "CEDEAR ULTRAPAR PARTICIPACOES",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "UL",
+  "nombre": "CEDEAR UNILEVER NV NY REGIST SHS ADR",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "UNP",
+  "nombre": "CEDEAR UNION PACIFIC CORP",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "UAL",
+  "nombre": "CEDEAR UNITED AIRLINES HOLDINGS INC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "USO",
+  "nombre": "CEDEAR UNITED STATE OIL FUND LP (USO)",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "X",
+  "nombre": "CEDEAR UNITED STATES STEEL CORP.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "UNH",
+  "nombre": "CEDEAR UNITEDHEALTH GROUP INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "UPST",
+  "nombre": "CEDEAR UPSTART HOLDINGS INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "URBN",
+  "nombre": "CEDEAR URBAN OUTFITTERS, INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "XLU",
+  "nombre": "CEDEAR UTILITIES SELECT SECTOR SPDR FUND",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "VALE",
+  "nombre": "CEDEAR VALE S.A.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "VALE3",
+  "nombre": "CEDEAR VALE S.A.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "GDX",
+  "nombre": "CEDEAR VAN ECK GOLD MINERS ETF/USA",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SMH",
+  "nombre": "CEDEAR VAN ECK VECTORS ETF TRUST",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "VEA",
+  "nombre": "CEDEAR VANGUARD FTSE DEVELOPED MARKETS ETF",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "VRSN",
+  "nombre": "CEDEAR VERISIGN, INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "VZ",
+  "nombre": "CEDEAR VERIZON COMMUNICATIONS INC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "VRTX",
+  "nombre": "CEDEAR VERTEX PHARMACEUTICALS INC (VRTX)",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SPCE",
+  "nombre": "CEDEAR VIRGIN GALACTIC HOLDINGS INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "V",
+  "nombre": "CEDEAR VISA INC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "VIST",
+  "nombre": "CEDEAR VISTA ENERGY S.A.B. DE CV (VIST)",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "VOD",
+  "nombre": "CEDEAR VODAFONE AIRTOUCH PLC",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "WBA",
+  "nombre": "CEDEAR WALGREENS BOOTS ALLIANCE INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "WEGE3",
+  "nombre": "CEDEAR WEG S.A.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "WBO",
+  "nombre": "CEDEAR WEIBO CORPORATION",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "XROX",
+  "nombre": "CEDEAR XEROX CORPORATION",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "XP",
+  "nombre": "CEDEAR XP INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "XPEV",
+  "nombre": "CEDEAR XPENG INC (XPEV)",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "YELP",
+  "nombre": "CEDEAR YELP INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "YY",
+  "nombre": "CEDEAR YY INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "ZM",
+  "nombre": "CEDEAR ZOOM VIDEO COMMUNICATIONS INC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "VST",
+  "nombre": "CEDEARV VISTRA CORPORATION (VST)",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "LYG",
+  "nombre": "LLOYDS BANKING GROUP PLC.",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "SAP",
+  "nombre": "SAP SE",
+  "tipo": "cedear"
+ },
+ {
+  "ticker": "",
+  "nombre": "1810 Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "1810 Ahorros Activos",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "1810 Mas Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "1810 Renta Fija Argentina",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "1810 Renta Fija Dolar",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "1810 Renta Mixta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "1810 Renta Variable Argentina",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "1822 Raices Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "1822 Raices Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "1822 Raices Cobertura",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "1822 Raices Gestion",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "1822 Raices Infraestructura",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "1822 Raices Inversion",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "1822 Raices Renta en",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "1822 Raices Valores Fiduciarios",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "1822 Raices Valores Negociables",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Abierto Momentum Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Abierto Pymes Veta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap ASB Multiactivo",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap Acciones",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap Ahorro Dinamico Fondo de Dinero",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap Balance Multiactivo",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap Balanceado I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap Balanceado III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap Balanceado IV",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap Balanceado IX",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap Balanceado V",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap Balanceado VI",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap Balanceado VII",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap Balanceado X",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap Balanceado XII",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap Balanceado XXVI",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap Cima Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap Cima Renta Fija Nacional",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap Cima Renta Total",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap Cobertura",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap Desarrollo e Infraestructura",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap Financiamiento 1",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap Financiamiento Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap Financiamiento Megra",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap Gestion Estrategica I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap Gestion Estrategica II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap Moneda",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap Patrimonio IV",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap Renta Dolar",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap Renta Fija",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap S&C Renta Corporativa CP Ab Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Adcap Verde y Sustentable ASG",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alamerica Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alamerica Renta Fija Argentina",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alamerica Renta Fija Dolar Latam",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alianza de Capitales",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Acciones",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Agro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Ahorro Dinamico",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Ahorro Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Calificado",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Capital",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Cobertura Dinamica",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Desarrollo e Infraestructura",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Desarrollo e infraestructura",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Dinamico",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Dinamico II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Dinamico III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Dinamico IV",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Diversificado",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Dolar Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Dolar Ahorro Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Dolar Crecimiento",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Dolar Dinamico",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Dolar Gestion",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Dolar Global",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Dolar Latam",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Dolar Performance",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Dolar Retorno Total",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Equity Selection",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Estrategico",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Estructurado",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Gestion",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Gestion II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Gestion IV",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Gestion V",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Patrimonio II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Patrimonio IV",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Patrimonio V",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Principal",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Pyme Selection",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Renta Balanceada I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Renta Balanceada II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Renta Dolar Ley 27260",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Renta Fija",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Renta Mixta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Renta Mixta II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Sustentable ASG",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Unicred",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Unicred Abierto Pymes FCI",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Unicred Cobertura",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Allaria Unicred Empresas",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alpha",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alpha Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alpha Acciones",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alpha Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alpha Dolar",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alpha Infraestructura",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alpha Latam",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alpha Mega",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alpha Mercosur",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alpha Planeamiento Conservador",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alpha Planeamiento Dinamico",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alpha Planeamiento Equilibrado",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alpha Recursos Naturales",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alpha Renta Balanceada Global",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alpha Renta Capital",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alpha Renta Capital Dolar",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alpha Renta Cobertura",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alpha Renta Crecimiento",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alpha Renta Fija Corporativa Dolar",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alpha Renta Fija Global",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alpha Renta Fija Serie 1",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alpha Renta Fija Serie 4",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alpha Renta Fija Serie 6",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alpha Renta Fija Serie 7",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alpha Renta Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alpha Retorno Total",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alycbur FCI Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alycbur Renta Cobertura",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Alycbur Renta Dolar",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Apolo",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Apolo Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Argenfunds Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Argenfunds Abierto Pymes II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Argenfunds Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Argenfunds Financiamiento",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Argenfunds Gestion",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Argenfunds Infraestructura",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Argenfunds Inversion",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Argenfunds Liquidez",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Argenfunds Renta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Argenfunds Renta Argentina",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Argenfunds Renta Balanceada",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Argenfunds Renta Capital",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Argenfunds Renta Crecimiento",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Argenfunds Renta Dinamica",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Argenfunds Renta Fija",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Argenfunds Renta Fija II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Argenfunds Renta Flexible",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Argenfunds Renta Global",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Argenfunds Renta Mixta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Argenfunds Renta Mixta Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Argenfunds Renta Total",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Argenfunds Renta Variable",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Argenfunds Retorno Absoluto",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Arpenta (ex Mercosur)",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Arpenta Acciones Argentina",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Arpenta Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Atlas (Valor final de liquidacion)",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Atlas Div $ U$S y Otras Mon (Valor Final de Liq.)",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Avantia Multiestrategia",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Abierto Pymes 3",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Capital 1",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Estrategia 1",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Estrategia 10",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Estrategia 11",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Estrategia 12",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Estrategia 13",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Estrategia 14",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Estrategia 15",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Estrategia 16",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Estrategia 17",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Estrategia 18",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Estrategia 19",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Estrategia 20",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Estrategia 21",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Estrategia 22",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Estrategia 23",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Estrategia 24",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Estrategia 25",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Estrategia 26",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Estrategia 27",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Estrategia 29",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Estrategia 3",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Estrategia Dolar 1",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Estrategia Dolar 2",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Estrategia Dolar 3",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Estrategia Dolar 4",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Estrategia Dolar 5",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Estrategia Dolar 6",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis FCIA Pymes 1",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis FCIA Pymes 2",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Gestion 1",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis IMSA FCI Abierto Pymes Fed Argen",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis IMSA FCI Abierto Pymes Federal Argentina",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Axis Rosental FCI Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "BAVSA",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "BAVSA Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "BAVSA Ahorro Dolar",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "BAVSA Ahorro Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "BAVSA FCIA Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "BAVSA Global I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "BAVSA Global II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "BAVSA Global V",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "BAVSA Peso Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "BAVSA Renta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "BAVSA Renta Balanceado",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "BAVSA Renta Balanceado II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "BAVSA Renta Balanceado III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "BAVSA Renta Balanceado V",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "BAVSA Retorno Total",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "BM Active Renta Fija Argentina",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "BM Smart Corto Plazo",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "BM Smart Money Market",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "BPF Renta Fija",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "BPF Renta Fija Dolar",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Acciones",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Ahorro en",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Capital Abierto Pymes FCI",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Capital Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Capital Estrategia I USD",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Capital Estrategia II USD",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Capital Estrategia III USD",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Capital Estrategia IV USD",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Capital Estrategia V USD",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Capital Money Market",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Capital Renta Fija",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Capital Renta Fija en",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Capital Sudamericano",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Crecim FCI Ab Fin Infra Ec Real",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Crecimiento FCI Ab Fin Infra Eco Real",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Desa FCI Ab Fin Infra y Ec Real",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Desarrollo FCI Ab Fin Infra Eco Real",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Equity Selection",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Excalibur Regisseur",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Infraestructura",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Institucional",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Lecaps",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Long",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Money Market USD",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Performance III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Performance V",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Performance XI",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Performance XIII",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Performance XIV",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Renta Fija Estrategica",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Renta Fija Global",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Renta Variable Global",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Retorno Total",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Balanz Soja",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Bamba Agronegocios",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Bavsa Renta Balanceado",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Bull Market Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Bull Market Acciones Argentinas",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Bull Market Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Bull Market Estrategia",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Bull Market Renta Fija",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Bull Market Renta Fija Dolar",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Bull Market Renta Fija Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "CMA Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "CMA Acciones",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "CMA Dolar Dinamico",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "CMA Estrategia",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "CMA Performance",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "CMA Proteccion",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "CMA Renta Dolar",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "CYC",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "CYC Liquidez",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "CYC Renta Fija en",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "CYC Renta Mixta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Chaco Abierto Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Chaco FCI Abierto Infraestructura",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Chaco FCI Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Chaco FCI Money Market",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Chaco FCI Renta Fija",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Chaco Renta Fija I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Champaqui Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Champaqui Ahorro Mixto",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Champaqui Cobertura",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Champaqui Estrategico",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Champaqui FCI Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Champaqui Fondo Inmediato",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Champaqui Fondo Inmediato Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Champaqui Fondo Liquidez Dolar",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Champaqui Renta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Champaqui Renta Dolar",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Champaqui Renta Futura",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Champaqui Renta Variable",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Cima Renta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Cima Renta Variable",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Cocos",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Cocos Acciones",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Cocos Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Cocos Rendimiento",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Cocos Renta Dolar",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Cocos Retorno Total II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Cohen Cobertura",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Cohen Renta Fija Argentina",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Cohen Renta Fija Plus Titulos RP",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Compass Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Compass Ahorro en",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Compass Argentina Abierto PyMEs",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Compass Best Ideas",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Compass Crecimiento",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Compass Crecimiento II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Compass Liquidez",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Compass Opportunity",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Compass Renta Fija",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Compass Renta Fija II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Compass Renta Fija III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Compass Renta Fija IV",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Compass Renta Fija V",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Compass Renta Mixta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Compass Renta Mixta II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Compass Renta Mixta III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Compass Renta Mixta IV",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Compass Renta Mixta V",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Compass Renta Mixta VI",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Compass Renta Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Compass Renta Plus II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "ConoSur Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "ConoSur Financiamiento",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "ConoSur Liquidez",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "ConoSur Renta Fija Corporativa",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "ConoSur Visus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Acciones Argentina",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Ahorro Plus Argentina F.C.I.",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Arbitraje",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Balance Fund",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Crecimiento",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Deuda Argentina",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Estrategia",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Estrategia I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Estrategia II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Estrategia III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Estrategia IV",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Estrategia V",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Fondo de Dinero",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Income Fund",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Liquidez Ley 27260",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Multiestrategia",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Multimercado I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Multimercado II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Multimercado III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Multimercado IV",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Multimercado V",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Renta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Renta Balanceada",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Renta Fija Argentina F.C.I.",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Renta Local",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Renta Mixta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Renta Nacional",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Renta Variable",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Renta y Capital",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Retorno Absoluto",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Consultatio Tactico",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Crecer Acciones",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Crecer Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Crecer Liquidez",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Crecer Renta Dolar",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Crecer Renta Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Delta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Delta Acciones",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Delta Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Delta Ahorro Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Delta Crecimiento Infraestructura",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Delta Empresas Argentinas Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Delta Federal I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Delta Gestion I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Delta Gestion II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Delta Gestion III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Delta Gestion IV",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Delta Gestion IX",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Delta Gestion V",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Delta Gestion VI",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Delta Gestion VII",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Delta Gestion X",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Delta Gestion XI",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Delta Gestion XII",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Delta Internacional",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Delta Moneda",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Delta Multimercado I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Delta Multimercado II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Delta Patrimonio I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Delta Performance",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Delta Recursos Naturales",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Delta Renta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Delta Retorno Real",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Delta Select",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Delval",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Desarrollo Argentino I FCI Ab Fin Infra y Ec Real",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Desarrollo Argentino I FCI Ab Fin Infra y Eco Real",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Desarrollo Argentino II FCI Ab Fin Infra Ec Real",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Desarrollo Argentino II FCI Ab Fin Infra Eco Real",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Desarrollo Argentino III FCI Ab Fin Infra Ec Real",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Dracma Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Dracma Balanceado",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Dracma Estrategia Dolar",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Dracma Estrategia Dolar I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Dracma Multiestrategia",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Dracma Renta Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "ESG ST Fondo Comun De Inversion ASG",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Ecopymes FCI Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "FBA Acciones Globales Dolar I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "FBA Money Market",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "FBA Money Market Dolar",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "FBA Renta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "FBA Renta Fija Dolar I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "FBA Renta Fija Dolar Latam I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "FBA Renta Fija Dolar Plus I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "FBA Renta Mixa Dolar I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "FBA Renta Mixta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "FBA Renta Publica I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "FBA Retorno Total I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "FCI Abierto Pymes Potencia Pyme",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Fima Acciones Latinoamerica",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Fima Ahorro Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Fima Capital Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Fima Cartera Sustentable FCI ASG",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Fima FCI Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Fima Mix",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Fima Mix I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Fima Mix II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Fima Premium",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Fima Renta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Fima Renta Fija",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Fima Renta Fija Internacional",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Fima Renta Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "First Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "First Abierto Pymes II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "First Crecimiento",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "First Renta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "First Renta Agro FCIC Ley 27260",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "First Renta Mixta I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "First Renta Mixta II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "First Renta Mixta III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "First Renta Mixta IV",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "First Renta Mixta V",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "First Renta Mixta VI",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "First Renta Mixta VII",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "First Renta Mixta VIII",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Fundcorp Capital Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Fundcorp Liquidez",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Fundcorp Liquidez Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Fundcorp Long Performance",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Fundcorp Long Performance Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Fundcorp Performance",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Fundcorp Performance Balanceado",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Fundcorp Performance Multiestrategia",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Fundcorp Performance Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "GMC Money Market",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "GMC Retorno Total",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "GMC Retorno Total II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "GMC Retorno Total IV",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "GNNW SBS FCIC Ganadero W86",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "GSS Cobertura",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "GSS Energia",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "GSS I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "GSS II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "GSS III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "GSS Inmobiliario I FCIC",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "GSS Renta Fija Argentina",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "GSS Retorno Total",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Balanceado",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Balanceado II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Balanceado III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Balanceado IV",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Balanceado V",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Balanceado VI",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Balanceado VII",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Balanceado VIII",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Capital",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Capital II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Capital III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Crecimiento",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Crecimiento II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Crecimiento III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Estrategia I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Estrategia II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Estrategia III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Estrategia IV",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest FF",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Global I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Global II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Global III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Global IV",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Global IX",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Global V",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Global VI",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Global VII",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Global VIII",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Infraestructura FCI Abierto",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest PYMEs",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Performance",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Performance II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Regional",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Renta Fija",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Renta Fija Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Renta Fija Proteccion Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Renta Mixta Sustentable FCI ASG",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gainvest Renta Variable",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Galileo",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Galileo Acciones",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Galileo Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Galileo Ahorro Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Galileo Argentina",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Galileo Estrategia",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Galileo Event Driven",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Galileo FCI Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Galileo Fixed Income",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Galileo Income",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Galileo Multi Strategy",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Galileo Multimercado II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Galileo Multimercado III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Galileo Multimercado IV",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Galileo Multimercado IX",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Galileo Multimercado V",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Galileo Multimercado VI",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Galileo Multimercado VII",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Galileo Multimercado VIII",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Galileo Premium",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Galileo Renta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Galileo Renta Fija",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Galileo Sustentable ASG",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gestionar Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Gestionar Renta Fija",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "HF Balanceado",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "HF Infraestructura",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "HF Infraestructura II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "HF Retorno Total",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IAM Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IAM Dinamico FCI Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IAM Estrategia",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IAM FCI Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IAM Lider Renta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IAM Liquidez en",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IAM Performance Americas",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IAM Renta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IAM Renta Balanceada",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IAM Renta Capital",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IAM Renta Crecimiento",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IAM Renta Mixta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IAM Renta Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IAM Renta Variable",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IAM Retorno",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IEB Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IEB Ahorro Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IEB Corto Plazo Dolar",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IEB Estrategico",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IEB Estrategico II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IEB Multiestrategia III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IEB Multiestrategia IV",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IEB Multiestrategia V",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IEB Pyme",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IEB Renta Fija",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IEB Renta Fija Dolar",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IEB Renta Fija Dolar 2",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IEB Retorno Total",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IEB Retorno Total II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IEB Retorno Total III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IEB Value",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IOL Dolar Ahorro Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "IOL Portafolio Potenciado",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Integrae Acciones",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Integrae Renta Fija",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Integrae Renta Fija Crecimiento",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Integrae SC Retorno Total",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Intervalores Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Intervalores Dolar Total Return",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Julio A. Roca Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Julio A. Roca Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Julio A. Roca Valores Negociables",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Litoral (En proceso de liquidacion)",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Litoral Renta Fija (En proceso de liquidacion)",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Lombard",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Lombard Abierto Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Lombard Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Lombard Acciones Lideres",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Lombard Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Lombard Ahorro Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Lombard Ahorro Plus II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Lombard Capital",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Lombard Capital Fisicos",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Lombard Capital JYF",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Lombard Dinamico I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Lombard Liquidez",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Lombard Renta Fija",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Lombard Renta Fija en",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Lombard Renta en",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MAF",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MAF Abiertos Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MAF Acciones Argentinas",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MAF Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MAF Ahorro Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MAF Empresas Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MAF Estrategia",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MAF Gestion Activa",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MAF Gestion Activa III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MAF Liquidez",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MAF Money Market",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MAF Renta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MAF Renta Argentina",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MAF Renta Argentina 2",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MAF Renta Balanceada",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MAF Renta Balanceada 2",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MAF Renta Fija Cobertura",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MAF Renta Mixta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MAX Gestion Abierto Pyme I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MEGAQM",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MEGAQM Acciones",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MEGAQM Acciones Latam",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MEGAQM Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MEGAQM Balanceado",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MEGAQM Cobertura",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MEGAQM Cobertura FCIA Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MEGAQM Corporativo",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MEGAQM Empresas Argentinas FCIA Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MEGAQM Estrategia 1",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MEGAQM Estrategia 2",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MEGAQM Estrategia 3",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MEGAQM Estrategia 4",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MEGAQM Estrategia 5",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MEGAQM Estrategia 6",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MEGAQM Estrategia 7",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MEGAQM FCI Abierto Financiamiento Infra",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MEGAQM Gestion",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MEGAQM Gestion Balanceada",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MEGAQM Latam Corporativo",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MEGAQM Performance II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MEGAQM Provincial",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MEGAQM Renta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MEGAQM Renta Fija LATAM",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MEGAQM Renta Mixta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MEGAQM Retorno Absoluto",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MEGAQM Retorno Total",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "MEGAQM Sustentable ASG",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Max Abierto PyMEs",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Max Acciones Argentinas",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Max Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Max Cobertura",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Max Dinamico I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Max Dinamico II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Max Dinamico III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Max Dinamico IV",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Max Dinamico V",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Max Estrategico I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Max Estrategico II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Max Estrategico III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Max Estrategico IV",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Max Estrategico V",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Max Money Market",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Max Multigestion I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Max Retorno Total",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Megainver Balanceado",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Mercado Fondo",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Mercado Fondo Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Novus Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Novus Balanceado",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Novus Capital",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Novus Estrategia",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Novus Gestion",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Novus Gestion II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Novus Income",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Novus Liquidez Fondo de Dinero",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Novus Liquidez Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Novus Low Volatility",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Novus Multiestrategia",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Novus Performance",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Novus Pyme Abierto",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Novus Renta Balanceado",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Novus Renta Capital",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Novus Renta Dolar",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Novus Renta Fija",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Novus Renta Mixta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Novus Retorno Total",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Novus Valor",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Numancia",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Optimum Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Optimum Balanced Strategy",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Optimum CDB",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Optimum Dynamic Balanced Fund",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Optimum FAE (Fondo de Aplicaciones Especiales)",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Optimum Global Balanced",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Optimum Global Investment Grade",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Optimum Global Opportunity",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Optimum Global Renta Mixta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Optimum Liquidity",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Optimum Multi Asset Fund",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Optimum Renta Fija",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Optimum Renta Fija Argentina",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Optimum Renta Fija Estrategica",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Optimum Renta Mixta Flexible",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Optimum Renta Mixta Flexible Argentina",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Optimum Renta Variable III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Optimum Total Return",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Parakeet",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Parakeet Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Parakeet Balanced Fund",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Parakeet Balanced Fund II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Parakeet Capital Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Parakeet Dinamico",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Parakeet Dinamico II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Parakeet Dinamico III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Parakeet Estrategia",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Parakeet Global",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Parakeet Income",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Parakeet Latam",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Parakeet Multimercado",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Parakeet Multimercado II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Parakeet Premium",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Parakeet Renta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pellegrini Acciones",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pellegrini Agro FCI",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pellegrini Crecimiento",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pellegrini Desarrollo Arg. Infraest.",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pellegrini Empresas Argentinas PyMES",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pellegrini I FCIC",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pellegrini Integral",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pellegrini Liquidez",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pellegrini Proteccion",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pellegrini Renta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pellegrini Renta Fija",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pellegrini Renta Fija Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pellegrini Renta Fija III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pellegrini Renta Fija Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pellegrini Renta Fija Publica",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pellegrini Renta Publica Federal",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pellegrini Retorno Total",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Acciones",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Acciones Argentinas",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Acciones Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Ahorro Dolar Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Argentina Bicentenario",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Capital",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Capital Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Crecimiento",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Desarrollo",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Dolar Dinamico",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Dolar Gestion",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Empresas FCI Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero FF",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Gestion",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Infraestructura",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Inversion Dolar",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Moneda",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Multiestrategia Mix",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Multiestrategia Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Patrimonio I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Performance",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Performance II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Performance III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Recovery",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Renta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Renta Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Renta Ahorro Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Renta Balanceado",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Renta Crecimiento",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Renta Dolar Estrategia",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Renta Estrategico",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Renta Fija",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Renta Global",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Renta Mixta I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Renta Mixta I RP D.596",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Retorno",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Pionero Retorno Total",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Premier Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Premier Capital",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Premier Commodities",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Premier Estrategico",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Premier Global",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Premier Inversion",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Premier Performance",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Premier Renta CP en",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Premier Renta Fija Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Premier Renta Fija Crecimiento",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Premier Renta Mixta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Premier Renta Mixta en",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Premier Renta Plus en",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Premier Renta Variable",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Premier Sustentable ASG",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Probolsa",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Probolsa Acciones",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Quinquela Predial FCIC Ley 27260",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Quiron Agro Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Quiron Fixed Income",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Quiron Latam en U$S",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Quiron Money Market",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Quiron PYMEs",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Quiron Pymes Capital Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Quiron Renta Mixta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Quiron Savings",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Roble Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Rofex 20 Renta Variable",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Acciones Argentina",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Acciones Brasil",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Balanceado",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Capital Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Creaurban Desarrollo FCIC",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Desarrollo Infraestructura",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Dolar Plus Ley 27260",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Estrategia",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Gestion Renta Fija",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Infraestructura y Desa Prod FCIC Ley N27260",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Latam",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Liquidez USD",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Multiactivos",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Patrimonio",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Patrimonio II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Patrimonio III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Patrimonio IV",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Patrimonio IX",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Patrimonio V",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Patrimonio VI",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Patrimonio VIII",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Renta Capital",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Renta Fija I FCIC",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Renta Fija Total",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Renta Mixta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Renta Mixta III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Renta Mixta V",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Renta Patrimonio",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Retorno Sustentable ASG",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Retorno Total",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Tavelli Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Tavelli Global",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SBS Tavelli Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SC I Renta Mixta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SC II Renta Fija",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SF Value",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SMR Fondo Comun de Inversion",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "SMSV Renta en",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "ST Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "ST Estrategico",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "ST Gestion I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "ST Gestion II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "ST Gestion III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "ST Gestion IV",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "ST Gestion IX",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "ST Gestion V",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "ST Global",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "ST Infraestructura",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "ST One Ahorro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "ST Renta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "ST Renta Fija",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "ST Renta Mixta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "ST Renta Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "ST Retorno Total",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "ST Zero",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Schroder",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Schroder Balanceado",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Schroder Capital Renta Fija",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Schroder Corto Plazo",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Schroder Crecimiento",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Schroder Crecimiento Dos",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Schroder Crecimiento Tres",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Schroder Desarrollo y Crecimiento PyMEs",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Schroder Income",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Schroder Infraestructura",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Schroder Liquidez",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Schroder Multiactivos",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Schroder Patrimonio",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Schroder Patrimonio Dos",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Schroder Renta Fija",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Schroder Renta Global",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Schroder Renta Global Cinco",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Schroder Renta Global Cuatro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Schroder Renta Global Dos",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Schroder Renta Global Tres",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Schroder Renta Performance",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Schroder Renta Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Schroder Renta Variable",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Schroder Retorno Absoluto",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Schroder Retorno Total",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Schroder Retorno Total Cuatro",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Schroder Retorno Total Dos",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Super Ahorro U$S",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Super Bonos",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Superfondo Acciones",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Superfondo Acciones Brasil",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Superfondo Ahorro U$S - Cash",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Superfondo Ahorro en",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Superfondo Empresas Args. Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Superfondo Equilibrado",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Superfondo Estrategico",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Superfondo Latinoamerica",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Superfondo Multiactivos Dolar",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Superfondo Renta $",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Superfondo Renta Balance",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Superfondo Renta Balance II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Superfondo Renta Fija",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Superfondo Renta Fija Latam",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Superfondo Renta Global",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Superfondo Renta Mixta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Superfondo Renta Variable",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Superfondo Sustentable ASG",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Supergestion",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Supergestion Balanceado",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Supergestion Mix VI",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Supergestion Multimercado",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Tandem",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Terrazas Del Volcan Inmobiliario FCIC",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Toronto Trust",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Toronto Trust Abierto Pymes",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Toronto Trust Argentina 2021",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Toronto Trust Balanceado",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Toronto Trust Crecimiento",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Toronto Trust Gestion",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Toronto Trust Global Capital",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Toronto Trust Infraestructura",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Toronto Trust Liquidez Dolar",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Toronto Trust Money Market Dolar",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Toronto Trust Multimercado",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Toronto Trust Renta Dolar",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Toronto Trust Renta Fija",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Toronto Trust Renta Fija Plus",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Toronto Trust Retorno Total",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Toronto Trust Special Opportunities",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Ualintec",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Ualintec Cobertura",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Ualintec Renta",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Ualintec Renta Fija",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Ualintec Renta Variable",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Ualintec Retorno Total",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Valiant Money Market",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Valiant Renta Fija",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Valiant Renta Fija Balanceado I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Valiant Renta Fija Balanceado II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Valiant Renta Fija Balanceado III",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Valiant Renta Fija Balanceado IV",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Valiant Renta Fija Balanceado V",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Valiant Renta Variable",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Valiant Total Return",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Valiant Total Return RP",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Wise Capital Corporate Treasury",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Wise Capital Equity",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Wise Capital Focus I",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Wise Capital Focus II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Wise Capital Global Markets",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Wise Capital Legacy",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Wise Capital Money Markets",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Wise Capital Multistrategy",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Wise Capital Saving",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Zofingen",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Zofingen Dollar Linked",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Zofingen Faro Fund",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Zofingen Infraestructura",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Zofingen Multi Strategy II",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "",
+  "nombre": "Zofingen Total Return Dolar",
+  "tipo": "fci"
+ },
+ {
+  "ticker": "DB01Q",
+  "nombre": "CP FF DESARROLLO MINERO MARITIN BRONCE USD",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "IB1QD",
+  "nombre": "CP FF ILLA BELGRANO 1 USD",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "NM25Q",
+  "nombre": "CP FF MERCADO CR. CONSUMO 25 CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "NM19Q",
+  "nombre": "CP FF MERCADO CRED CONSUMO 19 CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "NM24Q",
+  "nombre": "CP FF MERCADO CRED CONSUMO 24 CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "NM35Q",
+  "nombre": "CP FF MERCADO CRED CONSUMO 35 CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "DT19Q",
+  "nombre": "CP FF MERCADO CREDITO 19 CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "DT20Q",
+  "nombre": "CP FF MERCADO CREDITO 20 CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "DT21Q",
+  "nombre": "CP FF MERCADO CREDITO 21 CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "DT22Q",
+  "nombre": "CP FF MERCADO CREDITO 22 CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "DT23Q",
+  "nombre": "CP FF MERCADO CREDITO 23 CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "DT24Q",
+  "nombre": "CP FF MERCADO CREDITO 24 CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "NM26Q",
+  "nombre": "CP FF MERCADO CREDITO CONSUMO 26 CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "NM27Q",
+  "nombre": "CP FF MERCADO CREDITO CONSUMO 27 CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "NM28Q",
+  "nombre": "CP FF MERCADO CREDITO CONSUMO 28 CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "NM29Q",
+  "nombre": "CP FF MERCADO CREDITO CONSUMO 29 CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "NM30Q",
+  "nombre": "CP FF MERCADO CREDITO CONSUMO 30 CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "NM31Q",
+  "nombre": "CP FF MERCADO CREDITO CONSUMO 31 CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "NM32Q",
+  "nombre": "CP FF MERCADO CREDITO CONSUMO 32 CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "NM33Q",
+  "nombre": "CP FF MERCADO CREDITO CONSUMO 33 CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "NM34Q",
+  "nombre": "CP FF MERCADO CREDITO CONSUMO 34 CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "PVR1Q",
+  "nombre": "CP FF PROYEC.VIDA LAB.RICH US C.G",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "RM66Q",
+  "nombre": "CP FF RED MUTUAL 66 CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "EG01Q",
+  "nombre": "CP FF RENTA AGRICOLA 1/F. INV DIR US CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "S228Q",
+  "nombre": "CP FF SECUBONO 228 CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "TY01Q",
+  "nombre": "CP FF TRAYECTORIA LEASING 1 CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "MY47A",
+  "nombre": "VD FF AMFAYS 47 CL.A C.G",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "MY49A",
+  "nombre": "VD FF AMFAYS 49 CL.A C.G",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "TSCH9",
+  "nombre": "VD FF C.H.A. SERIE 9 2009-1 C.G.",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "TSC12",
+  "nombre": "VD FF C.H.A.SERIE 12 2010-1 CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "CARP",
+  "nombre": "VD FF CLUB RIVER PLATE UVA CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "CVS3V",
+  "nombre": "VD FF COOPERATIVA DE CREDITO Y VIVIENDA UNICRED LIM",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "TH04A",
+  "nombre": "VD FF CREDITECH 4 CL.A",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "CU44A",
+  "nombre": "VD FF CUOTAS CENCOSUD 44 CL.A CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "DB01A",
+  "nombre": "VD FF DESARROLLO MINERO MARTIN BRONCE USD",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "DG02A",
+  "nombre": "VD FF DIESEL LANGE S. 2 CL. A US C.G.",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "GA01A",
+  "nombre": "VD FF GLOBAL ARSA 1 US CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "M299A",
+  "nombre": "VD FF MEGABONO 299 CL. A CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "M324A",
+  "nombre": "VD FF MEGABONO CREDITO S.324 CL.A CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "DT29A",
+  "nombre": "VD FF MERCADO CREDITO 29 CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "DT30A",
+  "nombre": "VD FF MERCADO CREDITO 30 CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "DT31A",
+  "nombre": "VD FF MERCADO CREDITO 31 CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "DT35A",
+  "nombre": "VD FF MERCADO CREDITO 35 CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "PA07A",
+  "nombre": "VD FF PARETO S.7 CL. A CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "PA08A",
+  "nombre": "VD FF PARETO S.8 CL. A CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "S239A",
+  "nombre": "VD FF SECUBONO 239 CL.A CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "IP01A",
+  "nombre": "VD FF SION CONECTA INF PRIV 1 UVAS CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "TO04A",
+  "nombre": "VD FF TOTAL ASSETS 4 CL. A CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "TO05A",
+  "nombre": "VD FF TOTAL ASSETS 5 CL.A CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "VO03A",
+  "nombre": "VD FF VOII 3 SENIOR C.G.",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "WM11A",
+  "nombre": "VD FF WAYNIMOVIL 11 CL.A CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "CVS1V",
+  "nombre": "VDFF COOP CRED Y VIV UNICRED S.1 CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "MM14A",
+  "nombre": "VDFF MONI MOBILE S.14 CL.A CG",
+  "tipo": "fideicomiso"
+ },
+ {
+  "ticker": "X30N6",
+  "nombre": "LETRA TESORO NACIONAL AJUSTABLE CER A D",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "X29Y6",
+  "nombre": "LETRA TESORO NACIONAL AJUSTADA POR CER",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S17A6",
+  "nombre": "LETRA TESORO NACIONAL CAPITALIZABLE 17/0",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S30A6",
+  "nombre": "LETRA TESORO NACIONAL CAPITALIZABLE 30/0",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S30O6",
+  "nombre": "LETRA TESORO NACIONAL CAPITALIZABLE 30/1",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S30N6",
+  "nombre": "LETRA TESORO NACIONAL CAPITALIZABLE 30/1",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S31G6",
+  "nombre": "LETRA TESORO NACIONAL CAPITALIZABLE 31/0",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "M31G6",
+  "nombre": "LETRA TESORO NACIONAL TAMAR CAPITALIZAB",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "M30A6",
+  "nombre": "LETRA TESORO NACIONAL TASA TAMAR 30/04",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "D30A6",
+  "nombre": "LETRA TESORO NACIONAL VINC. USD CERO CU",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "D28N5",
+  "nombre": "LETRA TESORO NACIONAL VINC. USD CERO CU",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "D30E6",
+  "nombre": "LETRA TESORO NACIONAL VINC. USD CERO CU",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S14F5",
+  "nombre": "LETRAS DEL TESORO CAP 14/02/25",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S12S5",
+  "nombre": "LETRAS DEL TESORO CAP V 12/09/25",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S14M5",
+  "nombre": "LETRAS DEL TESORO CAP V 14/03/25",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S16A5",
+  "nombre": "LETRAS DEL TESORO CAP V 16/04/25",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S16Y5",
+  "nombre": "LETRAS DEL TESORO CAP V 16/05/25",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S31O4",
+  "nombre": "LETRAS DEL TESORO CAP V 31/10/24",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S28A5",
+  "nombre": "LETRAS DEL TESORO CAP V28/04/25",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S30Y5",
+  "nombre": "LETRAS DEL TESORO CAP V30/05/25",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S30S5",
+  "nombre": "LETRAS DEL TESORO CAP V30/09/25",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S31L5",
+  "nombre": "LETRAS DEL TESORO CAP V31/07/25",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "S31O5",
+  "nombre": "LETRAS DEL TESORO CAP V31/10/25",
+  "tipo": "letra"
+ },
+ {
+  "ticker": "RC1CO",
+  "nombre": "ARCOR S.A.I.C 7.6% VTO. 31/07/33",
+  "tipo": "on"
+ },
+ {
+  "ticker": "BYCHO",
+  "nombre": "BANCO DE GALICIA Y BS. AS. 7.75% VTO. 10/10/28",
+  "tipo": "on"
+ },
+ {
+  "ticker": "BACGO",
+  "nombre": "BANCO MACRO S A 8% VTO..23/06/2029",
+  "tipo": "on"
+ },
+ {
+  "ticker": "BA1GO",
+  "nombre": "BANCO MACRO SA 8% VTO. 23/06/29",
+  "tipo": "on"
+ },
+ {
+  "ticker": "CLI1O",
+  "nombre": "CLISA COMPANIA LATIN (REGS) VAR VTO.10/12/34",
+  "tipo": "on"
+ },
+ {
+  "ticker": "OZC6O",
+  "nombre": "EMP. DIST. DE ELECT. DE MENDOZA S A 28/07/2031",
+  "tipo": "on"
+ },
+ {
+  "ticker": "MR39O",
+  "nombre": "GENERACION MED REGS 11% VTO. 01/11/31",
+  "tipo": "on"
+ },
+ {
+  "ticker": "RUCDO",
+  "nombre": "MSU ENERGY S.A. REGS 9.75% VTO. 05/12/30",
+  "tipo": "on"
+ },
+ {
+  "ticker": "ARC1O",
+  "nombre": "ON AA2000 REGS 8,5% V.01/08/2031",
+  "tipo": "on"
+ },
+ {
+  "ticker": "AER4O",
+  "nombre": "ON AA2000 REGS 9,5% V.01/11/2028",
+  "tipo": "on"
+ },
+ {
+  "ticker": "AEC2O",
+  "nombre": "ON AES REGS 9.5% V30/08/2027",
+  "tipo": "on"
+ },
+ {
+  "ticker": "RCCJO",
+  "nombre": "ON ARCOR REGS 8.25% V.09/10/2027",
+  "tipo": "on"
+ },
+ {
+  "ticker": "HBC4O",
+  "nombre": "ON BANCO HIPOTECARIO REGS 9.75% 14/10/25",
+  "tipo": "on"
+ },
+ {
+  "ticker": "BYC2O",
+  "nombre": "ON BCO GALICIA REGS 8,25% 19/07/2026",
+  "tipo": "on"
+ },
+ {
+  "ticker": "BACAO",
+  "nombre": "ON BCO MACRO CL A REG S 6,750% 04/11/26",
+  "tipo": "on"
+ },
+ {
+  "ticker": "CAC5O",
+  "nombre": "ON CAPEX 9.250% V25/08/28 REGS",
+  "tipo": "on"
+ },
+ {
+  "ticker": "CAC2O",
+  "nombre": "ON CAPEX CLASE 2 REGS 6,875% 15/05/2024",
+  "tipo": "on"
+ },
+ {
+  "ticker": "CP38O",
+  "nombre": "ON COMPANIA GENERAL DE 11,875 % VTO. 28/11/30",
+  "tipo": "on"
+ },
+ {
+  "ticker": "DNC7O",
+  "nombre": "ON EDENOR CLASE 7 9.75% VTO 24/10/2030",
+  "tipo": "on"
+ },
+ {
+  "ticker": "DNC1O",
+  "nombre": "ON EDENOR S.A. REGS 9,75% V.12/05/2025",
+  "tipo": "on"
+ },
+ {
+  "ticker": "DN17O",
+  "nombre": "ON EMPRESA DISTRIBUIDO NORTE 9,75 % VTO. 24/10/30",
+  "tipo": "on"
+ },
+ {
+  "ticker": "MRCXO",
+  "nombre": "ON GENERACION MED REGS 12,5 % 28/05/27",
+  "tipo": "on"
+ },
+ {
+  "ticker": "GN49O",
+  "nombre": "ON GENNEIA S.A.7.75% 02/12/33",
+  "tipo": "on"
+ },
+ {
+  "ticker": "MRCAO",
+  "nombre": "ON GM/CTR REGS 9.875% V.01/12/2027",
+  "tipo": "on"
+ },
+ {
+  "ticker": "IR2PO",
+  "nombre": "ON IRSA INVERSIONES Y 8% VTO. 31/03/35",
+  "tipo": "on"
+ },
+ {
+  "ticker": "IRCPO",
+  "nombre": "ON IRSA INVERSIONES Y REP. REGS 8% V 31/03/35",
+  "tipo": "on"
+ },
+ {
+  "ticker": "IRCFO",
+  "nombre": "ON IRSA REGS 8.75% V.22/06/2028",
+  "tipo": "on"
+ },
+ {
+  "ticker": "PNDCO",
+  "nombre": "ON PAE CL.12 REGS 9,125% V.30/04/2027",
+  "tipo": "on"
+ },
+ {
+  "ticker": "MGC1O",
+  "nombre": "ON PAMPA ENERGIA REGS 7,5% 24/01/2027",
+  "tipo": "on"
+ },
+ {
+  "ticker": "MGCOO",
+  "nombre": "ON PAMPA ENERGIA S.A. 7,875 % V.16/12/34",
+  "tipo": "on"
+ },
+ {
+  "ticker": "MGCRO",
+  "nombre": "ON PAMPA ENERGIA SA 7,75 VTO. 14/11/37",
+  "tipo": "on"
+ },
+ {
+  "ticker": "MGC9O",
+  "nombre": "ON PAMPA ENERGIA SA REGS 9.5% V08/12/26",
+  "tipo": "on"
+ },
+ {
+  "ticker": "PNXCO",
+  "nombre": "ON PAN AMERICAN ENERGY 8.5 % 30/04/32",
+  "tipo": "on"
+ },
+ {
+  "ticker": "PNMCO",
+  "nombre": "ON PAN AMERICAN REGS 7.25% V.21/07/2025",
+  "tipo": "on"
+ },
+ {
+  "ticker": "PLC5O",
+  "nombre": "ON PLUSPETROL S.A. 8.125 18/05/31",
+  "tipo": "on"
+ },
+ {
+  "ticker": "PLC4O",
+  "nombre": "ON PLUSPETROL SA REGS 8.50% V. 30/05/32",
+  "tipo": "on"
+ },
+ {
+  "ticker": "RAC7O",
+  "nombre": "ON RAGHSA S.A. REGS 8,5% V. 11/12/32",
+  "tipo": "on"
+ },
+ {
+  "ticker": "RAC4O",
+  "nombre": "ON RAGHSA VTO.04/05/2027 8.5 %",
+  "tipo": "on"
+ },
+ {
+  "ticker": "RAC5O",
+  "nombre": "ON REGS RAGHSA 8.25% V.24/04/2030 US",
+  "tipo": "on"
+ },
+ {
+  "ticker": "TTCAO",
+  "nombre": "ON TECPETROL S.A. 7.625% V 22/01/33 REGS",
+  "tipo": "on"
+ },
+ {
+  "ticker": "TLCMO",
+  "nombre": "ON TELECOM ARGENTINA 9,5% V.18/7/31",
+  "tipo": "on"
+ },
+ {
+  "ticker": "TLCPO",
+  "nombre": "ON TELECOM ARGENTINA SA REGS 9.25% V. 28/05/33",
+  "tipo": "on"
+ },
+ {
+  "ticker": "TSC2O",
+  "nombre": "ON TGS S.A. 2 REGS US 6.75% 02/05/25",
+  "tipo": "on"
+ },
+ {
+  "ticker": "TSC4O",
+  "nombre": "ON TRAN. DE GAS DEL SUR 7.75 20/11/35",
+  "tipo": "on"
+ },
+ {
+  "ticker": "VSCTO",
+  "nombre": "ON VISTA ENERGY ARGENT 7,625% V.10/12/35",
+  "tipo": "on"
+ },
+ {
+  "ticker": "VS1VO",
+  "nombre": "ON VISTA ENERGY TEMP REGS 8.50 10/06/33",
+  "tipo": "on"
+ },
+ {
+  "ticker": "YCAMO",
+  "nombre": "ON YPF CL. 53 REGS 6,95% 21/07/2027",
+  "tipo": "on"
+ },
+ {
+  "ticker": "YCA6O",
+  "nombre": "ON YPF CLASE 39 8,50% US VTO.28/07/2025",
+  "tipo": "on"
+ },
+ {
+  "ticker": "YFCJO",
+  "nombre": "ON YPF ENERGIA ELEREGS 7.875% V 16/10/32",
+  "tipo": "on"
+ },
+ {
+  "ticker": "YMCJO",
+  "nombre": "ON YPF S.A. REGS 1,5% V.30/09/2033",
+  "tipo": "on"
+ },
+ {
+  "ticker": "YMCIO",
+  "nombre": "ON YPF S.A. REGS 2,5% V.30/06/2029",
+  "tipo": "on"
+ },
+ {
+  "ticker": "YMCHO",
+  "nombre": "ON YPF S.A. REGS 4% V.12/02/2026",
+  "tipo": "on"
+ },
+ {
+  "ticker": "YM1XO",
+  "nombre": "ON YPF SOCIEDAD ANONIM 8.75% 11/09/31",
+  "tipo": "on"
+ },
+ {
+  "ticker": "MGCMO",
+  "nombre": "PAMPA ENERGIA REGS 7.95%",
+  "tipo": "on"
+ },
+ {
+  "ticker": "MC1OO",
+  "nombre": "PAMPA ENERGIA SA 7.875% VTO. 16/12/34",
+  "tipo": "on"
+ },
+ {
+  "ticker": "PL4TO",
+  "nombre": "PLUSPETROL S A/8.5% VTO..30/05/2032",
+  "tipo": "on"
+ },
+ {
+  "ticker": "TTCDO",
+  "nombre": "TECPETROL S.A. 7.625 NOTES DUE 2030",
+  "tipo": "on"
+ },
+ {
+  "ticker": "TL1MO",
+  "nombre": "TELECOM ARGENTI T. REGS 9.5 18/07/31",
+  "tipo": "on"
+ },
+ {
+  "ticker": "TL1PO",
+  "nombre": "TELECOM ARGENTINA S 9.25% VTO. 28/05/33",
+  "tipo": "on"
+ },
+ {
+  "ticker": "TSC3O",
+  "nombre": "TRANSPORTADORA DE G 8.5 VTO. 24/07/31",
+  "tipo": "on"
+ },
+ {
+  "ticker": "VSCVO",
+  "nombre": "VISTA ENERGY A REGS 8.5% 10/06/33",
+  "tipo": "on"
+ },
+ {
+  "ticker": "YM34O",
+  "nombre": "YPF SOCIEDAD ANON REGS 8.25% V 17/01/34",
+  "tipo": "on"
+ },
+ {
+  "ticker": "YMCXO",
+  "nombre": "YPF SOCIEDAD ON 8.75% VTO. 11/09/31",
+  "tipo": "on"
+ },
+ {
+  "ticker": "CRE3W",
+  "nombre": "WARRANT CRESUD S.A.C.I.F. VTO 08/03/26",
+  "tipo": "opcion"
+ },
+ {
+  "ticker": "IRS2W",
+  "nombre": "WARRANTS INVERSORES Y REPRESENTACIONES",
+  "tipo": "opcion"
+ }
+]
