@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import re
 import time
+import urllib.request
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,7 @@ from afip_worker.registry import (
     list_cuits,
     mark_needs_admin,
 )
+from afip_worker.tunnel import GITHUB_RAW_TUNNEL_URL
 
 
 _ACTION_LABELS = {
@@ -117,14 +119,68 @@ def _fmt_dt(iso: str) -> str:
         return raw
 
 
+def _parse_tunnel_url(raw: str) -> str:
+    text = (raw or "").strip().split()[0].strip().strip('"').strip("'")
+    if text.startswith("https://") and "127.0.0.1" not in text and "localhost" not in text:
+        return text.rstrip("/")
+    return ""
+
+
+def _discovered_worker_url() -> str:
+    now = time.monotonic()
+    cached = str(st.session_state.get("_arca_discovered_url") or "")
+    ts = float(st.session_state.get("_arca_discovered_ts") or 0)
+    if cached and (now - ts) < 60:
+        return cached
+    req = urllib.request.Request(
+        GITHUB_RAW_TUNNEL_URL,
+        headers={"User-Agent": "EstudioContable-ARCA/1.0", "Accept": "text/plain"},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            found = _parse_tunnel_url(resp.read().decode("utf-8", errors="replace"))
+    except Exception:
+        return cached
+    if found:
+        st.session_state["_arca_discovered_url"] = found
+        st.session_state["_arca_discovered_ts"] = now
+    return found
+
+
+def _worker_url_candidates() -> list[str]:
+    out: list[str] = []
+    for raw in (
+        str(st.session_state.get("_arca_worker_base") or ""),
+        _secret_str("AFIP_WORKER_URL"),
+        _discovered_worker_url(),
+    ):
+        url = _parse_tunnel_url(raw)
+        if url and url not in out:
+            out.append(url)
+    return out
+
+
 def _remote() -> RemoteWorker | None:
-    url = _secret_str("AFIP_WORKER_URL")
     token = _secret_str("AFIP_WORKER_TOKEN")
-    if url.startswith("http://127.0.0.1") or url.startswith("http://localhost"):
+    if not token:
         return None
-    if url and token:
-        return RemoteWorker(url, token)
-    return None
+    urls = _worker_url_candidates()
+    if not urls:
+        return None
+    cached = str(st.session_state.get("_arca_worker_base") or "")
+    if cached in urls:
+        probe = RemoteWorker(cached, token)
+        if probe.health():
+            return probe
+    for url in urls:
+        worker = RemoteWorker(url, token)
+        if worker.health():
+            st.session_state["_arca_worker_base"] = url
+            st.session_state["_arca_health"] = True
+            st.session_state["_arca_health_ts"] = time.monotonic()
+            return worker
+    return RemoteWorker(urls[-1], token)
 
 
 def _remote_health(remote: RemoteWorker) -> bool:
@@ -178,12 +234,12 @@ def render_arca_module() -> None:
             st.success("RECEPCION conectada — la cola corre sola.")
         else:
             st.error(
-                "No se llega a RECEPCION. Dejá abierto `iniciar_afip_worker.bat` "
-                "y, si el túnel cambió, actualizá `AFIP_WORKER_URL` en Secrets."
+                "No se llega a RECEPCION. Dejá abierto `iniciar_afip_worker.bat`. "
+                "Si recién arrancó, recargá en un minuto: la web busca la URL nueva sola."
             )
     else:
         st.caption(
-            "Cola en esta PC. En la nube hace falta `AFIP_WORKER_URL` en Secrets."
+            "Cola en esta PC. En la nube hace falta `AFIP_WORKER_TOKEN` en Secrets."
         )
 
     _watch_tareas()

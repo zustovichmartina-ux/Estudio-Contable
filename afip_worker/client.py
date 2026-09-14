@@ -41,7 +41,7 @@ class RemoteWorker:
         except urllib.error.URLError as exc:
             raise RemoteError(
                 "No se llega al worker de RECEPCION. "
-                "¿Está abierto iniciar_afip_worker.bat y el túnel? "
+                "¿Está abierto iniciar_afip_worker.bat? "
                 f"({exc.reason})"
             ) from exc
         if not raw:
