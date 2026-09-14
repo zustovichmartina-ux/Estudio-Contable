@@ -14,7 +14,7 @@ if str(_ROOT) not in sys.path:
 
 os.environ["AFIP_CHROME_HEADED"] = "1"
 
-from afip_worker.actions.comprobantes import LOGIN_URL, _is_login, _is_portal
+from afip_worker.actions.session import LOGIN_URL, _is_login, _is_portal
 from afip_worker.browser import chrome_context, close_browser, kill_profile_chrome, show_worker_chrome
 from afip_worker.jobs import acquire_login_lock, release_login_lock
 

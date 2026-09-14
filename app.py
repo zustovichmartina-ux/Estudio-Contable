@@ -13834,7 +13834,7 @@ def main() -> None:
             - **Préstamos Financieros**: auditoría de cuotas desde PDFs bancarios.
             - **Herramientas**: recategorización monotributo; matcheo PDF + Tango; cuadro bancario; extractos; FCI FIFO; caja USD; liquidaciones; cruce facturas.
             - **Tango**: agente del estudio (responde, formula y lee capturas) con las ayudas Axoft y el export de sueldos.
-            - **ARCA**: encola jobs AFIP (emitir FCC / VEPs / comprobantes); el worker local ejecuta en Chrome. Sin claves en la web.
+            - **ARCA**: encola jobs AFIP (Comprobantes en Línea, Portal IVA, FCC/VEPs); el worker local ejecuta en Chrome. Sin claves en la web.
             - **Usuarios de oficina**: cada persona entra con su usuario; sesiones independientes.
             - **Cloud**: link público + muro de login (PIN). Planes/balances subidos se cifran con `DATA_ENCRYPTION_KEY`.
             - **Multi-PDF anual**: hasta {MAX_PDFS_ANUALES} extractos consolidados cronológicamente.

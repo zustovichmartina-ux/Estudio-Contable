@@ -32,7 +32,7 @@ Secrets Cloud: `AFIP_WORKER_URL` + `AFIP_WORKER_TOKEN` (ver `jobs/cloud_bridge.t
 - Nunca claves en Excel ni Streamlit.
 - CUIT nuevo → `needs_admin` / job `needs_auth` + handoff admin.
 - Claves solo Chrome autofill en la PC del worker.
-- Arranque: `iniciar_afip_worker.bat` (`--live`: Chrome/AFIP para `bajar_comprobantes`).
+- Arranque: `iniciar_afip_worker.bat` (`--live`: Chrome/AFIP para `bajar_comprobantes` y `bajar_portal_iva`).
 
 ## Orden
 
@@ -40,6 +40,9 @@ Secrets Cloud: `AFIP_WORKER_URL` + `AFIP_WORKER_TOKEN` (ver `jobs/cloud_bridge.t
 2. UI ARCA (encolar + cola + registry) ✅
 3. Worker autónomo + API/túnel (`iniciar_afip_worker.bat`) ✅
 4. `bajar_comprobantes` Playwright ✅ (Comprobantes en Línea → PDFs)
-5. `bajar_veps`
-6. `emitir_fcc`
-7. Badge auth + handoff 2FA (registry) ✅ base
+5. `bajar_portal_iva` Playwright ✅ (Portal IVA compras/ventas CSV·PDF; fallback Mis Comprobantes; **no presenta DDJJ**)
+   - Destino habitual: `\\TANGOSRV\Compartido\CLIENTES\<cliente>\Impuestos\Portal IVA\MM-YYYY\`
+   - Si el SPA de ARCA no deja automatizar el export: job `error` + screenshot `jobs/error/{id}_*.png`. Fallback manual: Portal IVA → período → Libro IVA Compras/Ventas → Importar desde ARCA → CSV (descomprimir ZIP); o Mis Comprobantes → Recibidos/Emitidos → XLS.
+6. `bajar_veps`
+7. `emitir_fcc`
+8. Badge auth + handoff 2FA (registry) ✅ base

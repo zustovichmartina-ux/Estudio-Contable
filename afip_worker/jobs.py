@@ -14,11 +14,11 @@ from zoneinfo import ZoneInfo
 
 TZ = ZoneInfo("America/Argentina/Buenos_Aires")
 
-Action = Literal["emitir_fcc", "bajar_veps", "bajar_comprobantes"]
+Action = Literal["emitir_fcc", "bajar_veps", "bajar_comprobantes", "bajar_portal_iva"]
 Status = Literal["pending", "running", "needs_auth", "done", "error"]
 AuthStatus = Literal["unknown", "ready", "needs_admin", "failed"]
 
-ACTIONS: tuple[Action, ...] = ("emitir_fcc", "bajar_veps", "bajar_comprobantes")
+ACTIONS: tuple[Action, ...] = ("emitir_fcc", "bajar_veps", "bajar_comprobantes", "bajar_portal_iva")
 STATUSES: tuple[Status, ...] = ("pending", "running", "needs_auth", "done", "error")
 
 _INVALID = re.compile(r'[\\/:*?"<>|]+')
