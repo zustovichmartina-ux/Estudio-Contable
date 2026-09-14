@@ -282,7 +282,11 @@ def _form_nueva_operacion(cliente: dict, periodo: str) -> None:
         c8.number_input(
             f"TC del día ({idb.MOV_LABEL.get(movimiento, movimiento)})",
             value=float(tc_dia or 0.0), step=0.01, disabled=True,
-            key=f"inv_op_tcdia_{combo_key}",
+            # La key incluye la fecha: al ser un campo deshabilitado, Streamlit
+            # solo usa `value` la primera vez que crea el widget — si la key no
+            # cambia junto con la fecha, el campo queda "pegado" mostrando el
+            # TC de la fecha anterior aunque el usuario elija otra fecha.
+            key=f"inv_op_tcdia_{combo_key}_{fecha.isoformat()}",
             help=f"TC BNA {tipo_tc} del día de la operación (o el hábil más "
                  "cercano) — se toma automático de la base cargada en el "
                  "estudio, no hace falta cargarlo a mano.",
