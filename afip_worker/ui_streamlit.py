@@ -120,7 +120,10 @@ def _fmt_dt(iso: str) -> str:
 
 
 def _parse_tunnel_url(raw: str) -> str:
-    text = (raw or "").strip().split()[0].strip().strip('"').strip("'")
+    parts = (raw or "").strip().split()
+    if not parts:
+        return ""
+    text = parts[0].strip().strip('"').strip("'")
     if text.startswith("https://") and "127.0.0.1" not in text and "localhost" not in text:
         return text.rstrip("/")
     return ""
@@ -305,6 +308,9 @@ def _render_encolar(remote: RemoteWorker | None) -> None:
         st.session_state["arca_job_action"] = "bajar_comprobantes"
         st.session_state["_arca_default_live"] = True
     _prefijar_desde_sociedad(conocidos)
+    elegido = str(st.session_state.get("arca_cuit_select") or "")
+    if elegido not in cuit_opts:
+        st.session_state["arca_cuit_select"] = ""
 
     c1, c2 = st.columns(2)
     with c1:
