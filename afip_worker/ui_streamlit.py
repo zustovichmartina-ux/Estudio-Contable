@@ -11,7 +11,7 @@ from typing import Any
 import streamlit as st
 
 from afip_worker.auth import admin_mark_cuit_ready
-from afip_worker.catalogo import catalogo_lookup, load_catalogo
+from afip_worker.catalogo import load_catalogo
 from afip_worker.client import RemoteError, RemoteWorker
 from afip_worker.jobs import (
     create_job,
@@ -46,6 +46,7 @@ _STATUS_BADGE = {
 }
 
 _HEALTH_TTL_SEC = 20.0
+_JOBS_TTL_SEC = 2.0
 _RE_DIGITS = re.compile(r"\D")
 
 
@@ -138,21 +139,6 @@ def _remote_health(remote: RemoteWorker) -> bool:
     return ok
 
 
-def _lookup_acceso(cuit: str, rows: list[dict[str, Any]]) -> tuple[str, str]:
-    """Solo lectura: no registra el CUIT al tipear."""
-    digits = _digits(cuit)
-    if len(digits) != 11:
-        return "", ""
-    for row in rows:
-        if _digits(str(row.get("cuit") or "")) == digits:
-            label = str(row.get("acceso") or badge_label(str(row.get("status") or "")))
-            return label, str(row.get("note") or "")
-    hit = catalogo_lookup(cuit)
-    if hit:
-        return str(hit.get("acceso") or "Listo"), str(hit.get("note") or "")
-    return "Pedir acceso", "CUIT nuevo: hace falta 2FA una vez en la PC RECEPCION."
-
-
 def _cuit_rows(remote: RemoteWorker | None) -> list[dict[str, Any]]:
     """Lista para la UI: worker si responde; si no, catálogo del repo (la nube no tiene jobs/)."""
     seed = load_catalogo()
@@ -182,32 +168,32 @@ def _cuit_rows(remote: RemoteWorker | None) -> list[dict[str, Any]]:
 def render_arca_module() -> None:
     """Módulo top-level ARCA: encolar + cola + registry (sin ejecutar AFIP)."""
     st.caption(
-        "Cualquiera del estudio encola acá. AFIP lo navega RECEPCION sola "
-        "(Chrome + clave ya guardada). Nadie más necesita permiso en AFIP. "
-        "Las claves nunca van a Excel ni a esta web."
+        "Encolá acá. RECEPCION entra a AFIP sola con la sesión del estudio "
+        "y representa al cliente. Nadie más necesita permiso fiscal. "
+        "Cuando termina, te avisa. Las claves nunca van a Excel ni a esta web."
     )
     remote = _remote()
     if remote:
         if _remote_health(remote):
-            st.success("Conectado al worker de RECEPCION.")
+            st.success("RECEPCION conectada — la cola corre sola.")
         else:
             st.error(
-                "No se llega al worker. En RECEPCION dejá abierto "
-                "`iniciar_afip_worker.bat` y, si el túnel cambió, actualizá "
-                "`AFIP_WORKER_URL` en Secrets."
+                "No se llega a RECEPCION. Dejá abierto `iniciar_afip_worker.bat` "
+                "y, si el túnel cambió, actualizá `AFIP_WORKER_URL` en Secrets."
             )
     else:
         st.caption(
-            "Cola en esta PC. En la nube hace falta `AFIP_WORKER_URL` en Secrets "
-            "para que RECEPCION tome los trabajos."
+            "Cola en esta PC. En la nube hace falta `AFIP_WORKER_URL` en Secrets."
         )
 
-    tab_encolar, tab_cola, tab_cuits = st.tabs(["Encolar", "Cola", "CUITs / acceso"])
+    _watch_tareas()
+
+    tab_encolar, tab_cola, tab_cuits = st.tabs(["Encolar", "Cola", "CUITs"])
 
     with tab_encolar:
         _render_encolar(remote)
     with tab_cola:
-        _render_cola(remote)
+        _render_cola()
     with tab_cuits:
         _render_registry(remote)
 
@@ -288,18 +274,6 @@ def _render_encolar(remote: RemoteWorker | None) -> None:
         )
         requested_by = _solicitado_por()
         st.caption(f"Lo pide **{requested_by}**.")
-
-    label, note = _lookup_acceso(cuit, rows)
-    if label == "Listo":
-        st.success(f"Acceso: **{label}** — {note}")
-    elif label == "Pedir acceso":
-        st.info(
-            f"Acceso: **primera vez** — RECEPCION entra sola a AFIP. "
-            "Nadie del estudio necesita permiso fiscal. "
-            "Solo se frena si AFIP pide 2FA (lo ves en Cola)."
-        )
-    elif label:
-        st.info(f"Acceso: **{label}** — {note}")
 
     params: dict[str, Any] = {}
     plantilla_b64 = ""
@@ -399,8 +373,8 @@ def _render_encolar(remote: RemoteWorker | None) -> None:
                     jid = str(job.get("id") or "")
                     st.success(f"Encolado en RECEPCION: {jid}")
                     st.caption(
-                        "Lo toma RECEPCION sola. El resto del estudio no abre AFIP ni necesita "
-                        "permiso fiscal. Si AFIP pide 2FA, aparece en Cola."
+                        "Lo toma sola. Mirá Cola: cuando termina, te avisa acá "
+                        "y en la PC de recepción."
                     )
                 else:
                     ensure_cuit_registered(cuit, razon)
@@ -413,27 +387,112 @@ def _render_encolar(remote: RemoteWorker | None) -> None:
                     )
                     enqueue_job(job_obj)
                     st.success(f"Encolado: {job_obj.id}")
-                    st.caption(
-                        "En esta PC queda en la cola local. En la nube, RECEPCION lo toma sola. "
-                        "Si AFIP pide 2FA, aparece en Cola."
-                    )
+                    st.caption("Cuando termina, te avisa acá. Si AFIP pide 2FA, aparece en Cola.")
             except (ValueError, RemoteError) as exc:
                 st.error(str(exc))
 
 
-def _render_cola(remote: RemoteWorker | None) -> None:
-    if st.button("Actualizar cola", key="arca_cola_refresh"):
-        st.session_state.pop("_arca_health", None)
-        st.rerun()
-    rows_src: list[dict[str, Any]] = []
+def _fetch_jobs(*, silent: bool = False) -> list[dict[str, Any]] | None:
+    now = time.monotonic()
+    cached = st.session_state.get("_arca_jobs_cache")
+    ts = float(st.session_state.get("_arca_jobs_ts") or 0)
+    if cached is not None and (now - ts) < _JOBS_TTL_SEC:
+        return cached
+    remote = _remote()
     try:
         if remote:
-            rows_src = remote.list_jobs()
+            rows = remote.list_jobs()
         else:
-            rows_src = [j.to_dict() for j in list_jobs()]
+            rows = [j.to_dict() for j in list_jobs()]
     except RemoteError as exc:
-        st.error(str(exc))
+        if not silent:
+            st.error(str(exc))
+        return None
+    st.session_state["_arca_jobs_cache"] = rows
+    st.session_state["_arca_jobs_ts"] = now
+    return rows
+
+
+def _aviso_texto(job: dict[str, Any]) -> str:
+    status = str(job.get("status") or "")
+    cliente = str(job.get("razon_social") or "cliente")
+    accion = _ACTION_LABELS.get(str(job.get("action")), str(job.get("action") or "tarea"))
+    result = job.get("result") or {}
+    msg = ""
+    if isinstance(result, dict):
+        msg = str(result.get("message") or "").strip()
+    if status == "done":
+        return f"Listo: {cliente} — {accion}" + (f". {msg}" if msg else "")
+    if status == "error":
+        return f"Error: {cliente} — {accion}" + (f". {msg}" if msg else "")
+    if status == "needs_auth":
+        return f"Falta 2FA: {cliente} — {accion}. Completalo en RECEPCION."
+    return f"{cliente} — {accion}"
+
+
+def _toast_si_cambio(rows_src: list[dict[str, Any]]) -> None:
+    """Avisa en la web cuando una tarea pasa a listo / error / 2FA."""
+    now_map = {
+        str(j.get("id") or ""): str(j.get("status") or "")
+        for j in rows_src
+        if j.get("id")
+    }
+    prev = st.session_state.get("_arca_job_status") or {}
+    if prev:
+        by_id = {str(j.get("id") or ""): j for j in rows_src}
+        for jid, status in now_map.items():
+            old = prev.get(jid)
+            if old == status or status not in {"done", "error", "needs_auth"}:
+                continue
+            if old not in {None, "pending", "running", "needs_auth"} and status == old:
+                continue
+            job = by_id.get(jid) or {}
+            texto = _aviso_texto(job)
+            if status == "done":
+                st.toast(texto, icon="✅")
+            elif status == "error":
+                st.toast(texto, icon="⚠️")
+            else:
+                st.toast(texto, icon="🔐")
+    st.session_state["_arca_job_status"] = now_map
+
+
+@st.fragment(run_every=5)
+def _watch_tareas() -> None:
+    """Sigue la cola aunque estés en Encolar: avisa cuando RECEPCION termina."""
+    if _remote() and st.session_state.get("_arca_health") is False:
         return
+    rows_src = _fetch_jobs(silent=True)
+    if rows_src is None:
+        return
+    _toast_si_cambio(rows_src)
+
+
+def _render_cola() -> None:
+    st.caption("Se actualiza sola cada 5 segundos. Te avisa acá cuando la tarea está ejecutada.")
+    _render_cola_live()
+
+
+@st.fragment(run_every=5)
+def _render_cola_live() -> None:
+    if st.button("Actualizar ahora", key="arca_cola_refresh"):
+        st.session_state.pop("_arca_health", None)
+        st.session_state.pop("_arca_jobs_cache", None)
+        st.rerun()
+    rows_src = _fetch_jobs()
+    if rows_src is None:
+        return
+    n_pending = sum(1 for j in rows_src if j.get("status") == "pending")
+    n_running = sum(1 for j in rows_src if j.get("status") == "running")
+    n_auth = sum(1 for j in rows_src if j.get("status") == "needs_auth")
+    n_done = sum(1 for j in rows_src if j.get("status") == "done")
+    n_error = sum(1 for j in rows_src if j.get("status") == "error")
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("En cola", n_pending)
+    c2.metric("En curso", n_running)
+    c3.metric("Listas", n_done)
+    c4.metric("Error", n_error)
+    c5.metric("Falta 2FA", n_auth)
     if not rows_src:
         st.info("Sin trabajos todavía.")
         return
@@ -479,7 +538,8 @@ def _render_cola(remote: RemoteWorker | None) -> None:
     if needs:
         st.warning(
             f"**{len(needs)} trabajo(s) esperan 2FA.** "
-            "En RECEPCION abrí AFIP una vez y marcá el CUIT como Listo."
+            "En RECEPCION abrí `iniciar_afip_sesion.bat`, completá el código "
+            "y la cola sigue sola."
         )
         for j in needs:
             auth = j.get("auth") or {}
@@ -493,8 +553,10 @@ def _render_cola(remote: RemoteWorker | None) -> None:
 
 
 def _render_registry(remote: RemoteWorker | None) -> None:
-    st.markdown("##### Registry de CUITs")
-    st.caption("Solo estado de acceso. Sin contraseñas ni tokens.")
+    st.caption(
+        "Clientes conocidos. RECEPCION entra sola; no hace falta Pedir acceso "
+        "por cada CUIT. Solo si AFIP pide 2FA se frena la cola."
+    )
     entries = _cuit_rows(remote)
     if entries:
         st.dataframe(
@@ -514,36 +576,35 @@ def _render_registry(remote: RemoteWorker | None) -> None:
     else:
         st.info("Todavía no hay CUITs registrados.")
 
-    st.divider()
-    st.markdown("##### Handoff admin (después del 2FA)")
-    hc1, hc2 = st.columns(2)
-    with hc1:
-        cuit_h = st.text_input("CUIT a marcar", key="arca_hand_cuit")
-        razon_h = st.text_input("Razón social", key="arca_hand_razon")
-    with hc2:
-        if st.button("Marcar Listo (Chrome autofill OK)", type="primary", key="arca_hand_ready"):
-            if not cuit_h.strip():
-                st.error("Indicá el CUIT.")
-            else:
-                try:
-                    if remote:
-                        remote.mark_ready(cuit_h, razon_h)
-                    else:
-                        admin_mark_cuit_ready(cuit_h, razon_h)
-                    st.success(f"{cuit_h} → Listo")
-                    st.rerun()
-                except RemoteError as exc:
-                    st.error(str(exc))
-        if st.button("Marcar Pedir acceso", key="arca_hand_need"):
-            if not cuit_h.strip():
-                st.error("Indicá el CUIT.")
-            else:
-                try:
-                    if remote:
-                        remote.mark_needs_admin(cuit_h, razon_h)
-                    else:
-                        mark_needs_admin(cuit_h, razon_social=razon_h)
-                    st.warning(f"{cuit_h} → Pedir acceso")
-                    st.rerun()
-                except RemoteError as exc:
-                    st.error(str(exc))
+    with st.expander("Marcar CUIT a mano (solo si AFIP pidió 2FA)", expanded=False):
+        hc1, hc2 = st.columns(2)
+        with hc1:
+            cuit_h = st.text_input("CUIT a marcar", key="arca_hand_cuit")
+            razon_h = st.text_input("Razón social", key="arca_hand_razon")
+        with hc2:
+            if st.button("Marcar Listo", type="primary", key="arca_hand_ready"):
+                if not cuit_h.strip():
+                    st.error("Indicá el CUIT.")
+                else:
+                    try:
+                        if remote:
+                            remote.mark_ready(cuit_h, razon_h)
+                        else:
+                            admin_mark_cuit_ready(cuit_h, razon_h)
+                        st.success(f"{cuit_h} → Listo")
+                        st.rerun()
+                    except RemoteError as exc:
+                        st.error(str(exc))
+            if st.button("Marcar pendiente 2FA", key="arca_hand_need"):
+                if not cuit_h.strip():
+                    st.error("Indicá el CUIT.")
+                else:
+                    try:
+                        if remote:
+                            remote.mark_needs_admin(cuit_h, razon_h)
+                        else:
+                            mark_needs_admin(cuit_h, razon_social=razon_h)
+                        st.warning(f"{cuit_h} → pendiente 2FA")
+                        st.rerun()
+                    except RemoteError as exc:
+                        st.error(str(exc))

@@ -25,6 +25,7 @@ from afip_worker.jobs import (
     mark_needs_auth,
     write_job,
 )
+from afip_worker.notify import aviso_tarea
 from afip_worker.server import start_api_thread
 from afip_worker.token import load_or_create_token
 from afip_worker.tunnel import start_cloudflared_tunnel
@@ -50,6 +51,11 @@ def process_one(*, dry_run: bool = True, root: Path | None = None) -> bool:
     if not chk.ready:
         mark_needs_auth(job, chk.note, root)
         LOG.warning("needs_auth %s: %s", job.id, chk.note)
+        if not dry_run:
+            aviso_tarea(
+                "ARCA: falta 2FA",
+                f"{job.razon_social} — completá AFIP en RECEPCION y la cola sigue sola.",
+            )
         return True
 
     job.auth.status = "ready"
@@ -83,6 +89,11 @@ def process_one(*, dry_run: bool = True, root: Path | None = None) -> bool:
     if result.needs_auth:
         mark_needs_auth(job, result.message, root)
         LOG.warning("needs_auth %s: %s", job.id, result.message)
+        if not dry_run:
+            aviso_tarea(
+                "ARCA: falta 2FA",
+                f"{job.razon_social} — completá AFIP en RECEPCION y la cola sigue sola.",
+            )
         return True
 
     finish_job(
@@ -99,6 +110,17 @@ def process_one(*, dry_run: bool = True, root: Path | None = None) -> bool:
         job.id,
         result.message,
     )
+    if not dry_run:
+        if result.ok:
+            aviso_tarea(
+                f"ARCA listo: {job.razon_social}",
+                result.message or "La tarea terminó.",
+            )
+        else:
+            aviso_tarea(
+                f"ARCA error: {job.razon_social}",
+                result.message or "Falló la tarea.",
+            )
     return True
 
 

@@ -16,11 +16,10 @@ os.environ["AFIP_CHROME_HEADED"] = "1"
 
 from afip_worker.actions.session import LOGIN_URL, _is_login, _is_portal
 from afip_worker.browser import chrome_context, close_browser, kill_profile_chrome, show_worker_chrome
+from afip_worker.estudio import cuit_login_recepcion
 from afip_worker.jobs import acquire_login_lock, release_login_lock
 
 LOG = logging.getLogger("afip_worker.login_once")
-
-CUIT_LOGIN = "23422843434"
 
 
 def main() -> int:
@@ -37,7 +36,7 @@ def main() -> int:
         if n:
             print(f"Cerré el Chrome oculto del worker ({n}).")
         print("Se abre Chrome ADELANTE. No lo minimices.")
-        print("1) Revisá que el CUIT sea el de Martina")
+        print("1) Revisá que el CUIT sea el de RECEPCION (estudio)")
         print("2) Escribí la clave fiscal")
         print("3) Si Chrome pregunta, tocá Guardar contraseña")
         print("4) Completá el 2FA si aparece")
@@ -55,7 +54,7 @@ def main() -> int:
             try:
                 if user.count():
                     user.first.click(force=True)
-                    user.first.fill(CUIT_LOGIN)
+                    user.first.fill(cuit_login_recepcion())
             except Exception:
                 print("No pude completar el CUIT: escribilo vos en Chrome.")
             show_worker_chrome()

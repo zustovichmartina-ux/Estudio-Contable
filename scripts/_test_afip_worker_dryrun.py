@@ -128,6 +128,7 @@ def main() -> int:
     print("PASS dry-run 4 jobs + needs_auth")
 
     from afip_worker.auth import check_session_ready
+    from afip_worker.estudio import cuit_login_recepcion
     from afip_worker.jobs import create_job as _cj
 
     live_job = _cj(
@@ -139,6 +140,11 @@ def main() -> int:
     live_chk = check_session_ready(live_job, dry_run=False)
     assert live_chk.ready, live_chk
     print("PASS live intenta AFIP aunque el CUIT no esté Listo")
+
+    login = cuit_login_recepcion()
+    assert len(login) == 11
+    assert login != "20111111111"
+    print("PASS login RECEPCION distinto al CUIT del cliente")
     return 0
 
 

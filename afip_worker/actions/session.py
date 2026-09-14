@@ -11,6 +11,7 @@ from typing import Any
 from playwright.sync_api import Locator, Page, TimeoutError as PlaywrightTimeout
 
 from ..browser import login_timeout_ms
+from ..estudio import cuit_login_recepcion
 from ..jobs import Job, jobs_root, normalizar_cuit
 from ..naming import iso_to_ddmmyyyy
 from ..password_vault import lookup_afip_password
@@ -107,8 +108,8 @@ def _is_blocker(page: Page) -> bool:
 
 
 def _login_afip(page: Page, job: Job) -> ActionResult | None:
-    """Reusa cookies. En segundo plano no espera a que alguien tipee la clave."""
-    LOG.info("login AFIP cuit=%s", job.cuit)
+    """Entra con la sesión de RECEPCION (estudio). El CUIT del job se representa después."""
+    LOG.info("login AFIP representado=%s", job.cuit)
     try:
         page.goto(PORTAL_URL, wait_until="domcontentloaded")
         page.wait_for_timeout(800)
@@ -121,11 +122,12 @@ def _login_afip(page: Page, job: Job) -> ActionResult | None:
         if not _is_login(page):
             page.goto(LOGIN_URL, wait_until="domcontentloaded")
     if _is_portal(page) and not _is_login(page):
-        LOG.info("sesión AFIP ya abierta (segundo plano)")
+        LOG.info("sesión AFIP ya abierta (RECEPCION)")
+        _elegir_empresa(page, job)
         _marcar_listo(job)
         return None
 
-    digits = _cuit_digits(job)
+    digits = cuit_login_recepcion()
     user = page.locator("#F1\\:username")
     if user.count() == 0:
         user = page.get_by_label(_RE_CUIT)
@@ -138,12 +140,13 @@ def _login_afip(page: Page, job: Job) -> ActionResult | None:
         user.first.press("Tab")
     except PlaywrightTimeout:
         if _is_portal(page):
+            _elegir_empresa(page, job)
             _marcar_listo(job)
             return None
         return ActionResult(
             needs_auth=True,
             ok=False,
-            message="No apareció el campo CUIT de AFIP. Completá el login en Chrome.",
+            message="No apareció el campo CUIT de AFIP. Completá el login en Chrome de RECEPCION.",
         )
 
     _click_first(
@@ -162,7 +165,6 @@ def _login_afip(page: Page, job: Job) -> ActionResult | None:
         if pwd.count():
             pwd.click(force=True)
             page.wait_for_timeout(400)
-            # 1) intento autofill del Chrome del worker
             page.keyboard.press("ArrowDown")
             page.keyboard.press("Enter")
             page.wait_for_timeout(500)
@@ -172,11 +174,11 @@ def _login_afip(page: Page, job: Job) -> ActionResult | None:
             except Exception:
                 current = ""
             if not current:
-                secret = lookup_afip_password(job.cuit)
+                secret = lookup_afip_password(digits) or lookup_afip_password(job.cuit)
                 if secret:
                     pwd.fill(secret)
                     filled_from_vault = True
-                    LOG.info("reingreso automatico (vault Edge/Chrome)")
+                    LOG.info("reingreso automatico (vault RECEPCION)")
                     _try_submit_password(page)
                 else:
                     LOG.info("reingreso automatico (autofill, %ss)", login_timeout_ms() // 1000)
@@ -185,7 +187,6 @@ def _login_afip(page: Page, job: Job) -> ActionResult | None:
     except Exception:
         pass
 
-    # timeout corto si ya llenamos desde vault
     steps = 20 if filled_from_vault else max(8, login_timeout_ms() // 1000)
     logged_in = False
     for _ in range(steps):
@@ -201,17 +202,17 @@ def _login_afip(page: Page, job: Job) -> ActionResult | None:
             return ActionResult(
                 needs_auth=True,
                 ok=False,
-                message="AFIP pidio 2FA. Completalo una vez en RECEPCION; despues reingresa solo.",
+                message="AFIP pidió 2FA en RECEPCION. Completalo una vez; después las tareas siguen solas.",
             )
         return ActionResult(
             needs_auth=True,
             ok=False,
             message=(
-                "No pude reingresar solo (sin clave en autofill Edge/Chrome para este CUIT). "
-                "Guardala una vez en Edge (AFIP) o avisame el CUIT para cargarla."
+                "No pude reingresar con la sesión de RECEPCION. "
+                "Abrí iniciar_afip_sesion.bat una vez y guardá la contraseña."
             ),
         )
-    _maybe_elegir_representado(page, job)
+    _elegir_empresa(page, job)
     _marcar_listo(job)
     return None
 
@@ -243,20 +244,6 @@ def _try_submit_password(page: Page) -> None:
         )
     except Exception:
         return
-
-
-def _maybe_elegir_representado(page: Page, job: Job) -> None:
-    for text in (normalizar_cuit(job.cuit), _cuit_digits(job), job.razon_social):
-        if not text:
-            continue
-        loc = page.get_by_text(str(text), exact=False)
-        try:
-            if loc.count() and loc.first.is_visible():
-                loc.first.click(timeout=3_000)
-                page.wait_for_timeout(800)
-                return
-        except Exception:
-            continue
 
 
 def _elegir_empresa(page: Page, job: Job) -> None:

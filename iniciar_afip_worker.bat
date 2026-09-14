@@ -1,10 +1,17 @@
 @echo off
-REM Worker AFIP autonomo + API (Chrome oculto). Solo iniciar_afip_sesion.bat usa Chrome visible.
+title AFIP worker - RECEPCION
+REM Worker autonomo: cola + API + Chrome oculto. Se relanza si se cae.
 cd /d "%~dp0"
 set AFIP_CHROME_HEADED=0
-echo [AFIP worker] API + cola en segundo plano. Ctrl+C para detener.
-python -m afip_worker.main --live --serve --interval 3
+set PYTHONUNBUFFERED=1
+set "PY=%LocalAppData%\Programs\Python\Python314\python.exe"
+if not exist "%PY%" set "PY=python"
+echo [AFIP worker] Cola autonoma. Cerra esta ventana para detener.
+echo Si la web no conecta, mira jobs\cloud_bridge.txt y actualiza Secrets.
 echo.
-echo Si aparecio una URL trycloudflare, pegala en Streamlit Secrets (AFIP_WORKER_URL).
-echo El token esta en jobs\.worker_token y el texto listo en jobs\cloud_bridge.txt
-pause
+:loop
+"%PY%" -u -m afip_worker.main --live --serve --interval 3
+echo.
+echo El worker se detuvo. Reintento en 8 segundos.
+timeout /t 8
+goto loop
