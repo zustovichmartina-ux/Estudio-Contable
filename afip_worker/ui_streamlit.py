@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import base64
+import re
+import time
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -12,11 +14,10 @@ from afip_worker.auth import admin_mark_cuit_ready
 from afip_worker.catalogo import catalogo_lookup, load_catalogo
 from afip_worker.client import RemoteError, RemoteWorker
 from afip_worker.jobs import (
-    ACTIONS,
     create_job,
     enqueue_job,
-    jobs_root,
     list_jobs,
+    normalizar_cuit,
     uploads_dir,
 )
 from afip_worker.registry import (
@@ -28,18 +29,23 @@ from afip_worker.registry import (
 
 
 _ACTION_LABELS = {
-    "emitir_fcc": "Emitir facturas (FCC)",
-    "bajar_veps": "Descargar VEPs",
     "bajar_comprobantes": "Descargar Comprobantes en Línea",
+    "emitir_fcc": "Emitir facturas (FCC) — próximamente",
+    "bajar_veps": "Descargar VEPs — próximamente",
 }
+_ACTIONS_UI = ("bajar_comprobantes", "emitir_fcc", "bajar_veps")
+_ACTIONS_LIVE = frozenset({"bajar_comprobantes"})
 
 _STATUS_BADGE = {
-    "pending": "pending",
-    "running": "running",
-    "needs_auth": "needs_auth",
-    "done": "done",
-    "error": "error",
+    "pending": "En cola",
+    "running": "En curso",
+    "needs_auth": "Falta 2FA",
+    "done": "Listo",
+    "error": "Error",
 }
+
+_HEALTH_TTL_SEC = 20.0
+_RE_DIGITS = re.compile(r"\D")
 
 
 def _secret_str(key: str) -> str:
@@ -47,6 +53,58 @@ def _secret_str(key: str) -> str:
         return str(st.secrets.get(key) or "").strip().strip('"').strip("'")
     except Exception:
         return ""
+
+
+def _digits(cuit: str) -> str:
+    return _RE_DIGITS.sub("", cuit or "")
+
+
+def _parse_cuit_label(raw: str) -> tuple[str, str]:
+    text = str(raw or "").strip()
+    if not text or "—" not in text:
+        return "", ""
+    cuit, razon = text.split("—", 1)
+    cuit = cuit.strip()
+    razon = razon.strip()
+    if razon == "(sin nombre)":
+        razon = ""
+    return cuit, razon
+
+
+def _label_cuit(cuit: str, razon: str) -> str:
+    return f"{cuit} — {razon or '(sin nombre)'}"
+
+
+def _solicitado_por() -> str:
+    return str(
+        st.session_state.get("usuario_oficina_nombre")
+        or st.session_state.get("usuario_oficina")
+        or "oficina"
+    ).strip()
+
+
+def _carpeta_cliente(razon: str) -> str:
+    t = re.sub(r'[\\/:*?"<>|]+', " ", razon or "").strip()
+    return re.sub(r"\s+", " ", t)
+
+
+def _ruta_sugerida(razon: str, hasta: date | None = None) -> str:
+    mes = (hasta or date.today()).strftime("%m-%Y")
+    slug = _carpeta_cliente(razon)
+    if not slug:
+        return rf"\\TANGOSRV\Compartido\CLIENTES\...\Facturas\{mes}"
+    return rf"\\TANGOSRV\Compartido\CLIENTES\{slug}\Facturas\{mes}"
+
+
+def _fmt_dt(iso: str) -> str:
+    raw = str(iso or "").strip()
+    if not raw:
+        return ""
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        return dt.strftime("%d/%m/%Y %H:%M")
+    except ValueError:
+        return raw
 
 
 def _remote() -> RemoteWorker | None:
@@ -57,6 +115,33 @@ def _remote() -> RemoteWorker | None:
     if url and token:
         return RemoteWorker(url, token)
     return None
+
+
+def _remote_health(remote: RemoteWorker) -> bool:
+    now = time.monotonic()
+    cached = st.session_state.get("_arca_health")
+    ts = float(st.session_state.get("_arca_health_ts") or 0)
+    if cached is not None and (now - ts) < _HEALTH_TTL_SEC:
+        return bool(cached)
+    ok = remote.health()
+    st.session_state["_arca_health"] = ok
+    st.session_state["_arca_health_ts"] = now
+    return ok
+
+
+def _lookup_acceso(cuit: str, rows: list[dict[str, Any]]) -> tuple[str, str]:
+    """Solo lectura: no registra el CUIT al tipear."""
+    digits = _digits(cuit)
+    if len(digits) != 11:
+        return "", ""
+    for row in rows:
+        if _digits(str(row.get("cuit") or "")) == digits:
+            label = str(row.get("acceso") or badge_label(str(row.get("status") or "")))
+            return label, str(row.get("note") or "")
+    hit = catalogo_lookup(cuit)
+    if hit:
+        return str(hit.get("acceso") or "Listo"), str(hit.get("note") or "")
+    return "Pedir acceso", "CUIT nuevo: hace falta 2FA una vez en la PC RECEPCION."
 
 
 def _cuit_rows(remote: RemoteWorker | None) -> list[dict[str, Any]]:
@@ -85,48 +170,27 @@ def _cuit_rows(remote: RemoteWorker | None) -> list[dict[str, Any]]:
     return sorted(by_cuit.values(), key=lambda r: str(r.get("cuit") or ""))
 
 
-def _badge_acceso(cuit: str, razon: str, remote: RemoteWorker | None) -> tuple[str, str]:
-    if remote:
-        try:
-            entry = remote.ensure_cuit(cuit, razon)
-            label = str(entry.get("acceso") or badge_label(str(entry.get("status") or "")))
-            return label, str(entry.get("note") or "")
-        except RemoteError:
-            pass
-    hit = catalogo_lookup(cuit)
-    if hit:
-        return str(hit.get("acceso") or "Listo"), str(hit.get("note") or "")
-    if not remote:
-        return _badge_acceso_local(cuit, razon)
-    return "Pedir acceso", "Sin confirmación del worker; si es CUIT nuevo hace falta 2FA en RECEPCION."
-
-
-def _badge_acceso_local(cuit: str, razon: str = "") -> tuple[str, str]:
-    entry = ensure_cuit_registered(cuit, razon)
-    return badge_label(entry.status), entry.note
-
-
 def render_arca_module() -> None:
     """Módulo top-level ARCA: encolar + cola + registry (sin ejecutar AFIP)."""
     st.caption(
-        "Esta web es para **todo el estudio**: cualquiera encola desde acá. "
-        "AFIP se ejecuta solo en la PC RECEPCION (Chrome + autofill). "
-        "Las claves nunca van a Excel ni a esta web."
+        "Cualquiera del estudio encola acá. AFIP corre solo en la PC RECEPCION "
+        "(Chrome + autofill). Las claves nunca van a Excel ni a esta web."
     )
     remote = _remote()
     if remote:
-        if remote.health():
-            st.success("Conectado al worker de RECEPCION (nube → túnel → tu PC).")
+        if _remote_health(remote):
+            st.success("Conectado al worker de RECEPCION.")
         else:
             st.error(
-                "No se llega al worker. En la PC RECEPCION dejá abierto "
-                "`iniciar_afip_worker.bat` y actualizá `AFIP_WORKER_URL` en Secrets "
-                "si el túnel cambió de URL."
+                "No se llega al worker. En RECEPCION dejá abierto "
+                "`iniciar_afip_worker.bat` y, si el túnel cambió, actualizá "
+                "`AFIP_WORKER_URL` en Secrets."
             )
-        st.caption(f"Cola remota: `{st.secrets.get('AFIP_WORKER_URL')}`")
     else:
-        root = jobs_root()
-        st.caption(f"Cola local: `{root}` — para la web en la nube configurá AFIP_WORKER_URL en Secrets.")
+        st.caption(
+            "Cola en esta PC. En la nube hace falta `AFIP_WORKER_URL` en Secrets "
+            "para que RECEPCION tome los trabajos."
+        )
 
     tab_encolar, tab_cola, tab_cuits = st.tabs(["Encolar", "Cola", "CUITs / acceso"])
 
@@ -143,75 +207,113 @@ def render_afip_cola_admin() -> None:
     render_arca_module()
 
 
+def _on_cuit_catalogo() -> None:
+    cuit, razon = _parse_cuit_label(str(st.session_state.get("arca_cuit_select") or ""))
+    if cuit:
+        st.session_state["arca_job_cuit"] = cuit
+    if razon:
+        st.session_state["arca_job_razon"] = razon
+
+
+def _prefijar_desde_sociedad(conocidos: list[tuple[str, str]]) -> None:
+    cuit = str(st.session_state.get("cuit_activo") or "").strip()
+    razon = str(st.session_state.get("nombre_activo") or "").strip()
+    sig = _digits(cuit)
+    if st.session_state.get("_arca_prefijado_cuit") == sig:
+        return
+    st.session_state["_arca_prefijado_cuit"] = sig
+    if not sig:
+        return
+    matched_c = ""
+    catalog_r = ""
+    for c, r in conocidos:
+        if _digits(c) == sig:
+            matched_c = c
+            catalog_r = r
+            break
+    if matched_c:
+        st.session_state["arca_cuit_select"] = _label_cuit(matched_c, catalog_r)
+        st.session_state["arca_job_cuit"] = matched_c
+    else:
+        st.session_state["arca_cuit_select"] = ""
+        st.session_state["arca_job_cuit"] = normalizar_cuit(cuit)
+    nombre = catalog_r or razon
+    if nombre:
+        st.session_state["arca_job_razon"] = nombre
+
+
 def _render_encolar(remote: RemoteWorker | None) -> None:
+    rows = _cuit_rows(remote)
     conocidos = [
         (str(e.get("cuit") or ""), str(e.get("razon_social") or ""))
-        for e in _cuit_rows(remote)
+        for e in rows
     ]
-    cuit_opts = [""] + [f"{c} — {r or '(sin nombre)'}" for c, r in conocidos if c]
+    cuit_opts = [""] + [_label_cuit(c, r) for c, r in conocidos if c]
+    if not st.session_state.get("_arca_default_live"):
+        st.session_state["arca_job_action"] = "bajar_comprobantes"
+        st.session_state["_arca_default_live"] = True
+    _prefijar_desde_sociedad(conocidos)
 
     c1, c2 = st.columns(2)
     with c1:
-        elegido = st.selectbox(
+        st.selectbox(
             "CUIT registrado",
             options=cuit_opts,
             key="arca_cuit_select",
-            help="O escribí un CUIT nuevo abajo.",
+            on_change=_on_cuit_catalogo,
+            help="Si no está, escribí el CUIT abajo. Sale de la sociedad activa.",
         )
-        cuit_default = ""
-        razon_default = ""
-        if elegido and "—" in elegido:
-            cuit_default = elegido.split("—", 1)[0].strip()
-            razon_default = elegido.split("—", 1)[1].strip()
-            if razon_default == "(sin nombre)":
-                razon_default = ""
-        cuit = st.text_input("CUIT", value=cuit_default, placeholder="27-42043034-0", key="arca_job_cuit")
+        cuit = st.text_input("CUIT", placeholder="27-42043034-0", key="arca_job_cuit")
         razon = st.text_input(
             "Razón social",
-            value=razon_default,
-            placeholder="Camila Rocio Albarello",
+            placeholder="Nombre del cliente",
             key="arca_job_razon",
         )
     with c2:
         action = st.selectbox(
             "Acción",
-            options=list(ACTIONS),
+            options=list(_ACTIONS_UI),
             format_func=lambda a: _ACTION_LABELS.get(a, a),
             key="arca_job_action",
         )
-        requested_by = st.text_input("Solicitado por", value="admin", key="arca_job_by")
-
-    if cuit.strip():
-        label, note = _badge_acceso(cuit, razon, remote)
-        if label == "Listo":
-            st.success(f"Acceso: **{label}** — {note}")
-        elif label == "Pedir acceso":
-            st.warning(f"Acceso: **{label}** — {note}")
-            st.info(
-                "CUIT nuevo o sin sesión: el admin abre AFIP en la PC del worker (2FA una vez), "
-                "después marca el CUIT como Listo en la pestaña **CUITs / acceso**."
+        requested_by = _solicitado_por()
+        st.caption(f"Lo pide **{requested_by}**.")
+        if action not in _ACTIONS_LIVE:
+            st.warning(
+                "FCC y VEPs todavía no entran a ARCA. "
+                "Hoy lo que corre en RECEPCION es **Descargar Comprobantes en Línea**."
             )
-        elif label:
-            st.info(f"Acceso: **{label}** — {note}")
+
+    label, note = _lookup_acceso(cuit, rows)
+    if label == "Listo":
+        st.success(f"Acceso: **{label}** — {note}")
+    elif label == "Pedir acceso":
+        st.warning(f"Acceso: **{label}** — {note}")
+        st.info(
+            "CUIT nuevo o sin sesión: el admin abre AFIP en RECEPCION (2FA una vez) "
+            "y lo marca Listo en **CUITs / acceso**."
+        )
+    elif label:
+        st.info(f"Acceso: **{label}** — {note}")
 
     params: dict[str, Any] = {}
-    ruta = st.text_input(
-        "Ruta destino (UNC)",
-        placeholder=r"\\TANGOSRV\Compartido\CLIENTES\...\Facturas\08-2026",
-        key="arca_job_ruta",
-    )
-    params["ruta_destino"] = ruta.strip().strip('"').strip("'")
-
     plantilla_b64 = ""
     plantilla_name = ""
+    hasta_ruta = date.today()
     if action == "emitir_fcc":
         plantilla = st.file_uploader(
             "Plantilla Excel (montos / receptor / concepto — SIN claves)",
             type=["xlsx", "xls"],
             key="arca_job_xlsx",
         )
-        fecha_emision = st.date_input("Fecha emisión", value=date.today(), key="arca_job_emision")
+        fecha_emision = st.date_input(
+            "Fecha emisión",
+            value=date.today(),
+            format="DD/MM/YYYY",
+            key="arca_job_emision",
+        )
         params["fecha_emision"] = fecha_emision.isoformat()
+        hasta_ruta = fecha_emision
         if plantilla is not None:
             raw = plantilla.getvalue()
             if remote:
@@ -229,12 +331,19 @@ def _render_encolar(remote: RemoteWorker | None) -> None:
             desde = st.date_input(
                 "Período desde",
                 value=date.today().replace(day=1),
+                format="DD/MM/YYYY",
                 key="arca_job_desde",
             )
         with d2:
-            hasta = st.date_input("Período hasta", value=date.today(), key="arca_job_hasta")
+            hasta = st.date_input(
+                "Período hasta",
+                value=date.today(),
+                format="DD/MM/YYYY",
+                key="arca_job_hasta",
+            )
         params["periodo_desde"] = desde.isoformat()
         params["periodo_hasta"] = hasta.isoformat()
+        hasta_ruta = hasta
         if action == "bajar_comprobantes":
             params["analizar_monotributo"] = st.checkbox(
                 "Al terminar, analizar recategorización (período facturado, recibos, NC)",
@@ -243,13 +352,28 @@ def _render_encolar(remote: RemoteWorker | None) -> None:
                 help="El worker arma el papel de trabajo de monotributo con los PDF bajados.",
             )
 
+    sugerida = _ruta_sugerida(razon, hasta_ruta)
+    ruta = st.text_input(
+        "Ruta destino (UNC)",
+        placeholder=sugerida,
+        key="arca_job_ruta",
+        help="Carpeta de red donde RECEPCION guarda los PDF. Si lo dejás vacío, usa la sugerida.",
+    )
+    params["ruta_destino"] = (ruta.strip() or sugerida).strip().strip('"').strip("'")
+    if not ruta.strip():
+        st.caption(f"Si encolás ahora, guarda en `{sugerida}`")
+
     if st.button("Encolar", type="primary", key="arca_job_enqueue"):
-        if not cuit.strip() or not razon.strip():
-            st.error("CUIT y razón social son obligatorios.")
-        elif not ruta.strip():
-            st.error("Ruta destino UNC es obligatoria.")
+        if len(_digits(cuit)) != 11:
+            st.error("El CUIT tiene que tener 11 dígitos.")
+        elif not razon.strip():
+            st.error("Falta la razón social.")
         elif action == "emitir_fcc" and not (params.get("plantilla_excel") or plantilla_b64):
             st.error("Subí la plantilla Excel para emitir FCC.")
+        elif action not in _ACTIONS_LIVE:
+            st.error(
+                "Esa acción todavía no entra a ARCA. Elegí **Descargar Comprobantes en Línea**."
+            )
         else:
             try:
                 if remote:
@@ -258,13 +382,16 @@ def _render_encolar(remote: RemoteWorker | None) -> None:
                         razon_social=razon,
                         action=action,
                         params=params,
-                        requested_by=requested_by or "admin",
+                        requested_by=requested_by,
                         plantilla_b64=plantilla_b64,
                         plantilla_name=plantilla_name,
                     )
-                    st.success(f"Encolado en RECEPCION `{job.get('id')}`")
-                    st.caption("Lo toma la PC RECEPCION sola. El resto del estudio no tiene que abrir AFIP. Solo frena si el CUIT dice **Pedir acceso**.")
-                    st.json(job)
+                    jid = str(job.get("id") or "")
+                    st.success(f"Encolado en RECEPCION: {jid}")
+                    st.caption(
+                        "Lo toma la PC RECEPCION sola. El resto del estudio no abre AFIP. "
+                        "Solo frena si el CUIT dice **Pedir acceso**. Miralo en la pestaña Cola."
+                    )
                 else:
                     ensure_cuit_registered(cuit, razon)
                     job_obj = create_job(
@@ -272,20 +399,22 @@ def _render_encolar(remote: RemoteWorker | None) -> None:
                         razon_social=razon,
                         action=action,  # type: ignore[arg-type]
                         params=params,
-                        requested_by=requested_by or "admin",
+                        requested_by=requested_by,
                     )
-                    path = enqueue_job(job_obj)
-                    st.success(f"Encolado `{job_obj.id}` → `{path.name}`")
+                    enqueue_job(job_obj)
+                    st.success(f"Encolado: {job_obj.id}")
                     st.caption(
-                        "Lo toma la PC RECEPCION sola. El resto del estudio no tiene que abrir AFIP. "
-                        "Solo frena si el CUIT dice **Pedir acceso**."
+                        "En esta PC queda en la cola local. En la nube, RECEPCION lo toma sola. "
+                        "Solo frena si el CUIT dice **Pedir acceso**. Miralo en la pestaña Cola."
                     )
-                    st.json(job_obj.to_dict())
             except (ValueError, RemoteError) as exc:
                 st.error(str(exc))
 
 
 def _render_cola(remote: RemoteWorker | None) -> None:
+    if st.button("Actualizar cola", key="arca_cola_refresh"):
+        st.session_state.pop("_arca_health", None)
+        st.rerun()
     rows_src: list[dict[str, Any]] = []
     try:
         if remote:
@@ -300,17 +429,15 @@ def _render_cola(remote: RemoteWorker | None) -> None:
         return
     rows = []
     for j in reversed(rows_src):
-        auth = j.get("auth") or {}
         result = j.get("result") or {}
         rows.append(
             {
                 "Estado": _STATUS_BADGE.get(str(j.get("status")), j.get("status")),
-                "ID": j.get("id"),
                 "CUIT": j.get("cuit"),
                 "Cliente": j.get("razon_social"),
                 "Acción": _ACTION_LABELS.get(str(j.get("action")), j.get("action")),
-                "Auth": auth.get("status") if isinstance(auth, dict) else "",
-                "Creado": j.get("created_at"),
+                "Lo pidió": j.get("requested_by"),
+                "Creado": _fmt_dt(str(j.get("created_at") or "")),
                 "Mensaje": str(result.get("message") or "")[:140] if isinstance(result, dict) else "",
             }
         )
@@ -341,8 +468,8 @@ def _render_cola(remote: RemoteWorker | None) -> None:
     needs = [j for j in rows_src if j.get("status") == "needs_auth"]
     if needs:
         st.warning(
-            f"**{len(needs)} job(s) needs_auth.** "
-            "Abrí AFIP conmigo en la PC del worker (2FA una vez) y marcá el CUIT como Listo."
+            f"**{len(needs)} trabajo(s) esperan 2FA.** "
+            "En RECEPCION abrí AFIP una vez y marcá el CUIT como Listo."
         )
         for j in needs:
             auth = j.get("auth") or {}
@@ -367,8 +494,7 @@ def _render_registry(remote: RemoteWorker | None) -> None:
                     "Razón social": e.get("razon_social"),
                     "Acceso": e.get("acceso") or badge_label(str(e.get("status") or "")),
                     "Nota": e.get("note"),
-                    "Actualizado": e.get("updated_at"),
-                    "Perfil Chrome": e.get("chrome_profile"),
+                    "Actualizado": _fmt_dt(str(e.get("updated_at") or "")),
                 }
                 for e in entries
             ],

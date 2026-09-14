@@ -30,6 +30,7 @@ from prestamos_listado_excel import (
 
 import auth_oficina
 import database as db
+from afip_worker.ui_streamlit import render_arca_module
 from cruce_facturas_arca import procesar_cruce_facturas_arca
 from procesador import (
     BANCOS_ARGENTINOS,
@@ -916,7 +917,7 @@ _VENTANA_HEADER = {
     ),
     "ARCA": (
         "ARCA",
-        "Encolá comprobantes, FCC y VEPs",
+        "Bajá comprobantes de ARCA a la carpeta del cliente",
     ),
     "clientes": ("Clientes", "Altas, CUITs y fichas"),
     "usuarios_oficina": ("Usuarios", "Accesos de la oficina"),
@@ -13177,11 +13178,6 @@ def _herramienta_extracto_fci() -> None:
 
 def _seccion_arca() -> None:
     """ARCA top-level: solo encola jobs AFIP; worker local ejecuta."""
-    try:
-        from afip_worker.ui_streamlit import render_arca_module
-    except Exception as exc:
-        st.error(f"No se pudo cargar el módulo ARCA: {exc}")
-        return
     render_arca_module()
 
 

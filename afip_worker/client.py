@@ -61,7 +61,7 @@ class RemoteWorker:
             headers={"User-Agent": "EstudioContable-ARCA/1.0", "Accept": "application/json"},
         )
         try:
-            with urllib.request.urlopen(req, timeout=8) as resp:
+            with urllib.request.urlopen(req, timeout=3) as resp:
                 return resp.status == 200
         except Exception:
             return False
