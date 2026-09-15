@@ -27,8 +27,10 @@ INSTRUMENTOS_SEED_PATH = BASE_DIR / "data" / "instrumentos_seed.json"
 # --- Catálogos (mismos valores que la herramienta original, + fideicomiso/opcion) ---
 
 TIPOS_INSTRUMENTO = (
-    "on", "bono", "accion", "cedear", "crypto", "letra", "fci", "caucion",
-    "fideicomiso", "opcion", "otro",
+    "on", "on_exterior", "bono", "titulo_extranjero", "accion", "accion_sin_cotizacion",
+    "accion_exterior", "adr", "cedear", "crypto", "letra", "fci", "fci_sin_oferta",
+    "fci_extranjero", "caucion", "fideicomiso", "opcion", "plazo_fijo_ars", "plazo_fijo_usd",
+    "futuro", "cheque_dif", "fce", "otro",
 )
 MOVIMIENTOS = ("compra", "venta", "dividendo", "renta", "amort", "apertura", "rescate", "caucion")
 TRATAMIENTOS_FISCALES = ("ced15", "ced5", "ret7", "exento", "gravado", "ordinario", "na")
@@ -36,10 +38,17 @@ ALCANZA_BP = ("exento", "gravado")
 ORIGENES_POOL = ("mep", "oficial", "blue", "ext", "otro")
 
 TIPO_LABEL = {
-    "on": "Obligación Negociable", "bono": "Bono / Título público", "accion": "Acción",
+    "on": "Obligación Negociable (local)", "on_exterior": "Obligación Negociable (exterior)",
+    "bono": "Bono / Título público (argentino)", "titulo_extranjero": "Título público extranjero",
+    "accion": "Acción (con cotización)", "accion_sin_cotizacion": "Acción (sin cotización)",
+    "accion_exterior": "Acción (exterior)", "adr": "ADR de sociedad argentina",
     "cedear": "CEDEAR", "crypto": "Cripto", "letra": "Letra del Tesoro / LECAP",
-    "fci": "FCI/Cuotapartes", "caucion": "Caución",
-    "fideicomiso": "Fideicomiso financiero", "opcion": "Opción / Warrant", "otro": "Otro",
+    "fci": "FCI/Cuotapartes (oferta pública)", "fci_sin_oferta": "FCI (sin oferta pública)",
+    "fci_extranjero": "FCI extranjero", "caucion": "Caución",
+    "fideicomiso": "Fideicomiso financiero (oferta pública)", "opcion": "Opción / Warrant",
+    "plazo_fijo_ars": "Plazo fijo en pesos", "plazo_fijo_usd": "Plazo fijo en dólares",
+    "futuro": "Futuro", "cheque_dif": "Cheque de pago diferido",
+    "fce": "FCE / Pagaré bursátil", "otro": "Otro",
 }
 MOV_LABEL = {
     "compra": "Compra", "venta": "Venta", "dividendo": "Dividendo",
@@ -69,24 +78,73 @@ MOVIMIENTOS_COSTO_BASE = ("compra", "apertura")
 
 # Catálogo de tratamiento impositivo por tipo de instrumento, según el cuadro
 # "Impuesto a las Ganancias (Rendimiento / Compra-Venta) + Bienes Personales"
-# provisto por el estudio. Es un PUNTO DE PARTIDA sugerido — el contador
-# puede (y en casos particulares como ONs/FCI/ADRs "sin oferta pública" o
-# instrumentos en el exterior, DEBE) corregirlo a mano.
+# provisto por el estudio (cuadro completo, fila por fila):
+#
+#   Inversión                                  | Rendimiento | Compra/Venta | Bienes Personales
+#   Acciones arg. con cotización CNV           | Ret. 7% div | Exento        | Exento
+#   Acciones arg. sin cotización                | Ret. 7% div | Gravado 15%   | Exento
+#   Acciones en el exterior                     | Grav. escala| Gravado 15%   | Gravado
+#   ADRs de sociedades argentinas                | Ret. 7% div | Gravado 15%   | Exento *
+#   CEDEARs                                       | Grav. escala| Exento        | Gravado
+#   ONs locales en pesos                          | Exento      | Exento        | Exento
+#   ONs locales en dólares                        | Exento      | Exento        | Gravado
+#   ONs en el exterior                            | Grav. escala| Gravado 15%   | Gravado
+#   Bonos argentinos (pesos y dólares)            | Exento      | Exento        | Exento
+#   Títulos públicos extranjeros                  | Grav. escala| Gravado 15%   | Gravado
+#   FCI (oferta pública, activo subyacente 75%+   | Exento      | Exento        | Exento **
+#     en tít. públicos/plazo fijo/ON oferta púb.)
+#   FCI sin oferta pública                        | Grav. escala| Gravado 15%   | Gravado
+#   FCI extranjeros                               | Grav. escala| Gravado 15%   | Gravado
+#   Fideicomisos financieros oferta pública        | Exento      | Exento        | Exento **
+#   Plazo fijo en pesos (con o sin cláusula ajuste)| Exento      | —             | Exento
+#   Plazo fijo en dólares                          | Grav. escala| —             | Exento
+#   Cripto                                        | —           | Gravado 15%   | Gravado
+#   Futuros                                        | —           | Grav. escala  | Gravado
+#   Opciones                                       | —           | Grav. escala  | Gravado
+#   FCE y pagaré bursátil                          | Exento      | Exento        | Gravado
+#   Cheque de pago diferido                       | Grav. escala| Exento        | Gravado
+#   Cauciones                                      | Grav. escala| —             | Gravado
+#
+#   * Hay criterios que sostienen que no está gravado, al tributar la
+#     sociedad como responsable sustituto por las acciones.
+#   ** Condicionado a que esté colocado por oferta pública (CNV) y el activo
+#      subyacente principal esté integrado en un 75% por títulos públicos,
+#      depósitos a plazo fijo, ONs colocadas por oferta pública e
+#      instrumentos emitidos en moneda nacional (ver listado de ARCA).
+#
+# Cajas de ahorro/cuentas corrientes/cuentas en el exterior/tenencia de
+# moneda extranjera no tienen "operaciones" propias en esta herramienta (son
+# saldos, no instrumentos con compra/venta) y quedan fuera de este catálogo.
+#
+# Es un PUNTO DE PARTIDA sugerido — el contador puede (y en los casos con *
+# o **, DEBE) corregirlo a mano según el caso particular.
 #   rendimiento: tratamiento para dividendo/renta
 #   compraventa: tratamiento para compra/venta/rescate/amort/caución/apertura
 #   bienes_personales: si la tenencia al 31/12 está alcanzada por BP
 CATALOGO_FISCAL: dict[str, dict[str, str]] = {
-    "accion":       {"rendimiento": "ret7",      "compraventa": "exento",   "bienes_personales": "exento"},
-    "cedear":       {"rendimiento": "gravado",    "compraventa": "exento",   "bienes_personales": "gravado"},
-    "on":           {"rendimiento": "exento",     "compraventa": "exento",   "bienes_personales": "exento"},
-    "bono":         {"rendimiento": "exento",     "compraventa": "exento",   "bienes_personales": "exento"},
-    "letra":        {"rendimiento": "exento",     "compraventa": "exento",   "bienes_personales": "exento"},
-    "fci":          {"rendimiento": "exento",     "compraventa": "exento",   "bienes_personales": "exento"},
-    "fideicomiso":  {"rendimiento": "exento",     "compraventa": "exento",   "bienes_personales": "exento"},
-    "opcion":       {"rendimiento": "na",         "compraventa": "gravado",  "bienes_personales": "gravado"},
-    "crypto":       {"rendimiento": "na",         "compraventa": "ced15",    "bienes_personales": "gravado"},
-    "caucion":      {"rendimiento": "gravado",    "compraventa": "na",       "bienes_personales": "gravado"},
-    "otro":         {"rendimiento": "gravado",    "compraventa": "gravado",  "bienes_personales": "gravado"},
+    "accion":                {"rendimiento": "ret7",    "compraventa": "exento", "bienes_personales": "exento"},
+    "accion_sin_cotizacion": {"rendimiento": "ret7",    "compraventa": "ced15",  "bienes_personales": "exento"},
+    "accion_exterior":       {"rendimiento": "gravado", "compraventa": "ced15",  "bienes_personales": "gravado"},
+    "adr":                   {"rendimiento": "ret7",    "compraventa": "ced15",  "bienes_personales": "exento"},
+    "cedear":                {"rendimiento": "gravado", "compraventa": "exento", "bienes_personales": "gravado"},
+    "on":                    {"rendimiento": "exento",  "compraventa": "exento", "bienes_personales": "exento"},
+    "on_exterior":           {"rendimiento": "gravado", "compraventa": "ced15",  "bienes_personales": "gravado"},
+    "bono":                  {"rendimiento": "exento",  "compraventa": "exento", "bienes_personales": "exento"},
+    "titulo_extranjero":     {"rendimiento": "gravado", "compraventa": "ced15",  "bienes_personales": "gravado"},
+    "letra":                 {"rendimiento": "exento",  "compraventa": "exento", "bienes_personales": "exento"},
+    "fci":                   {"rendimiento": "exento",  "compraventa": "exento", "bienes_personales": "exento"},
+    "fci_sin_oferta":        {"rendimiento": "gravado", "compraventa": "ced15",  "bienes_personales": "gravado"},
+    "fci_extranjero":        {"rendimiento": "gravado", "compraventa": "ced15",  "bienes_personales": "gravado"},
+    "fideicomiso":           {"rendimiento": "exento",  "compraventa": "exento", "bienes_personales": "exento"},
+    "opcion":                {"rendimiento": "na",      "compraventa": "gravado","bienes_personales": "gravado"},
+    "plazo_fijo_ars":        {"rendimiento": "exento",  "compraventa": "na",     "bienes_personales": "exento"},
+    "plazo_fijo_usd":        {"rendimiento": "gravado", "compraventa": "na",     "bienes_personales": "exento"},
+    "crypto":                {"rendimiento": "na",      "compraventa": "ced15",  "bienes_personales": "gravado"},
+    "futuro":                {"rendimiento": "na",      "compraventa": "gravado","bienes_personales": "gravado"},
+    "fce":                   {"rendimiento": "exento",  "compraventa": "exento", "bienes_personales": "gravado"},
+    "cheque_dif":            {"rendimiento": "gravado", "compraventa": "exento", "bienes_personales": "gravado"},
+    "caucion":               {"rendimiento": "gravado", "compraventa": "na",     "bienes_personales": "gravado"},
+    "otro":                  {"rendimiento": "gravado", "compraventa": "gravado","bienes_personales": "gravado"},
 }
 
 # Casos donde la moneda cambia el resultado (según el cuadro: ON local en
@@ -222,6 +280,7 @@ def inicializar_tablas_inversiones(conn: sqlite3.Connection) -> None:
 
 def sembrar_tc_bna_default() -> None:
     """Carga el historial BNA 2023-2025 una sola vez (no-op si la tabla ya tiene datos)."""
+
     if not TC_BNA_SEED_PATH.is_file():
         return
     with db.obtener_conexion() as conn:
@@ -297,6 +356,7 @@ def obtener_tc(fecha: str, tipo: str = "venta") -> Optional[float]:
     ese caso. En ambos casos, si no hay dato hacia ese lado (fecha en un
     extremo de la serie cargada), se usa el lado disponible.
     """
+
     with db.obtener_conexion() as conn:
         return _obtener_tc_con(conn, fecha, tipo)
 
@@ -308,6 +368,7 @@ def tc_para_movimiento(fecha: str, movimiento: str) -> Optional[float]:
 
 
 def listar_tc_bna(limite: int = 400) -> list[dict]:
+
     with db.obtener_conexion() as conn:
         filas = conn.execute(
             "SELECT * FROM inversiones_tc_bna ORDER BY fecha DESC LIMIT ?", (limite,)
@@ -316,6 +377,7 @@ def listar_tc_bna(limite: int = 400) -> list[dict]:
 
 
 def agregar_tc_bna(fecha: str, compra: float, venta: float) -> None:
+
     with db.obtener_conexion() as conn:
         conn.execute(
             "INSERT INTO inversiones_tc_bna (fecha, compra, venta) VALUES (?, ?, ?) "
@@ -351,6 +413,7 @@ def crear_operacion(
     es_saldo_inicial: bool = False,
     alcanza_bienes_personales: str = "gravado",
 ) -> int:
+
     with db.obtener_conexion() as conn:
         cur = conn.execute(
             """
@@ -374,11 +437,61 @@ def crear_operacion(
         return int(cur.lastrowid)
 
 
+def actualizar_operacion(
+    operacion_id: int,
+    fecha: str,
+    instrumento: str,
+    tipo: str,
+    movimiento: str,
+    tratamiento_fiscal: str,
+    vn: float,
+    precio_ars: float,
+    precio_usd: float,
+    tc: float,
+    tc_origen: float,
+    total_ars: float,
+    total_usd: float,
+    div_usd: float,
+    div_ars: float,
+    comision: float,
+    moneda: str,
+    notas: str,
+    costo_fiscal: float,
+    alcanza_bienes_personales: str,
+) -> None:
+    """Actualiza una operación ya cargada (edición manual desde la tabla de
+    Operaciones cargadas). No toca ``asignaciones_usd_json``: si la edición
+    cambia sustancialmente el total en USD, puede quedar desalineada con lo
+    ya asignado en Depuración — se ve reflejado ahí como "sin completar" y
+    se puede volver a correr "Asignar PEPS automático" o reasignar a mano."""
+
+    with db.obtener_conexion() as conn:
+        conn.execute(
+            """
+            UPDATE inversiones_operaciones SET
+                fecha = ?, instrumento = ?, tipo = ?, movimiento = ?, tratamiento_fiscal = ?,
+                vn = ?, precio_ars = ?, precio_usd = ?, tc = ?, tc_origen = ?,
+                total_ars = ?, total_usd = ?, div_usd = ?, div_ars = ?, comision = ?,
+                moneda = ?, notas = ?, costo_fiscal = ?, alcanza_bienes_personales = ?
+            WHERE id = ?
+            """,
+            (
+                fecha, instrumento.strip(), tipo, movimiento, tratamiento_fiscal,
+                float(vn), float(precio_ars), float(precio_usd), float(tc), float(tc_origen),
+                float(total_ars), float(total_usd), float(div_usd), float(div_ars),
+                float(comision), moneda, notas.strip(), float(costo_fiscal),
+                alcanza_bienes_personales, operacion_id,
+            ),
+        )
+        conn.commit()
+
+
 def listar_operaciones(
     cliente_id: Optional[int] = None,
     periodo: Optional[str] = None,
     solo_saldos_iniciales: Optional[bool] = None,
 ) -> list[dict]:
+
     q = "SELECT * FROM inversiones_operaciones WHERE 1=1"
     args: list = []
     if cliente_id:
@@ -406,12 +519,14 @@ def listar_operaciones(
 
 
 def eliminar_operacion(operacion_id: int) -> None:
+
     with db.obtener_conexion() as conn:
         conn.execute("DELETE FROM inversiones_operaciones WHERE id = ?", (operacion_id,))
         conn.commit()
 
 
 def obtener_operacion(operacion_id: int) -> Optional[dict]:
+
     with db.obtener_conexion() as conn:
         fila = conn.execute(
             "SELECT * FROM inversiones_operaciones WHERE id = ?", (operacion_id,)
@@ -432,6 +547,7 @@ def cambiar_tratamiento_fiscal_instrumento(
     """Aplica un tratamiento fiscal a TODAS las operaciones de ese instrumento
     (mismo cliente y período) — atajo para corregir de una vez casos
     particulares (ON/FCI sin oferta pública, ADRs, etc.)."""
+
     with db.obtener_conexion() as conn:
         cur = conn.execute(
             "UPDATE inversiones_operaciones SET tratamiento_fiscal = ? "
@@ -447,6 +563,7 @@ def cambiar_moneda_operacion(operacion_id: int, nueva_moneda: str) -> None:
     una compra que en realidad fue en USD, o viceversa). Recalcula total_ars/
     total_usd/costo_fiscal y, si pasa a ARS, devuelve al pool cualquier lote
     USD que tuviera asignado."""
+
     with db.obtener_conexion() as conn:
         op = conn.execute(
             "SELECT * FROM inversiones_operaciones WHERE id = ?", (operacion_id,)
@@ -485,6 +602,7 @@ def cambiar_moneda_operacion(operacion_id: int, nueva_moneda: str) -> None:
 # --- Pool USD (Etapa 2 — Depuración) ----------------------------------------
 
 def listar_pool_usd(cliente_id: int) -> list[dict]:
+
     with db.obtener_conexion() as conn:
         filas = conn.execute(
             "SELECT * FROM inversiones_pool_usd WHERE cliente_id = ? ORDER BY fecha ASC",
@@ -497,6 +615,7 @@ def crear_lote_pool(
     cliente_id: int, fecha: str, cant_usd: float, tc_origen: float,
     origen: str = "otro", descripcion: str = "",
 ) -> int:
+
     with db.obtener_conexion() as conn:
         cur = conn.execute(
             """
@@ -511,6 +630,7 @@ def crear_lote_pool(
 
 
 def eliminar_lote_pool(lote_id: int) -> None:
+
     with db.obtener_conexion() as conn:
         conn.execute("DELETE FROM inversiones_pool_usd WHERE id = ?", (lote_id,))
         conn.commit()
@@ -526,6 +646,7 @@ def _guardar_asignaciones(conn: sqlite3.Connection, operacion_id: int, asignacio
 def asignar_lote_a_operacion(operacion_id: int, lote_id: int, cant_usd: float) -> None:
     """Asigna (parte de) un lote del pool a una compra en USD, descontando su
     disponibilidad y sumando la asignación al costo fiscal de la operación."""
+
     with db.obtener_conexion() as conn:
         op = conn.execute(
             "SELECT * FROM inversiones_operaciones WHERE id = ?", (operacion_id,)
@@ -554,6 +675,7 @@ def asignar_lote_a_operacion(operacion_id: int, lote_id: int, cant_usd: float) -
 def quitar_asignacion(operacion_id: int, index: int) -> None:
     """Quita una asignación de la operación y devuelve el USD al lote de
     origen en el pool (si tenía uno — no si era el respaldo 'bna')."""
+
     with db.obtener_conexion() as conn:
         op = conn.execute(
             "SELECT * FROM inversiones_operaciones WHERE id = ?", (operacion_id,)
@@ -582,6 +704,7 @@ def asignar_peps_automatico(operacion_id: int) -> None:
     por el más antiguo. Si el pool no alcanza a cubrir el total, arma un lote
     de respaldo 'bna' al TC BNA vendedor de la fecha de la operación (mismo
     comportamiento que la herramienta original)."""
+
     with db.obtener_conexion() as conn:
         op = conn.execute(
             "SELECT * FROM inversiones_operaciones WHERE id = ?", (operacion_id,)
@@ -688,7 +811,20 @@ def calcular_posicion(cliente_id: int, periodo: str) -> list[dict]:
             p["div_ars"] += float(op["div_ars"] or 0)
             p["div_usd"] += float(op["div_usd"] or 0)
         elif op["movimiento"] == "amort":
+            # La amortización es devolución de capital, no una venta: reduce
+            # la cantidad de cuotapartes/partes/unidades del instrumento (se
+            # consume del mismo lote PEPS que una venta/rescate) pero el
+            # importe cobrado no genera un resultado — se registra aparte en
+            # amorts_ars.
             p["amorts_ars"] += float(op["div_ars"] or op["total_ars"] or 0)
+            restante = float(op["vn"] or 0)
+            for lote in p["lotes"]:
+                if restante <= 0:
+                    break
+                usar = min(lote["cant"], restante)
+                lote["cant"] -= usar
+                restante -= usar
+            p["comisiones"] += float(op["comision"] or 0)
         elif op["movimiento"] == "caucion":
             p["rentas_ars"] += float(op["div_ars"] or op["total_ars"] or 0)
 
@@ -802,6 +938,19 @@ def calcular_movimientos(cliente_id: int, periodo: str) -> list[dict]:
             if es_usd:
                 fila["rendimiento_ars"] = rendimiento_ars
                 fila["diferencia_cambio_ars"] = diferencia_cambio_ars
+        elif op["movimiento"] == "amort":
+            # Igual que en calcular_posicion: la amortización reduce la
+            # cantidad de cuotapartes/partes/unidades (consume el lote PEPS)
+            # pero NO es una venta — no se registra resultado_ars ni se abre
+            # en rendimiento/diferencia de cambio, es devolución de capital.
+            restante = float(op["vn"] or 0)
+            for lote in g["lotes"]:
+                if restante <= 0:
+                    break
+                usar = min(lote["cant"], restante)
+                lote["cant"] -= usar
+                restante -= usar
+            g["lotes"] = [l for l in g["lotes"] if l["cant"] > 1e-9]
 
         g["movimientos"].append(fila)
 
@@ -815,6 +964,7 @@ def crear_tenencia_control(
     """Registra la tenencia real de un instrumento según el extracto/comprobante
     de cierre (fin de ejercicio, o 31/12 para Persona Humana), para poder
     compararla contra la posición PEPS calculada y detectar diferencias."""
+
     with db.obtener_conexion() as conn:
         cur = conn.execute(
             """
@@ -829,6 +979,7 @@ def crear_tenencia_control(
 
 
 def listar_tenencias_control(cliente_id: int, periodo: str) -> list[dict]:
+
     with db.obtener_conexion() as conn:
         filas = conn.execute(
             "SELECT * FROM inversiones_tenencias_control WHERE cliente_id = ? AND periodo = ? "
@@ -839,6 +990,7 @@ def listar_tenencias_control(cliente_id: int, periodo: str) -> list[dict]:
 
 
 def eliminar_tenencia_control(control_id: int) -> None:
+
     with db.obtener_conexion() as conn:
         conn.execute("DELETE FROM inversiones_tenencias_control WHERE id = ?", (control_id,))
         conn.commit()
