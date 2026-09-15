@@ -17,12 +17,20 @@ import json
 import sqlite3
 from pathlib import Path
 from typing import Optional
-
 import database as db
 
 BASE_DIR = Path(__file__).resolve().parent
 TC_BNA_SEED_PATH = BASE_DIR / "data" / "tc_bna_seed.json"
 INSTRUMENTOS_SEED_PATH = BASE_DIR / "data" / "instrumentos_seed.json"
+VALUACIONES_CIERRE_SEED_PATH = BASE_DIR / "data" / "valuaciones_cierre_2025.json"
+
+# Alícuota de referencia por defecto para el tratamiento "Gravado a escala"
+# (impuesto a las Ganancias, escalas progresivas de persona humana): no hay
+# una tasa fija posible acá porque depende de TODOS los ingresos anuales del
+# cliente, no solo de Inversiones — se usa el tramo máximo vigente (35%) como
+# punto de partida razonable, siempre editable a mano (tanto en la app como
+# en el Excel exportado) para ajustarla al caso real de cada cliente.
+ALICUOTA_ESCALA_DEFAULT = 0.35
 
 # --- Catálogos (mismos valores que la herramienta original, + fideicomiso/opcion) ---
 
@@ -176,6 +184,96 @@ def default_fis(tipo: str) -> str:
 _catalogo_instrumentos_cache: Optional[list[dict]] = None
 
 
+_valuaciones_cierre_cache: Optional[dict[str, dict]] = None
+
+
+def listar_valuaciones_cierre() -> dict[str, dict]:
+    """Catálogo de cotizaciones de cierre 2025 (Bienes Personales), indexado
+    por ticker en mayúsculas — extraído de las planillas oficiales de
+    valuaciones (Acciones, CEDEARs, Fideicomisos Financieros, Opciones,
+    Títulos Públicos). Dos de las siete planillas provistas (Obligaciones
+    Negociables y Fondos Comunes de Inversión) tienen un defecto de
+    generación del PDF que superpone dos capas de texto y hace que la
+    extracción automática de la columna Cotización dé valores ilegibles —
+    esos instrumentos no están en este catálogo y necesitan carga manual
+    (ver ``obtener_valor_cierre`` / ``guardar_valor_cierre_manual``).
+
+    El archivo semilla guarda cada fila en formato compacto
+    ``[ticker, cotizacion, moneda]`` (no un objeto por fila) para que el
+    JSON pese lo menos posible — acá se expande a un dict por comodidad de
+    uso en el resto del módulo."""
+    global _valuaciones_cierre_cache
+    if _valuaciones_cierre_cache is not None:
+        return _valuaciones_cierre_cache
+    if not VALUACIONES_CIERRE_SEED_PATH.is_file():
+        _valuaciones_cierre_cache = {}
+        return _valuaciones_cierre_cache
+    try:
+        filas = json.loads(VALUACIONES_CIERRE_SEED_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        _valuaciones_cierre_cache = {}
+        return _valuaciones_cierre_cache
+    _valuaciones_cierre_cache = {
+        fila[0]: {"cotizacion": fila[1], "moneda": fila[2]}
+        for fila in filas if fila and fila[0]
+    }
+    return _valuaciones_cierre_cache
+
+
+def _ticker_de_instrumento(instrumento: str) -> str:
+    """El formulario de carga guarda el instrumento como "TICKER - Nombre" (o
+    solo el nombre libre si se cargó a mano) — esto recupera la parte de
+    ticker para buscarla en el catálogo de cierre."""
+    return (instrumento or "").split(" - ")[0].strip().upper()
+
+
+def obtener_valor_cierre(cliente_id: int, periodo: str, instrumento: str) -> dict:
+    """Cotización de cierre del período para Bienes Personales, con la
+    siguiente prioridad: 1) valor cargado a mano para ese cliente/período/
+    instrumento (siempre gana, es la corrección del contador); 2) catálogo
+    de las planillas oficiales 2025 por ticker; 3) sin dato (0, a completar
+    a mano). Devuelve también ``fuente`` para que la UI/Excel puedan avisar
+    de dónde salió el número."""
+
+    with db.obtener_conexion() as conn:
+        fila = conn.execute(
+            "SELECT cotizacion, moneda FROM inversiones_valor_cierre_manual "
+            "WHERE cliente_id = ? AND periodo = ? AND instrumento = ?",
+            (cliente_id, periodo, instrumento),
+        ).fetchone()
+    if fila:
+        return {"cotizacion": float(fila["cotizacion"]), "moneda": fila["moneda"], "fuente": "manual"}
+
+    if periodo == "2025":
+        catalogo = listar_valuaciones_cierre()
+        entrada = catalogo.get(_ticker_de_instrumento(instrumento))
+        if entrada:
+            return {"cotizacion": float(entrada["cotizacion"]), "moneda": entrada["moneda"], "fuente": "pdf"}
+
+    return {"cotizacion": 0.0, "moneda": "ARS", "fuente": "sin_dato"}
+
+
+def guardar_valor_cierre_manual(
+    cliente_id: int, periodo: str, instrumento: str, cotizacion: float, moneda: str = "ARS",
+) -> None:
+    """Guarda (o corrige) a mano la cotización de cierre de un instrumento
+    para Bienes Personales — para períodos sin planilla oficial cargada
+    (2026 en adelante) o para pisar/completar un dato del catálogo 2025."""
+
+    with db.obtener_conexion() as conn:
+        conn.execute(
+            """
+            INSERT INTO inversiones_valor_cierre_manual
+                (cliente_id, periodo, instrumento, cotizacion, moneda)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(cliente_id, periodo, instrumento)
+            DO UPDATE SET cotizacion = excluded.cotizacion, moneda = excluded.moneda
+            """,
+            (cliente_id, periodo, instrumento.strip(), float(cotizacion), moneda),
+        )
+        conn.commit()
+
+
 def listar_catalogo_instrumentos() -> list[dict]:
     """Catálogo de instrumentos conocidos (ticker, nombre, tipo) para autocompletar
     el formulario de carga — extraído de las planillas de valuaciones 2025
@@ -273,6 +371,20 @@ def inicializar_tablas_inversiones(conn: sqlite3.Connection) -> None:
             valor_ars_control REAL NOT NULL DEFAULT 0,
             notas TEXT NOT NULL DEFAULT '',
             creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS inversiones_valor_cierre_manual (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cliente_id INTEGER NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
+            periodo TEXT NOT NULL,
+            instrumento TEXT NOT NULL,
+            cotizacion REAL NOT NULL DEFAULT 0,
+            moneda TEXT NOT NULL DEFAULT 'ARS',
+            creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(cliente_id, periodo, instrumento)
         )
         """
     )
@@ -955,6 +1067,149 @@ def calcular_movimientos(cliente_id: int, periodo: str) -> list[dict]:
         g["movimientos"].append(fila)
 
     return list(grupos.values())
+
+
+# --- Resumen patrimonial (Etapa Resumen — Patrimonio) -----------------------
+
+def _calcular_impuesto(
+    tratamiento_fiscal: str, base_ars: float, alicuota_escala: float,
+) -> tuple[float, float, float]:
+    """(base imponible, alícuota, impuesto aproximado) según el tratamiento
+    fiscal de la operación. Cedular 15%/5% y Retención 7% tienen tasa fija
+    (impuesto exacto). "Gravado a escala" no tiene una tasa única posible —
+    depende de TODOS los ingresos anuales del cliente, no solo de
+    Inversiones — así que se usa una alícuota de referencia editable
+    (``alicuota_escala``, por defecto la escala máxima vigente) y el importe
+    resultante es una APROXIMACIÓN a revisar por el contador según el caso
+    real. Exento/N.A. no generan impuesto. El impuesto no se calcula sobre
+    resultados negativos (una pérdida no genera impuesto a pagar)."""
+    base = base_ars if base_ars > 0 else 0.0
+    if tratamiento_fiscal == "ced15":
+        return base, 0.15, base * 0.15
+    if tratamiento_fiscal == "ced5":
+        return base, 0.05, base * 0.05
+    if tratamiento_fiscal == "ret7":
+        return base, 0.07, base * 0.07
+    if tratamiento_fiscal in ("gravado", "ordinario"):
+        return base, alicuota_escala, base * alicuota_escala
+    return base, 0.0, 0.0
+
+
+def calcular_resumen_patrimonial(
+    cliente_id: int, periodo: str, alicuota_escala: float = ALICUOTA_ESCALA_DEFAULT,
+) -> dict:
+    """Resumen patrimonial de cierre para la solapa Patrimonio: composición de
+    la cartera a costo histórico (Ganancias) y a valor de cierre (Bienes
+    Personales, con la cotización de las planillas oficiales 2025 o la carga
+    manual), variación patrimonial del período descompuesta en rendimientos/
+    intereses/rentas vs. compra-venta vs. diferencia de cambio, y el
+    impuesto aproximado de cada operación/instrumento según su tratamiento
+    fiscal. Todos los totales salen de recorrer ``calcular_posicion`` /
+    ``calcular_movimientos`` — no hay ningún número acá que no derive de esos
+    dos cálculos, para que el Excel exportado pueda enlazarse con fórmulas a
+    los datos puros sin duplicar la lógica fiscal en otro lado."""
+    posicion = calcular_posicion(cliente_id, periodo)
+    movimientos_por_inst = calcular_movimientos(cliente_id, periodo)
+    tc_cierre = _obtener_tc_cierre(periodo)
+
+    tenencias = []
+    costo_hist_total = 0.0
+    valor_cierre_total = 0.0
+    for p in posicion:
+        if p["estado"] != "mantenida" or p["cantidad"] <= 1e-9:
+            continue
+        vc = obtener_valor_cierre(cliente_id, periodo, p["instrumento"])
+        cotiz = vc["cotizacion"]
+        valor_cierre_unit_ars = cotiz * tc_cierre if vc["moneda"] == "USD" else cotiz
+        valor_cierre_total_ars = p["cantidad"] * valor_cierre_unit_ars
+        costo_hist_total += p["costo_ars"]
+        if p["alcanza_bienes_personales"] == "gravado":
+            valor_cierre_total += valor_cierre_total_ars
+        tenencias.append({
+            "instrumento": p["instrumento"], "tipo": p["tipo"],
+            "tratamiento_fiscal": p["tratamiento_fiscal"],
+            "alcanza_bienes_personales": p["alcanza_bienes_personales"],
+            "cantidad": p["cantidad"],
+            "costo_historico_ars": p["costo_ars"],
+            "cotizacion_cierre": cotiz, "moneda_cotizacion": vc["moneda"],
+            "fuente_valor_cierre": vc["fuente"],
+            "valor_cierre_unitario_ars": valor_cierre_unit_ars,
+            "valor_cierre_total_ars": valor_cierre_total_ars,
+        })
+
+    rendimientos_ars = sum(p["div_ars"] + p["amorts_ars"] + p["rentas_ars"] for p in posicion)
+    compraventa_ars = 0.0
+    diferencia_cambio_ars = 0.0
+    detalle_impuesto = []
+    detalle_variacion = []
+
+    for g in movimientos_por_inst:
+        for m in g["movimientos"]:
+            if m["resultado_ars"] is None:
+                continue
+            rend = m["rendimiento_ars"] if m["rendimiento_ars"] is not None else m["resultado_ars"]
+            dif = m["diferencia_cambio_ars"] or 0.0
+            compraventa_ars += rend
+            diferencia_cambio_ars += dif
+            detalle_variacion.append({
+                "fecha": m["fecha"], "instrumento": g["instrumento"],
+                "movimiento": MOV_LABEL.get(m["movimiento"], m["movimiento"]),
+                "rendimiento_intereses_rentas_ars": 0.0,
+                "compraventa_ars": rend, "diferencia_cambio_ars": dif,
+            })
+            base, alic, impuesto = _calcular_impuesto(g["tratamiento_fiscal"], m["resultado_ars"], alicuota_escala)
+            detalle_impuesto.append({
+                "fecha": m["fecha"], "instrumento": g["instrumento"],
+                "movimiento": MOV_LABEL.get(m["movimiento"], m["movimiento"]),
+                "tratamiento_fiscal": g["tratamiento_fiscal"],
+                "base_ars": base, "alicuota": alic, "impuesto_ars": impuesto,
+            })
+
+    for p in posicion:
+        base_rend = p["div_ars"] + p["amorts_ars"] + p["rentas_ars"]
+        if base_rend <= 1e-9:
+            continue
+        detalle_variacion.append({
+            "fecha": f"{periodo} (total)", "instrumento": p["instrumento"],
+            "movimiento": "Dividendos/rentas/amort.",
+            "rendimiento_intereses_rentas_ars": base_rend,
+            "compraventa_ars": 0.0, "diferencia_cambio_ars": 0.0,
+        })
+        base, alic, impuesto = _calcular_impuesto(p["tratamiento_fiscal"], base_rend, alicuota_escala)
+        detalle_impuesto.append({
+            "fecha": f"{periodo} (total)", "instrumento": p["instrumento"],
+            "movimiento": "Dividendos/rentas/amort.",
+            "tratamiento_fiscal": p["tratamiento_fiscal"],
+            "base_ars": base, "alicuota": alic, "impuesto_ars": impuesto,
+        })
+
+    impuesto_exacto_total = sum(d["impuesto_ars"] for d in detalle_impuesto if d["tratamiento_fiscal"] != "gravado")
+    impuesto_aproximado_escala = sum(d["impuesto_ars"] for d in detalle_impuesto if d["tratamiento_fiscal"] == "gravado")
+
+    return {
+        "periodo": periodo, "alicuota_escala": alicuota_escala, "tc_cierre": tc_cierre,
+        "tenencias": tenencias,
+        "costo_historico_total_ars": costo_hist_total,
+        "valor_cierre_total_ars": valor_cierre_total,
+        "variacion_patrimonial": {
+            "rendimientos_ars": rendimientos_ars,
+            "compraventa_ars": compraventa_ars,
+            "diferencia_cambio_ars": diferencia_cambio_ars,
+            "total_ars": rendimientos_ars + compraventa_ars + diferencia_cambio_ars,
+        },
+        "detalle_impuesto": detalle_impuesto,
+        "detalle_variacion": detalle_variacion,
+        "impuesto_exacto_total_ars": impuesto_exacto_total,
+        "impuesto_aproximado_escala_ars": impuesto_aproximado_escala,
+    }
+
+
+def _obtener_tc_cierre(periodo: str) -> float:
+    """TC BNA vendedor al 31/12 del período (o el hábil disponible más
+    cercano) — se usa para convertir a pesos las cotizaciones de cierre que
+    vienen en dólares (Bienes Personales)."""
+    tc = obtener_tc(f"{periodo}-12-31", "venta")
+    return float(tc) if tc else 1.0
 
 
 def crear_tenencia_control(
