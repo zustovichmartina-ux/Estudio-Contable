@@ -17,7 +17,6 @@ import json
 import sqlite3
 from pathlib import Path
 from typing import Optional
-import database as db
 
 BASE_DIR = Path(__file__).resolve().parent
 TC_BNA_SEED_PATH = BASE_DIR / "data" / "tc_bna_seed.json"
@@ -168,8 +167,14 @@ def sugerir_fiscal(tipo: str, movimiento: str, moneda: str = "ARS") -> dict[str,
     en el exterior tienen reglas distintas a las del caso general acá cubierto.
     """
     cat = CATALOGO_FISCAL.get(tipo, CATALOGO_FISCAL["otro"])
-    es_rendimiento = movimiento in MOVIMIENTOS_RENDIMIENTO
-    tratamiento = cat["rendimiento"] if es_rendimiento else cat["compraventa"]
+    if movimiento == "amort":
+        # La amortización es devolución de capital, no un rendimiento ni una
+        # compra/venta: no tributa Ganancias sea cual sea el instrumento, así
+        # que no hereda el tratamiento de "compraventa" del catálogo.
+        tratamiento = "na"
+    else:
+        es_rendimiento = movimiento in MOVIMIENTOS_RENDIMIENTO
+        tratamiento = cat["rendimiento"] if es_rendimiento else cat["compraventa"]
     bp = cat["bienes_personales"]
     if tipo == "on" and moneda == "USD":
         bp = _CATALOGO_FISCAL_ON_USD_BP
@@ -234,6 +239,7 @@ def obtener_valor_cierre(cliente_id: int, periodo: str, instrumento: str) -> dic
     de las planillas oficiales 2025 por ticker; 3) sin dato (0, a completar
     a mano). Devuelve también ``fuente`` para que la UI/Excel puedan avisar
     de dónde salió el número."""
+    import database as db
 
     with db.obtener_conexion() as conn:
         fila = conn.execute(
@@ -259,6 +265,7 @@ def guardar_valor_cierre_manual(
     """Guarda (o corrige) a mano la cotización de cierre de un instrumento
     para Bienes Personales — para períodos sin planilla oficial cargada
     (2026 en adelante) o para pisar/completar un dato del catálogo 2025."""
+    import database as db
 
     with db.obtener_conexion() as conn:
         conn.execute(
@@ -392,6 +399,7 @@ def inicializar_tablas_inversiones(conn: sqlite3.Connection) -> None:
 
 def sembrar_tc_bna_default() -> None:
     """Carga el historial BNA 2023-2025 una sola vez (no-op si la tabla ya tiene datos)."""
+    import database as db
 
     if not TC_BNA_SEED_PATH.is_file():
         return
@@ -468,6 +476,7 @@ def obtener_tc(fecha: str, tipo: str = "venta") -> Optional[float]:
     ese caso. En ambos casos, si no hay dato hacia ese lado (fecha en un
     extremo de la serie cargada), se usa el lado disponible.
     """
+    import database as db
 
     with db.obtener_conexion() as conn:
         return _obtener_tc_con(conn, fecha, tipo)
@@ -480,6 +489,7 @@ def tc_para_movimiento(fecha: str, movimiento: str) -> Optional[float]:
 
 
 def listar_tc_bna(limite: int = 400) -> list[dict]:
+    import database as db
 
     with db.obtener_conexion() as conn:
         filas = conn.execute(
@@ -489,6 +499,7 @@ def listar_tc_bna(limite: int = 400) -> list[dict]:
 
 
 def agregar_tc_bna(fecha: str, compra: float, venta: float) -> None:
+    import database as db
 
     with db.obtener_conexion() as conn:
         conn.execute(
@@ -525,6 +536,7 @@ def crear_operacion(
     es_saldo_inicial: bool = False,
     alcanza_bienes_personales: str = "gravado",
 ) -> int:
+    import database as db
 
     with db.obtener_conexion() as conn:
         cur = conn.execute(
@@ -576,6 +588,7 @@ def actualizar_operacion(
     cambia sustancialmente el total en USD, puede quedar desalineada con lo
     ya asignado en Depuración — se ve reflejado ahí como "sin completar" y
     se puede volver a correr "Asignar PEPS automático" o reasignar a mano."""
+    import database as db
 
     with db.obtener_conexion() as conn:
         conn.execute(
@@ -603,6 +616,7 @@ def listar_operaciones(
     periodo: Optional[str] = None,
     solo_saldos_iniciales: Optional[bool] = None,
 ) -> list[dict]:
+    import database as db
 
     q = "SELECT * FROM inversiones_operaciones WHERE 1=1"
     args: list = []
@@ -631,6 +645,7 @@ def listar_operaciones(
 
 
 def eliminar_operacion(operacion_id: int) -> None:
+    import database as db
 
     with db.obtener_conexion() as conn:
         conn.execute("DELETE FROM inversiones_operaciones WHERE id = ?", (operacion_id,))
@@ -638,6 +653,7 @@ def eliminar_operacion(operacion_id: int) -> None:
 
 
 def obtener_operacion(operacion_id: int) -> Optional[dict]:
+    import database as db
 
     with db.obtener_conexion() as conn:
         fila = conn.execute(
@@ -659,6 +675,7 @@ def cambiar_tratamiento_fiscal_instrumento(
     """Aplica un tratamiento fiscal a TODAS las operaciones de ese instrumento
     (mismo cliente y período) — atajo para corregir de una vez casos
     particulares (ON/FCI sin oferta pública, ADRs, etc.)."""
+    import database as db
 
     with db.obtener_conexion() as conn:
         cur = conn.execute(
@@ -675,6 +692,7 @@ def cambiar_moneda_operacion(operacion_id: int, nueva_moneda: str) -> None:
     una compra que en realidad fue en USD, o viceversa). Recalcula total_ars/
     total_usd/costo_fiscal y, si pasa a ARS, devuelve al pool cualquier lote
     USD que tuviera asignado."""
+    import database as db
 
     with db.obtener_conexion() as conn:
         op = conn.execute(
@@ -714,6 +732,7 @@ def cambiar_moneda_operacion(operacion_id: int, nueva_moneda: str) -> None:
 # --- Pool USD (Etapa 2 — Depuración) ----------------------------------------
 
 def listar_pool_usd(cliente_id: int) -> list[dict]:
+    import database as db
 
     with db.obtener_conexion() as conn:
         filas = conn.execute(
@@ -727,6 +746,7 @@ def crear_lote_pool(
     cliente_id: int, fecha: str, cant_usd: float, tc_origen: float,
     origen: str = "otro", descripcion: str = "",
 ) -> int:
+    import database as db
 
     with db.obtener_conexion() as conn:
         cur = conn.execute(
@@ -742,6 +762,7 @@ def crear_lote_pool(
 
 
 def eliminar_lote_pool(lote_id: int) -> None:
+    import database as db
 
     with db.obtener_conexion() as conn:
         conn.execute("DELETE FROM inversiones_pool_usd WHERE id = ?", (lote_id,))
@@ -758,6 +779,7 @@ def _guardar_asignaciones(conn: sqlite3.Connection, operacion_id: int, asignacio
 def asignar_lote_a_operacion(operacion_id: int, lote_id: int, cant_usd: float) -> None:
     """Asigna (parte de) un lote del pool a una compra en USD, descontando su
     disponibilidad y sumando la asignación al costo fiscal de la operación."""
+    import database as db
 
     with db.obtener_conexion() as conn:
         op = conn.execute(
@@ -787,6 +809,7 @@ def asignar_lote_a_operacion(operacion_id: int, lote_id: int, cant_usd: float) -
 def quitar_asignacion(operacion_id: int, index: int) -> None:
     """Quita una asignación de la operación y devuelve el USD al lote de
     origen en el pool (si tenía uno — no si era el respaldo 'bna')."""
+    import database as db
 
     with db.obtener_conexion() as conn:
         op = conn.execute(
@@ -816,6 +839,7 @@ def asignar_peps_automatico(operacion_id: int) -> None:
     por el más antiguo. Si el pool no alcanza a cubrir el total, arma un lote
     de respaldo 'bna' al TC BNA vendedor de la fecha de la operación (mismo
     comportamiento que la herramienta original)."""
+    import database as db
 
     with db.obtener_conexion() as conn:
         op = conn.execute(
@@ -1219,6 +1243,7 @@ def crear_tenencia_control(
     """Registra la tenencia real de un instrumento según el extracto/comprobante
     de cierre (fin de ejercicio, o 31/12 para Persona Humana), para poder
     compararla contra la posición PEPS calculada y detectar diferencias."""
+    import database as db
 
     with db.obtener_conexion() as conn:
         cur = conn.execute(
@@ -1234,6 +1259,7 @@ def crear_tenencia_control(
 
 
 def listar_tenencias_control(cliente_id: int, periodo: str) -> list[dict]:
+    import database as db
 
     with db.obtener_conexion() as conn:
         filas = conn.execute(
@@ -1245,6 +1271,7 @@ def listar_tenencias_control(cliente_id: int, periodo: str) -> list[dict]:
 
 
 def eliminar_tenencia_control(control_id: int) -> None:
+    import database as db
 
     with db.obtener_conexion() as conn:
         conn.execute("DELETE FROM inversiones_tenencias_control WHERE id = ?", (control_id,))
