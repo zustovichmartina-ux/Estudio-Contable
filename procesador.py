@@ -6628,6 +6628,226 @@ def _filas_a_df_extracto(filas: list[dict]) -> pd.DataFrame:
     return df.sort_values(["_sort", "Pagina PDF"], kind="stable").drop(columns=["_sort"]).reset_index(drop=True)
 
 
+def _contar_texto_nativo_pdf(data: bytes) -> int:
+    """Cantidad de caracteres de texto embebido (0 = PDF escaneado)."""
+    doc = fitz.open(stream=data, filetype="pdf")
+    try:
+        return sum(len((doc[i].get_text("text") or "").strip()) for i in range(doc.page_count))
+    finally:
+        doc.close()
+
+
+def _monto_celda_extracto(valor) -> float | None:
+    if valor is None or (isinstance(valor, float) and pd.isna(valor)):
+        return None
+    if isinstance(valor, (int, float)):
+        return round(float(valor), 2)
+    txt = str(valor).strip()
+    if not txt or txt.lower() in {"nan", "none", "-"}:
+        return None
+    val = _limpiar_monto(txt)
+    return round(val, 2)
+
+
+def _procesar_un_excel_extracto(nombre: str, data: bytes) -> tuple[list[dict], dict, dict | None]:
+    """Excel/CSV de homebanking (BNA Últimos movimientos y similares)."""
+    banco_slug = detectar_banco_desde_bytes(b"", nombre)
+    display = _nombre_display_banco(banco_slug)
+    meta_base = {
+        "banco_slug": banco_slug or "desconocido",
+        "banco": display,
+        "formato_id": "excel_homebanking",
+        "formato": "Excel homebanking · Fecha/Concepto/Monto/Saldo",
+        "parser": "excel_homebanking",
+        "archivos": [nombre],
+        "periodos": [],
+        "cliente": "",
+        "cuit": "",
+        "cuenta": "",
+        "cbu": "",
+    }
+    low = nombre.lower()
+    try:
+        buf = io.BytesIO(data)
+        if low.endswith(".csv"):
+            crudo = pd.read_csv(buf, header=None, dtype=str, sep=None, engine="python")
+        else:
+            engine = "xlrd" if low.endswith(".xls") else "openpyxl"
+            try:
+                crudo = pd.read_excel(buf, header=None, engine=engine)
+            except Exception:
+                buf.seek(0)
+                crudo = pd.read_excel(buf, header=None)
+    except Exception as exc:
+        return [], meta_base, {
+            "archivo": nombre,
+            "motivo": f"No pude leer el Excel ({exc}). Si es .xls viejo, abrilo y guardalo como .xlsx.",
+            "banco": display,
+            "formato": meta_base["formato"],
+        }
+
+    header_idx = None
+    colmap: dict[str, int] = {}
+    alias = {
+        "fecha": "fecha",
+        "comprobante": "comprobante",
+        "comprob.": "comprobante",
+        "concepto": "descripcion",
+        "descripcion": "descripcion",
+        "descripción": "descripcion",
+        "detalle": "detalle",
+        "monto": "monto",
+        "importe": "monto",
+        "saldo": "saldo",
+        "debito": "debito",
+        "débito": "debito",
+        "credito": "credito",
+        "crédito": "credito",
+    }
+    for i, row in crudo.iterrows():
+        vals = [_normalizar_texto(str(v or "")) for v in row.tolist()]
+        cmap: dict[str, int] = {}
+        for j, v in enumerate(vals):
+            clave = alias.get(v)
+            if clave and clave not in cmap:
+                cmap[clave] = j
+        if "fecha" in cmap and ("monto" in cmap or "debito" in cmap or "credito" in cmap):
+            header_idx = int(i)
+            colmap = cmap
+            break
+    if header_idx is None:
+        return [], meta_base, {
+            "archivo": nombre,
+            "motivo": (
+                "No encontré columnas Fecha + Monto/Importe (o Débito/Crédito). "
+                "El Excel de BNA es el de Últimos movimientos: Fecha, Comprobante, Concepto, Monto, Saldo."
+            ),
+            "banco": display,
+            "formato": meta_base["formato"],
+        }
+
+    trabajo = crudo.iloc[header_idx + 1 :].copy()
+    filas_brutas: list[dict] = []
+    for _, row in trabajo.iterrows():
+        fecha_raw = row.iloc[colmap["fecha"]] if colmap["fecha"] < len(row) else None
+        if fecha_raw is None or (isinstance(fecha_raw, float) and pd.isna(fecha_raw)):
+            continue
+        if hasattr(fecha_raw, "date"):
+            fecha = fecha_raw.date() if not isinstance(fecha_raw, date) else fecha_raw
+            if isinstance(fecha, datetime):
+                fecha = fecha.date()
+        else:
+            fecha = _parsear_fecha(str(fecha_raw).strip().split(" ")[0])
+        if fecha is None or not _fecha_plausible_extracto(fecha):
+            continue
+        desc = ""
+        if "descripcion" in colmap:
+            desc = str(row.iloc[colmap["descripcion"]] or "").strip()
+        if desc.lower() in {"nan", "none"}:
+            desc = ""
+        det = ""
+        if "detalle" in colmap:
+            det = str(row.iloc[colmap["detalle"]] or "").strip()
+            if det.lower() in {"nan", "none"}:
+                det = ""
+        comprob = ""
+        if "comprobante" in colmap:
+            comprob = str(row.iloc[colmap["comprobante"]] or "").strip()
+            if comprob.lower() in {"nan", "none", "nan"}:
+                comprob = ""
+            if comprob.endswith(".0") and comprob.replace(".", "", 1).isdigit():
+                comprob = comprob[:-2]
+        monto = None
+        if "monto" in colmap:
+            monto = _monto_celda_extracto(row.iloc[colmap["monto"]])
+        elif "debito" in colmap or "credito" in colmap:
+            deb = _monto_celda_extracto(row.iloc[colmap["debito"]]) if "debito" in colmap else 0.0
+            cred = _monto_celda_extracto(row.iloc[colmap["credito"]]) if "credito" in colmap else 0.0
+            deb = float(deb or 0)
+            cred = float(cred or 0)
+            if cred > 0 and deb <= 0:
+                monto = round(cred, 2)
+            elif deb > 0:
+                monto = -round(deb, 2)
+        if monto is None:
+            continue
+        saldo = None
+        if "saldo" in colmap:
+            saldo = _monto_celda_extracto(row.iloc[colmap["saldo"]])
+        filas_brutas.append({
+            "fecha": fecha,
+            "descripcion": desc or "Sin descripción",
+            "detalle": det,
+            "comprobante": comprob,
+            "monto": round(float(monto), 2),
+            "saldo": saldo,
+        })
+    if not filas_brutas:
+        return [], meta_base, {
+            "archivo": nombre,
+            "motivo": "El Excel no tenía movimientos con fecha e importe.",
+            "banco": display,
+            "formato": meta_base["formato"],
+        }
+
+    if len(filas_brutas) >= 2 and filas_brutas[0]["fecha"] > filas_brutas[-1]["fecha"]:
+        filas_brutas.reverse()
+
+    saldo_es_antes = False
+    if (
+        len(filas_brutas) >= 2
+        and filas_brutas[0]["saldo"] is not None
+        and filas_brutas[1]["saldo"] is not None
+    ):
+        pred = round(filas_brutas[0]["saldo"] + filas_brutas[0]["monto"], 2)
+        if abs(pred - float(filas_brutas[1]["saldo"])) <= 0.05:
+            saldo_es_antes = True
+
+    display = _nombre_display_banco(banco_slug)
+    out: list[dict] = []
+    saldo_running = None
+    if saldo_es_antes and filas_brutas[0]["saldo"] is not None:
+        saldo_running = float(filas_brutas[0]["saldo"])
+    for f in filas_brutas:
+        if saldo_es_antes:
+            saldo_after = round((saldo_running if saldo_running is not None else 0.0) + f["monto"], 2)
+            saldo_running = saldo_after
+        elif f["saldo"] is not None:
+            saldo_after = float(f["saldo"])
+        else:
+            saldo_after = None
+        mov = MovimientoBanco(
+            fecha=f["fecha"],
+            descripcion=f["descripcion"],
+            comprobante=f["comprobante"],
+            debito=abs(f["monto"]) if f["monto"] < 0 else 0.0,
+            credito=f["monto"] if f["monto"] > 0 else 0.0,
+            saldo=saldo_after,
+            pagina=0,
+            banco=banco_slug or "desconocido",
+            archivo_origen=nombre,
+        )
+        fila = _movimiento_banco_a_fila_extracto(mov)
+        if f["detalle"]:
+            fila["Detalle"] = f["detalle"]
+        out.append(fila)
+
+    if not banco_slug or banco_slug == "desconocido":
+        texto = " ".join(f["descripcion"] for f in filas_brutas[:8])
+        banco_slug = detectar_banco_desde_bytes(b"", nombre) or detectar_banco_desde_bytes(
+            texto.encode("utf-8", errors="ignore"), nombre
+        )
+        display = _nombre_display_banco(banco_slug)
+        meta_base["banco_slug"] = banco_slug
+        meta_base["banco"] = display
+        for row in out:
+            row["Banco"] = display
+    else:
+        for row in out:
+            row["Banco"] = display
+    return out, meta_base, None
+
+
 def _procesar_un_pdf_extracto(nombre: str, data: bytes) -> tuple[list[dict], dict, dict | None]:
     """
     Procesa un PDF. Devuelve (filas, meta_archivo, error_dict|None).
@@ -6649,6 +6869,22 @@ def _procesar_un_pdf_extracto(nombre: str, data: bytes) -> tuple[list[dict], dic
         "cbu": "",
     }
     cache_galicia: list[dict] | None = None
+
+    try:
+        chars_nativos = _contar_texto_nativo_pdf(data)
+    except Exception:
+        chars_nativos = 0
+    if chars_nativos < 40 and (_es_entorno_cloud_ocr() or banco_slug == "nacion"):
+        return [], meta_base, {
+            "archivo": nombre,
+            "motivo": (
+                f"Este PDF está escaneado ({display}). En la web el OCR se cuelga "
+                "con el resumen de cuenta del BNA. Subí el Excel de Últimos movimientos "
+                "del homebanking (.xls / .xlsx, el de la misma carpeta Bancos)."
+            ),
+            "banco": display,
+            "formato": "escaneado",
+        }
 
     def _parsear(paginas: list[tuple[int, str]], estrategia: str) -> tuple[list[dict], dict]:
         movs_loc: list[dict] = []
@@ -6801,7 +7037,12 @@ def _procesar_un_pdf_extracto(nombre: str, data: bytes) -> tuple[list[dict], dic
         if chars < 40 and estrategia not in {"galicia", "provincia"}:
             return [], meta_base, {
                 "archivo": nombre,
-                "motivo": f"No se pudo leer texto del PDF ({display}).",
+                "motivo": (
+                    f"Este PDF está escaneado y no se pudo leer ({display}). "
+                    "En la web de la nube el OCR se cuelga con este tipo de resumen. "
+                    "Subí el Excel de Últimos movimientos del homebanking (.xls / .xlsx) "
+                    "que suele estar en la misma carpeta Bancos."
+                ),
                 "banco": display,
                 "formato": meta_base.get("formato") or "",
             }
@@ -6890,13 +7131,23 @@ def procesar_extractos_bancarios_pdfs(archivos) -> tuple[pd.DataFrame, dict, lis
 
     for uploaded in archivos or []:
         nombre, data = _leer_bytes_upload(uploaded)
-        if not nombre.lower().endswith(".pdf"):
-            errores.append({"archivo": nombre, "motivo": "Solo se admiten PDF."})
-            continue
-        bytes_por_nombre[nombre] = data
-        filas, meta_arch, err = _procesar_un_pdf_extracto(nombre, data)
-        if err:
-            errores.append(err)
+        low = nombre.lower()
+        if low.endswith((".xls", ".xlsx", ".csv")):
+            filas, meta_arch, err = _procesar_un_excel_extracto(nombre, data)
+            if err:
+                errores.append(err)
+                continue
+        elif low.endswith(".pdf"):
+            bytes_por_nombre[nombre] = data
+            filas, meta_arch, err = _procesar_un_pdf_extracto(nombre, data)
+            if err:
+                errores.append(err)
+                continue
+        else:
+            errores.append({
+                "archivo": nombre,
+                "motivo": "Solo se admiten PDF o Excel/CSV de extracto (homebanking).",
+            })
             continue
         slug = meta_arch["banco_slug"]
         g = grupos.get(slug)
@@ -7342,6 +7593,19 @@ def clasificar_movimiento_extracto(
         return "Transferencias recibidas"
     if "transferencia" in low or "trf " in low or "transf " in low:
         return "Transferencias emitidas" if imp < 0 else "Transferencias recibidas"
+    # Banco Nación (resumen de cuenta / homebanking)
+    if "ibtc" in low or "gravamen ib percep" in low or "ib percep" in low:
+        return "IIBB"
+    if "48hs" in low or "deb.tran.interb" in low or "deb tran interb" in low:
+        return "Transferencias emitidas" if imp < 0 else "Transferencias recibidas"
+    if "c be tr" in low or "o/bco" in low:
+        return "Transferencias recibidas" if imp >= 0 else "Transferencias emitidas"
+    if "com ech" in low or ("comis" in low and "compensacion" in low):
+        return "Gastos Bancarios"
+    if "i.v.a" in low or "iva base" in low or "rg.2408" in low:
+        return "IVA"
+    if "interes" in low:
+        return "Intereses"
     return "Sin clasificar"
 
 

@@ -11455,29 +11455,31 @@ def _herramienta_pdf_extractos_a_excel() -> None:
             }
         )
     )
-    st.markdown("#### PDF extractos → Excel")
+    st.markdown("#### PDF / Excel extractos → Excel")
     st.caption(
-        "Subí uno o varios extractos PDF (digital o escaneado). "
+        "Subí extractos **PDF** (digital) o el **Excel/CSV del homebanking**. "
         "Se detecta el banco automáticamente y **todos** salen con el **mismo formato universal**: "
         "`Fecha | Descripcion | Detalle | Importe | Saldo | Clasificacion | Nueva_Clasificacion | Tipo Movimiento` "
         "+ hoja `Resumen_Clasificacion`. "
         "Importe con signo: **(−) resta** · **(+) suma**. Un Excel por banco. "
+        "Si el PDF del BNA es el resumen de cuenta **escaneado**, no lo uses acá: "
+        "subí el `.xls` de Últimos movimientos (en Aurora está en la misma carpeta Bancos). "
         f"Soportados: {bancos_txt}."
     )
     pdfs_ext = st.file_uploader(
-        "Extractos bancarios (PDF)",
-        type=["pdf"],
+        "Extractos (PDF o Excel del homebanking)",
+        type=["pdf", "xlsx", "xls", "csv"],
         accept_multiple_files=True,
         key="uploader_herramientas_extractos_bancarios",
-        help="Podés mezclar bancos: cada uno sale en su propio Excel. Varios meses del mismo banco sí se unifican.",
+        help="PDF digital, o Excel de Últimos movimientos (BNA). Podés mezclar bancos.",
     )
     if st.button("Convertir a Excel", type="primary", key="btn_herramientas_extracto_excel"):
         if not pdfs_ext:
             st.warning("Subí al menos un PDF para convertir.")
         else:
             with st.spinner(
-                "Detectando banco(s) y leyendo PDFs… Si está escaneado, OCR página por página "
-                "(puede tardar). No cierres la ventana."
+                "Detectando banco(s) y leyendo archivos… "
+                "PDF escaneado del BNA: usá el Excel del homebanking. No cierres la ventana."
             ):
                 df_ext, meta_ext, err_ext = procesar_extractos_bancarios_pdfs(pdfs_ext)
                 st.session_state.extracto_santander_df = df_ext
@@ -11521,13 +11523,19 @@ def _herramienta_pdf_extractos_a_excel() -> None:
 
     err_ext = st.session_state.get("extracto_santander_errores") or []
     if err_ext:
-        with st.expander(f"Advertencias ({len(err_ext)})", expanded=True):
+        st.error(
+            "No pude armar el Excel con ese archivo. Leé el motivo abajo: "
+            "si el PDF está escaneado (BNA resumen de cuenta), subí el Excel de Últimos movimientos."
+        )
+        with st.expander(f"Detalle ({len(err_ext)})", expanded=True):
             st.dataframe(pd.DataFrame(err_ext), use_container_width=True, hide_index=True)
 
     paquetes = st.session_state.get("extracto_paquetes") or []
     df_ext = st.session_state.get("extracto_santander_df")
     meta_ext = st.session_state.get("extracto_santander_meta") or {}
     if not paquetes or df_ext is None or df_ext.empty:
+        if not err_ext and st.session_state.get("extracto_santander_df") is not None:
+            st.warning("No salieron movimientos. Probá el Excel del homebanking, no el PDF escaneado.")
         return
 
     n_mov = int((df_ext["Tipo fila"] == "Movimiento").sum()) if "Tipo fila" in df_ext.columns else len(df_ext)
@@ -11535,7 +11543,7 @@ def _herramienta_pdf_extractos_a_excel() -> None:
     bancos_txt_ok = " · ".join(p["banco"] for p in paquetes)
     st.success(
         f"Listo: **{n_mov}** movimientos · **{n_bancos}** banco(s) · "
-        f"**{len(meta_ext.get('archivos') or [])}** PDF(s)"
+        f"**{len(meta_ext.get('archivos') or [])}** archivo(s)"
         + (f" · {bancos_txt_ok}" if bancos_txt_ok else "")
     )
     if n_bancos > 1:
@@ -11567,7 +11575,7 @@ def _herramienta_pdf_extractos_a_excel() -> None:
         n_meses_b = int(df_b["Mes"].nunique()) if "Mes" in df_b.columns else 0
         banco = p.get("banco") or "Banco"
         with st.expander(
-            f"{banco}: {n_mov_b} mov. · {n_meses_b} mes(es) · {len(meta_b.get('archivos') or [])} PDF(s)",
+            f"{banco}: {n_mov_b} mov. · {n_meses_b} mes(es) · {len(meta_b.get('archivos') or [])} archivo(s)",
             expanded=(n_bancos == 1),
         ):
             if meta_b.get("cliente") or meta_b.get("cuit") or meta_b.get("formato"):
