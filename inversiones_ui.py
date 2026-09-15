@@ -120,6 +120,47 @@ def _detectar_tipo(instrumento: str) -> str:
 
 
 # ────────────────────────────────────────────────────────────────────────
+# Helpers de formato (PESOS / USD / CANTIDAD) para las tablas de Inversiones
+# ────────────────────────────────────────────────────────────────────────
+
+def _fmt_monto(v, prefijo: str = "", decimales: int = 2) -> str:
+    """Formatea un número con separador de miles '.' y decimal ',' (convención
+    argentina), con un prefijo opcional ('$' para pesos, 'USD' para dólares).
+    Sin prefijo queda como formato de CANTIDAD simple. El signo (para
+    resultados negativos) va siempre adelante de todo, ej. "-$ 1.234,50"."""
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        v = 0.0
+    signo = "-" if v < 0 else ""
+    v = abs(v)
+    txt = f"{v:,.{decimales}f}" if decimales else f"{v:,.0f}"
+    entero, _, dec = txt.partition(".")
+    entero = entero.replace(",", ".")
+    numero = f"{entero},{dec}" if decimales else entero
+    cuerpo = f"{prefijo} {numero}".strip() if prefijo else numero
+    return f"{signo}{cuerpo}"
+
+
+def _fmt_pesos(v, decimales: int = 2) -> str:
+    return _fmt_monto(v, "$", decimales)
+
+
+def _fmt_usd(v, decimales: int = 2) -> str:
+    return _fmt_monto(v, "USD", decimales)
+
+
+def _fmt_cantidad(v, decimales: int = 2) -> str:
+    return _fmt_monto(v, "", decimales)
+
+
+def _fmt_moneda(v, moneda: str, decimales: int = 2) -> str:
+    """Formatea según la moneda de la operación (para columnas como Comisión
+    que pueden estar en ARS o USD según cada fila)."""
+    return _fmt_usd(v, decimales) if moneda == "USD" else _fmt_pesos(v, decimales)
+
+
+# ────────────────────────────────────────────────────────────────────────
 # Sección principal
 # ────────────────────────────────────────────────────────────────────────
 
@@ -145,8 +186,8 @@ def seccion_inversiones_arg() -> None:
     """Renderiza la pestaña Inversiones."""
     _asegurar_tablas_inversiones()
     st.subheader("📈 Inversiones")
-    tab_carga, tab_usd, tab_dep, tab_pat, tab_mov = st.tabs(
-        ["Carga de datos", "Tenencia USD", "Depuración", "Patrimonio", "Movimientos"]
+    tab_carga, tab_usd, tab_dep, tab_mov, tab_pat = st.tabs(
+        ["Carga de datos", "Tenencia USD", "Depuración", "Movimientos", "Patrimonio"]
     )
 
     with tab_carga:
@@ -158,11 +199,11 @@ def seccion_inversiones_arg() -> None:
     with tab_dep:
         _tab_depuracion()
 
-    with tab_pat:
-        _tab_patrimonio()
-
     with tab_mov:
         _tab_movimientos()
+
+    with tab_pat:
+        _tab_patrimonio()
 
 
 def _tab_carga_datos() -> None:
@@ -602,20 +643,152 @@ def _tabla_operaciones(cliente: dict, periodo: str) -> None:
         "Bienes Personales": idb.ALCANZA_BP_LABEL.get(
             o.get("alcanza_bienes_personales", "gravado"), o.get("alcanza_bienes_personales", "")
         ),
-        "VN": o["vn"],
-        "Total ARS": round(o["total_ars"], 2),
-        "Total USD": round(o["total_usd"], 2),
-        "Div. ARS": round(o["div_ars"], 2),
-        "Comisión": round(o["comision"], 2),
+        "VN": _fmt_cantidad(o["vn"]),
+        "Total ARS": _fmt_pesos(o["total_ars"]),
+        "Total USD": _fmt_usd(o["total_usd"]),
+        "Div. ARS": _fmt_pesos(o["div_ars"]),
+        "Comisión": _fmt_moneda(o["comision"], o["moneda"]),
         "Moneda": o["moneda"],
     } for o in ops]
     st.dataframe(pd.DataFrame(filas), use_container_width=True, hide_index=True)
+
+    _editar_operacion(ops)
 
     with st.expander("Eliminar una operación"):
         id_borrar = st.number_input("ID a eliminar", min_value=0, step=1, key="inv_op_id_borrar")
         if st.button("Eliminar", key="inv_op_btn_borrar") and id_borrar:
             idb.eliminar_operacion(int(id_borrar))
             st.success("Operación eliminada.")
+            st.rerun()
+
+
+def _editar_operacion(ops: list[dict]) -> None:
+    with st.expander("Editar una operación"):
+        opciones_op = {f"#{o['id']} — {o['fecha']} — {o['instrumento']}": o for o in ops}
+        clave_sel = st.selectbox(
+            "Operación a editar", list(opciones_op.keys()), key="inv_editar_op_sel",
+        )
+        op = opciones_op[clave_sel]
+        op_id = op["id"]
+
+        st.caption(
+            "Modificá los datos y guardá — se recalculan los totales en ARS/USD "
+            "igual que al cargar una operación nueva. Si cambiás mucho el total "
+            "en USD de una compra ya asignada en Depuración, puede que haga "
+            "falta reasignar los lotes del pool ahí."
+        )
+
+        c1, c2 = st.columns([1, 2])
+        fecha = c1.date_input(
+            "Fecha", value=_dt.date.fromisoformat(op["fecha"][:10]), key=f"inv_edit_fecha_{op_id}",
+        )
+        instrumento = c2.text_input(
+            "Instrumento", value=op["instrumento"], key=f"inv_edit_instr_{op_id}",
+        )
+
+        c3, c4, c5 = st.columns(3)
+        tipo = c3.selectbox(
+            "Tipo", idb.TIPOS_INSTRUMENTO,
+            index=(idb.TIPOS_INSTRUMENTO.index(op["tipo"]) if op["tipo"] in idb.TIPOS_INSTRUMENTO else 0),
+            format_func=lambda t: idb.TIPO_LABEL.get(t, t), key=f"inv_edit_tipo_{op_id}",
+        )
+        movimiento = c4.selectbox(
+            "Movimiento", idb.MOVIMIENTOS,
+            index=(idb.MOVIMIENTOS.index(op["movimiento"]) if op["movimiento"] in idb.MOVIMIENTOS else 0),
+            format_func=lambda m: idb.MOV_LABEL.get(m, m), key=f"inv_edit_mov_{op_id}",
+        )
+        moneda = c5.radio(
+            "Moneda", ["ARS", "USD"], horizontal=True,
+            index=(0 if op["moneda"] == "ARS" else 1), key=f"inv_edit_moneda_{op_id}",
+        )
+        es_usd = moneda == "USD"
+
+        c6, c7, c8 = st.columns(3)
+        vn = c6.number_input(
+            "VN / Cantidad", min_value=0.0, step=1.0, value=float(op["vn"] or 0),
+            key=f"inv_edit_vn_{op_id}",
+        )
+        precio_actual = op["precio_usd"] if op["moneda"] == "USD" else op["precio_ars"]
+        precio = c7.number_input(
+            "Precio (en la moneda elegida)", min_value=0.0, step=0.01,
+            value=float(precio_actual or 0), key=f"inv_edit_precio_{op_id}",
+        )
+        if es_usd and movimiento in idb.MOVIMIENTOS_COSTO_BASE:
+            tc_origen = c8.number_input(
+                "TC origen", min_value=0.0, step=0.01, value=float(op["tc_origen"] or 0),
+                key=f"inv_edit_tcorigen_{op_id}",
+            )
+        elif es_usd:
+            tc_dia = idb.tc_para_movimiento(fecha.isoformat(), movimiento)
+            c8.number_input(
+                f"TC del día ({idb.MOV_LABEL.get(movimiento, movimiento)})",
+                value=float(tc_dia if tc_dia is not None else (op["tc"] or 0)), step=0.01, disabled=True,
+                key=f"inv_edit_tcdia_{op_id}_{movimiento}_{fecha.isoformat()}",
+            )
+            tc_origen = 0.0
+        else:
+            tc_origen = 0.0
+            c8.caption("TC origen: no aplica en operaciones en pesos.")
+
+        c9, c10, c11 = st.columns(3)
+        fis = c9.selectbox(
+            "Tratamiento fiscal (Ganancias)", idb.TRATAMIENTOS_FISCALES,
+            index=(idb.TRATAMIENTOS_FISCALES.index(op["tratamiento_fiscal"])
+                   if op["tratamiento_fiscal"] in idb.TRATAMIENTOS_FISCALES else 0),
+            format_func=lambda f: idb.FIS_LABEL.get(f, f), key=f"inv_edit_fis_{op_id}",
+        )
+        bp_actual = op.get("alcanza_bienes_personales", "gravado")
+        bp = c10.selectbox(
+            "Bienes Personales", idb.ALCANZA_BP,
+            index=(idb.ALCANZA_BP.index(bp_actual) if bp_actual in idb.ALCANZA_BP else 0),
+            format_func=lambda b: idb.ALCANZA_BP_LABEL.get(b, b), key=f"inv_edit_bp_{op_id}",
+        )
+        comision = c11.number_input(
+            "Comisión", min_value=0.0, step=0.01, value=float(op["comision"] or 0),
+            key=f"inv_edit_comision_{op_id}",
+        )
+
+        notas = st.text_input("Notas", value=op["notas"] or "", key=f"inv_edit_notas_{op_id}")
+
+        if st.button("Guardar cambios", key=f"inv_edit_guardar_{op_id}"):
+            if not instrumento.strip():
+                st.error("Ingresá el instrumento.")
+                return
+
+            fecha_str = fecha.isoformat()
+            tc = idb.tc_para_movimiento(fecha_str, movimiento) or 0
+
+            if es_usd:
+                precio_usd, precio_ars = precio, precio * tc
+                total_usd = vn * precio if vn > 0 else precio
+                total_ars = total_usd * tc
+            else:
+                precio_ars, precio_usd = precio, (precio / tc if tc else 0)
+                total_ars = vn * precio if vn > 0 else precio
+                total_usd = total_ars / tc if tc else 0
+
+            div_usd = div_ars = 0.0
+            if movimiento in ("dividendo", "renta"):
+                if es_usd:
+                    div_usd, div_ars = total_usd, total_ars
+                else:
+                    div_ars = total_ars
+                total_ars = total_usd = 0.0
+            elif movimiento in ("amort", "caucion"):
+                div_ars = total_ars
+                total_ars = total_usd = 0.0
+
+            costo_fiscal = (total_usd * tc_origen) if (tc_origen > 0 and es_usd) else total_ars
+
+            idb.actualizar_operacion(
+                operacion_id=op_id, fecha=fecha_str, instrumento=instrumento, tipo=tipo,
+                movimiento=movimiento, tratamiento_fiscal=fis, vn=vn, precio_ars=precio_ars,
+                precio_usd=precio_usd, tc=tc, tc_origen=tc_origen, total_ars=total_ars,
+                total_usd=total_usd, div_usd=div_usd, div_ars=div_ars, comision=comision,
+                moneda=moneda, notas=notas, costo_fiscal=costo_fiscal,
+                alcanza_bienes_personales=bp,
+            )
+            st.success("Operación actualizada ✓")
             st.rerun()
 
 
@@ -644,9 +817,9 @@ def _tab_tenencia_usd() -> None:
     total_usado = total_cargado - total_disponible
 
     m1, m2, m3 = st.columns(3)
-    m1.metric("USD cargados (histórico)", f"USD {total_cargado:,.2f}".replace(",", "."))
-    m2.metric("USD ya utilizados", f"USD {total_usado:,.2f}".replace(",", "."))
-    m3.metric("USD disponibles (tenencia actual)", f"USD {total_disponible:,.2f}".replace(",", "."))
+    m1.metric("USD cargados (histórico)", _fmt_usd(total_cargado))
+    m2.metric("USD ya utilizados", _fmt_usd(total_usado))
+    m3.metric("USD disponibles (tenencia actual)", _fmt_usd(total_disponible))
     st.divider()
 
     _pool_usd(cliente)
@@ -718,10 +891,10 @@ def _pool_usd(cliente: dict) -> None:
     filas = [{
         "ID": l["id"], "Fecha": l["fecha"],
         "Origen": idb.ORIGEN_POOL_LABEL.get(l["origen"], l["origen"]),
-        "Cant. USD": round(l["cant_usd"], 4),
-        "TC origen": round(l["tc_origen"], 2),
-        "Costo ARS": round(l["cant_usd"] * l["tc_origen"], 0),
-        "Disponible USD": round(l["disponible_usd"], 4),
+        "Cant. USD": _fmt_usd(l["cant_usd"], 4),
+        "TC origen": _fmt_cantidad(l["tc_origen"]),
+        "Costo ARS": _fmt_pesos(l["cant_usd"] * l["tc_origen"], 0),
+        "Disponible USD": _fmt_usd(l["disponible_usd"], 4),
         "Descripción": l["descripcion"],
     } for l in lotes]
     st.dataframe(pd.DataFrame(filas), use_container_width=True, hide_index=True)
@@ -778,11 +951,11 @@ def _depuracion_por_instrumento(cliente: dict, periodo: str) -> None:
             filas = [{
                 "ID": o["id"], "Fecha": o["fecha"],
                 "Movimiento": idb.MOV_LABEL.get(o["movimiento"], o["movimiento"]),
-                "VN": o["vn"], "Moneda": o["moneda"],
-                "Total ARS": round(o["total_ars"], 2), "Total USD": round(o["total_usd"], 4),
-                "TC BNA": round(o["tc"], 2),
-                "USD asignado": round(sum(a["cant_usd"] for a in o["asignaciones_usd"]), 4),
-                "Costo fiscal $": round(o["costo_fiscal"], 2),
+                "VN": _fmt_cantidad(o["vn"]), "Moneda": o["moneda"],
+                "Total ARS": _fmt_pesos(o["total_ars"]), "Total USD": _fmt_usd(o["total_usd"], 4),
+                "TC BNA": _fmt_cantidad(o["tc"]),
+                "USD asignado": _fmt_usd(sum(a["cant_usd"] for a in o["asignaciones_usd"]), 4),
+                "Costo fiscal $": _fmt_pesos(o["costo_fiscal"]),
             } for o in ops_inst]
             st.dataframe(pd.DataFrame(filas), use_container_width=True, hide_index=True)
 
@@ -915,10 +1088,10 @@ def _metricas_patrimonio(posicion: list[dict]) -> None:
     activos = len(mantenidas)
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Costo histórico invertido", f"$ {costo_hist:,.0f}".replace(",", "."))
-    c2.metric("Dividendos/rentas cobrados", f"$ {div_cobrados:,.0f}".replace(",", "."))
-    c3.metric("Amort. + rentas fija/caución", f"$ {rentas_amorts:,.0f}".replace(",", "."))
-    c4.metric("Activos en cartera", activos)
+    c1.metric("Costo histórico invertido", _fmt_pesos(costo_hist, 0))
+    c2.metric("Dividendos/rentas cobrados", _fmt_pesos(div_cobrados, 0))
+    c3.metric("Amort. + rentas fija/caución", _fmt_pesos(rentas_amorts, 0))
+    c4.metric("Activos en cartera", _fmt_cantidad(activos, 0))
 
 
 def _grafico_composicion(posicion: list[dict]) -> None:
@@ -952,13 +1125,13 @@ def _tabla_posicion(posicion: list[dict]) -> None:
         "Tipo": idb.TIPO_LABEL.get(p["tipo"], p["tipo"]),
         "Trat. fiscal": idb.FIS_LABEL.get(p["tratamiento_fiscal"], p["tratamiento_fiscal"]),
         "Bienes Personales": idb.ALCANZA_BP_LABEL.get(p["alcanza_bienes_personales"], p["alcanza_bienes_personales"]),
-        "Cant. / VN": round(p["cantidad"], 4),
-        "Val. hist. unit. $": round(p["precio_unit_ars"], 2),
-        "Costo total $ (PEPS)": round(p["costo_ars"], 2),
-        "Costo total USD": round(p["costo_usd"], 2),
-        "Costo $ fiscal (TC origen)": round(p["costo_fiscal"], 2),
-        "Div./Renta cobrados $": round(p["div_ars"], 2),
-        "Amort. $": round(p["amorts_ars"], 2),
+        "Cant. / VN": _fmt_cantidad(p["cantidad"], 4),
+        "Val. hist. unit. $": _fmt_pesos(p["precio_unit_ars"]),
+        "Costo total $ (PEPS)": _fmt_pesos(p["costo_ars"]),
+        "Costo total USD": _fmt_usd(p["costo_usd"]),
+        "Costo $ fiscal (TC origen)": _fmt_pesos(p["costo_fiscal"]),
+        "Div./Renta cobrados $": _fmt_pesos(p["div_ars"]),
+        "Amort. $": _fmt_pesos(p["amorts_ars"]),
         "Estado": "Mantenida" if p["estado"] == "mantenida" else "Cerrada",
     } for p in posicion]
     st.dataframe(pd.DataFrame(filas), use_container_width=True, hide_index=True)
@@ -1002,9 +1175,9 @@ def _control_cierre(cliente: dict, periodo: str, posicion: list[dict]) -> None:
         diff = c["vn_control"] - cant_calc
         filas.append({
             "ID": c["id"], "Instrumento": c["instrumento"],
-            "Cant. calculada (PEPS)": round(cant_calc, 4),
-            "Cant. real (extracto)": round(c["vn_control"], 4),
-            "Diferencia": round(diff, 4),
+            "Cant. calculada (PEPS)": _fmt_cantidad(cant_calc, 4),
+            "Cant. real (extracto)": _fmt_cantidad(c["vn_control"], 4),
+            "Diferencia": _fmt_cantidad(diff, 4),
             "¿Coincide?": "✓" if abs(diff) < 0.0001 else "⚠️ revisar",
             "Notas": c["notas"],
         })
@@ -1119,15 +1292,15 @@ def _tab_movimientos() -> None:
             filas = [{
                 "Fecha": m["fecha"],
                 "Movimiento": idb.MOV_LABEL.get(m["movimiento"], m["movimiento"]),
-                "VN": m["vn"],
+                "VN": _fmt_cantidad(m["vn"]),
                 "Moneda": m["moneda"],
-                "Total ARS": round(m["total_ars"], 2),
-                "Total USD": round(m["total_usd"], 2),
-                "Div./Renta $": round(m["div_ars"], 2),
-                "Comisión": round(m["comision"], 2),
-                "Resultado realizado $": (round(m["resultado_ars"], 2) if m["resultado_ars"] is not None else ""),
-                "Rendimiento $": (round(m["rendimiento_ars"], 2) if m["rendimiento_ars"] is not None else ""),
-                "Dif. de cambio $": (round(m["diferencia_cambio_ars"], 2) if m["diferencia_cambio_ars"] is not None else ""),
+                "Total ARS": _fmt_pesos(m["total_ars"]),
+                "Total USD": _fmt_usd(m["total_usd"]),
+                "Div./Renta $": _fmt_pesos(m["div_ars"]),
+                "Comisión": _fmt_moneda(m["comision"], m["moneda"]),
+                "Resultado realizado $": (_fmt_pesos(m["resultado_ars"]) if m["resultado_ars"] is not None else ""),
+                "Rendimiento $": (_fmt_pesos(m["rendimiento_ars"]) if m["rendimiento_ars"] is not None else ""),
+                "Dif. de cambio $": (_fmt_pesos(m["diferencia_cambio_ars"]) if m["diferencia_cambio_ars"] is not None else ""),
             } for m in g["movimientos"]]
             st.dataframe(pd.DataFrame(filas), use_container_width=True, hide_index=True)
 
