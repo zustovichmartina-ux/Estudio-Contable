@@ -1619,6 +1619,11 @@ def _tab_movimientos(cliente: dict, periodo: str) -> None:
             } for m in g["movimientos"]]
             st.dataframe(pd.DataFrame(filas), use_container_width=True, hide_index=True)
 
+            existencia = sum(
+                float(l["cant"]) for l in g.get("lotes", []) if float(l["cant"]) > 1e-9
+            )
+            st.markdown(f"**Existencia al cierre:** {_fmt_cantidad(existencia)}")
+
             rend_inst = sum(
                 m["rendimiento_ars"] for m in g["movimientos"] if m["rendimiento_ars"] is not None
             )
