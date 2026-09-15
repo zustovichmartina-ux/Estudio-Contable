@@ -23,8 +23,10 @@ ya no aporta nada que no esté cubierto acá.
 from __future__ import annotations
 
 import datetime as _dt
+import io
 import re
 import unicodedata
+from typing import Optional
 
 import pandas as pd
 import streamlit as st
@@ -182,47 +184,66 @@ def _asegurar_tablas_inversiones() -> bool:
     return True
 
 
+def _selector_cliente_periodo() -> tuple[Optional[dict], str]:
+    """Selector único de Cliente y Período, compartido por todas las
+    solapas de Inversiones: elegirlos acá alcanza para que el resto de las
+    solapas (Carga de datos, Tenencia USD, Depuración, Movimientos,
+    Patrimonio) ya los tengan seleccionados, sin tener que volver a elegir
+    en cada una."""
+    clientes = db.listar_clientes()
+    if not clientes:
+        st.warning("Todavía no hay clientes cargados en el estudio.")
+        return None, ""
+
+    opciones = {f"{c['nombre']} ({c['cuit']})": c for c in clientes}
+    anio_actual = _dt.date.today().year
+
+    c1, c2 = st.columns([2, 1])
+    nombre_sel = c1.selectbox("Cliente", list(opciones.keys()), key="inv_cliente_global")
+    cliente = opciones[nombre_sel]
+    periodo = c2.selectbox(
+        "Período (año fiscal)",
+        [str(a) for a in range(anio_actual + 1, anio_actual - 6, -1)],
+        key="inv_periodo_global",
+    )
+    st.caption(
+        "El cliente y el período elegidos acá se usan en todas las solapas "
+        "de Inversiones (Carga de datos, Tenencia USD, Depuración, "
+        "Movimientos, Patrimonio)."
+    )
+    return cliente, periodo
+
+
 def seccion_inversiones_arg() -> None:
     """Renderiza la pestaña Inversiones."""
     _asegurar_tablas_inversiones()
     st.subheader("📈 Inversiones")
+
+    cliente, periodo = _selector_cliente_periodo()
+    if cliente is None:
+        return
+
     tab_carga, tab_usd, tab_dep, tab_mov, tab_pat = st.tabs(
         ["Carga de datos", "Tenencia USD", "Depuración", "Movimientos", "Patrimonio"]
     )
 
     with tab_carga:
-        _tab_carga_datos()
+        _tab_carga_datos(cliente, periodo)
 
     with tab_usd:
-        _tab_tenencia_usd()
+        _tab_tenencia_usd(cliente)
 
     with tab_dep:
-        _tab_depuracion()
+        _tab_depuracion(cliente, periodo)
 
     with tab_mov:
-        _tab_movimientos()
+        _tab_movimientos(cliente, periodo)
 
     with tab_pat:
-        _tab_patrimonio()
+        _tab_patrimonio(cliente, periodo)
 
 
-def _tab_carga_datos() -> None:
-    clientes = db.listar_clientes()
-    if not clientes:
-        st.warning("Todavía no hay clientes cargados en el estudio.")
-        return
-
-    opciones = {f"{c['nombre']} ({c['cuit']})": c for c in clientes}
-    nombre_sel = st.selectbox("Cliente", list(opciones.keys()), key="inv_cli_sel")
-    cliente = opciones[nombre_sel]
-
-    anio_actual = _dt.date.today().year
-    periodo = st.selectbox(
-        "Período (año fiscal)",
-        [str(a) for a in range(anio_actual + 1, anio_actual - 6, -1)],
-        key="inv_periodo",
-    )
-
+def _tab_carga_datos(cliente: dict, periodo: str) -> None:
     st.caption(
         "Los datos se guardan en la base del estudio: se comparten entre "
         "todos los usuarios y no dependen de este navegador/equipo."
@@ -792,16 +813,7 @@ def _editar_operacion(ops: list[dict]) -> None:
             st.rerun()
 
 
-def _tab_tenencia_usd() -> None:
-    clientes = db.listar_clientes()
-    if not clientes:
-        st.warning("Todavía no hay clientes cargados en el estudio.")
-        return
-
-    opciones = {f"{c['nombre']} ({c['cuit']})": c for c in clientes}
-    nombre_sel = st.selectbox("Cliente", list(opciones.keys()), key="usd_cli_sel")
-    cliente = opciones[nombre_sel]
-
+def _tab_tenencia_usd(cliente: dict) -> None:
     st.caption(
         "Acá se arma la tenencia de dólares del cliente: cada compra o "
         "recepción de USD (MEP, oficial, informal, remesa) se carga como un "
@@ -825,23 +837,7 @@ def _tab_tenencia_usd() -> None:
     _pool_usd(cliente)
 
 
-def _tab_depuracion() -> None:
-    clientes = db.listar_clientes()
-    if not clientes:
-        st.warning("Todavía no hay clientes cargados en el estudio.")
-        return
-
-    opciones = {f"{c['nombre']} ({c['cuit']})": c for c in clientes}
-    nombre_sel = st.selectbox("Cliente", list(opciones.keys()), key="dep_cli_sel")
-    cliente = opciones[nombre_sel]
-
-    anio_actual = _dt.date.today().year
-    periodo = st.selectbox(
-        "Período (año fiscal)",
-        [str(a) for a in range(anio_actual + 1, anio_actual - 6, -1)],
-        key="dep_periodo",
-    )
-
+def _tab_depuracion(cliente: dict, periodo: str) -> None:
     st.caption(
         "Revisá cada instrumento: confirmá si la operación fue en ARS o USD. "
         "Para compras en USD, asignale lotes del pool con su TC de origen "
@@ -1041,23 +1037,7 @@ def _fila_asignacion_usd(cliente: dict, op: dict) -> None:
     st.divider()
 
 
-def _tab_patrimonio() -> None:
-    clientes = db.listar_clientes()
-    if not clientes:
-        st.warning("Todavía no hay clientes cargados en el estudio.")
-        return
-
-    opciones = {f"{c['nombre']} ({c['cuit']})": c for c in clientes}
-    nombre_sel = st.selectbox("Cliente", list(opciones.keys()), key="pat_cli_sel")
-    cliente = opciones[nombre_sel]
-
-    anio_actual = _dt.date.today().year
-    periodo = st.selectbox(
-        "Período (año fiscal)",
-        [str(a) for a in range(anio_actual + 1, anio_actual - 6, -1)],
-        key="pat_periodo",
-    )
-
+def _tab_patrimonio(cliente: dict, periodo: str) -> None:
     st.caption(
         "Tenencia al cierre del ejercicio (31/12 para Persona Humana), valuada al "
         "costo histórico PEPS — se consumen las compras en el orden en que se "
@@ -1078,6 +1058,8 @@ def _tab_patrimonio() -> None:
     _tabla_posicion(posicion)
     st.divider()
     _control_cierre(cliente, periodo, posicion)
+    st.divider()
+    _resumen_patrimonial(cliente, periodo)
 
 
 def _metricas_patrimonio(posicion: list[dict]) -> None:
@@ -1198,6 +1180,355 @@ def _control_cierre(cliente: dict, periodo: str, posicion: list[dict]) -> None:
             st.rerun()
 
 
+def _resumen_patrimonial(cliente: dict, periodo: str) -> None:
+    st.markdown("### 📊 Resumen patrimonial (Ganancias / Bienes Personales)")
+    st.caption(
+        "Composición de la cartera a costo histórico (Ganancias) y a valor de "
+        "cierre (Bienes Personales, según las planillas oficiales de "
+        "valuaciones 2025 o la carga manual de abajo), variación patrimonial "
+        "del período e impuesto aproximado por operación/instrumento. Todos "
+        "los totales salen de la posición y los movimientos calculados arriba."
+    )
+
+    alic_key = f"pat_alicuota_escala_{cliente['id']}_{periodo}"
+    alicuota_pct = st.number_input(
+        "Alícuota de referencia para 'Gravado a escala' (%)",
+        min_value=0.0, max_value=100.0, step=1.0,
+        value=float(st.session_state.get(alic_key, idb.ALICUOTA_ESCALA_DEFAULT * 100)),
+        key=alic_key,
+        help="El tratamiento 'Gravado a escala' (Impuesto a las Ganancias, "
+             "persona humana) no tiene una tasa fija: depende de TODOS los "
+             "ingresos anuales del cliente, no solo de Inversiones. Se usa "
+             "esta alícuota de referencia (por defecto, la escala máxima "
+             "vigente, 35%) para estimar el impuesto — ajustala al caso real "
+             "de cada cliente.",
+    )
+    alicuota = alicuota_pct / 100.0
+
+    resumen = idb.calcular_resumen_patrimonial(cliente["id"], periodo, alicuota)
+
+    if not resumen["tenencias"]:
+        st.info("Sin tenencias abiertas al cierre para armar el resumen.")
+        return
+
+    sin_dato = [t for t in resumen["tenencias"] if t["fuente_valor_cierre"] == "sin_dato"]
+    if sin_dato:
+        st.warning(
+            f"⚠️ {len(sin_dato)} instrumento(s) sin cotización de cierre encontrada "
+            "(no está en las planillas oficiales 2025 cargadas, o el período no es "
+            "2025) — completá el valor manual más abajo para que entren correctamente "
+            "en Bienes Personales."
+        )
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Costo histórico (Ganancias)", _fmt_pesos(resumen["costo_historico_total_ars"], 0))
+    c2.metric("Valor de cierre (Bienes Personales)", _fmt_pesos(resumen["valor_cierre_total_ars"], 0))
+    c3.metric("TC cierre (31/12) usado", _fmt_cantidad(resumen["tc_cierre"]))
+    c4.metric("Alícuota escala usada", f"{alicuota_pct:.0f}%")
+
+    st.markdown("**Variación patrimonial del período**")
+    vp = resumen["variacion_patrimonial"]
+    v1, v2, v3, v4 = st.columns(4)
+    v1.markdown(_html_metric("Rendimientos / intereses / rentas", vp["rendimientos_ars"]), unsafe_allow_html=True)
+    v2.markdown(_html_metric("Compra-venta", vp["compraventa_ars"]), unsafe_allow_html=True)
+    v3.markdown(_html_metric("Diferencia de cambio", vp["diferencia_cambio_ars"]), unsafe_allow_html=True)
+    v4.markdown(_html_metric("Total variación patrimonial", vp["total_ars"]), unsafe_allow_html=True)
+
+    st.markdown("**Composición de tenencias al cierre**")
+    fuente_label = {"pdf": "Planilla oficial 2025", "manual": "Carga manual", "sin_dato": "⚠️ Sin dato"}
+    filas_t = [{
+        "Instrumento": t["instrumento"], "Tipo": idb.TIPO_LABEL.get(t["tipo"], t["tipo"]),
+        "Cantidad": _fmt_cantidad(t["cantidad"], 4),
+        "Costo histórico $ (Ganancias)": _fmt_pesos(t["costo_historico_ars"]),
+        "Cotización cierre": f"{_fmt_cantidad(t['cotizacion_cierre'], 4)} {t['moneda_cotizacion']}",
+        "Valor de cierre $ (Bienes Pers.)": _fmt_pesos(t["valor_cierre_total_ars"]),
+        "Bienes Personales": idb.ALCANZA_BP_LABEL.get(t["alcanza_bienes_personales"], t["alcanza_bienes_personales"]),
+        "Fuente cotización": fuente_label.get(t["fuente_valor_cierre"], t["fuente_valor_cierre"]),
+    } for t in resumen["tenencias"]]
+    st.dataframe(pd.DataFrame(filas_t), use_container_width=True, hide_index=True)
+
+    with st.expander("Cargar/corregir valor de cierre manual de un instrumento"):
+        st.caption(
+            "Usalo para instrumentos sin dato (ON y FCI 2025 no se pudieron "
+            "extraer automáticamente por un problema en esas dos planillas — "
+            "ver aviso en el chat) o para cualquier período distinto de 2025."
+        )
+        instrumentos = [t["instrumento"] for t in resumen["tenencias"]]
+        vversion = st.session_state.get("pat_vcierre_version", 0)
+        i1, i2, i3, i4 = st.columns([2, 1, 1, 1])
+        instr_sel = i1.selectbox("Instrumento", instrumentos, key=f"pat_vcierre_inst_{vversion}")
+        cotiz = i2.number_input("Cotización", min_value=0.0, step=0.01, key=f"pat_vcierre_cot_{vversion}")
+        moneda_v = i3.radio("Moneda", ["ARS", "USD"], horizontal=True, key=f"pat_vcierre_mon_{vversion}")
+        if i4.button("Guardar", key=f"pat_vcierre_btn_{vversion}"):
+            idb.guardar_valor_cierre_manual(cliente["id"], periodo, instr_sel, cotiz, moneda_v)
+            st.session_state["pat_vcierre_version"] = vversion + 1
+            st.success("Valor de cierre guardado ✓")
+            st.rerun()
+
+    st.markdown("**Desglose de impuesto aproximado por operación/instrumento**")
+    st.caption(
+        "Cedular 15%/5% y Retención 7% son el impuesto exacto (tasa fija sobre "
+        "la base). 'Gravado a escala' usa la alícuota de referencia de arriba "
+        "— es una aproximación a revisar, no el impuesto real del cliente."
+    )
+    filas_imp = [{
+        "Fecha": d["fecha"], "Instrumento": d["instrumento"], "Movimiento": d["movimiento"],
+        "Tratamiento": idb.FIS_LABEL.get(d["tratamiento_fiscal"], d["tratamiento_fiscal"]),
+        "Base imponible $": _fmt_pesos(d["base_ars"]),
+        "Alícuota": f"{d['alicuota'] * 100:.0f}%",
+        "Impuesto aprox. $": _fmt_pesos(d["impuesto_ars"]),
+    } for d in resumen["detalle_impuesto"]]
+    st.dataframe(pd.DataFrame(filas_imp), use_container_width=True, hide_index=True)
+
+    ti1, ti2 = st.columns(2)
+    ti1.metric("Impuesto exacto (cedular/retención)", _fmt_pesos(resumen["impuesto_exacto_total_ars"]))
+    ti2.metric("Impuesto aprox. (gravado a escala)", _fmt_pesos(resumen["impuesto_aproximado_escala_ars"]))
+
+    st.divider()
+    try:
+        excel_bytes = _generar_excel_resumen(cliente, periodo, resumen)
+    except Exception as e:
+        st.error(f"No pude generar el Excel: {e}")
+        return
+    nombre_archivo = f"Resumen_Patrimonial_{cliente['nombre'].replace(' ', '_')}_{periodo}.xlsx"
+    st.download_button(
+        "📥 Exportar resumen a Excel",
+        data=excel_bytes,
+        file_name=nombre_archivo,
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        key=f"pat_export_excel_{cliente['id']}_{periodo}",
+    )
+
+
+# ────────────────────────────────────────────────────────────────────────
+# Exportación a Excel del resumen patrimonial (una sola solapa, con
+# fórmulas que enlazan los totales a los datos puros — no hay ningún total
+# hardcodeado como número fijo)
+# ────────────────────────────────────────────────────────────────────────
+
+_XLSX_AZUL = "1F4E79"
+_XLSX_AZUL_CLARO = "DCE6F1"
+_XLSX_GRIS = "F2F2F2"
+_XLSX_VERDE = "1A7F37"
+_XLSX_ROJO = "C62828"
+_XLSX_BLANCO = "FFFFFF"
+
+
+def _generar_excel_resumen(cliente: dict, periodo: str, resumen: dict) -> bytes:
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Resumen Patrimonial"
+
+    fill_header = PatternFill("solid", fgColor=_XLSX_AZUL)
+    fill_subheader = PatternFill("solid", fgColor=_XLSX_AZUL_CLARO)
+    fill_gris = PatternFill("solid", fgColor=_XLSX_GRIS)
+    font_header = Font(color=_XLSX_BLANCO, bold=True, size=14)
+    font_subheader = Font(color=_XLSX_AZUL, bold=True, size=11)
+    font_col = Font(color=_XLSX_BLANCO, bold=True, size=10)
+    font_normal = Font(size=10)
+    thin = Side(style="thin", color="B7B7B7")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    for col in range(1, 9):
+        ws.column_dimensions[get_column_letter(col)].width = 20
+
+    fila = 1
+
+    def _titulo(texto, filas_alto=1):
+        nonlocal fila
+        ws.merge_cells(start_row=fila, start_column=1, end_row=fila + filas_alto - 1, end_column=8)
+        c = ws.cell(row=fila, column=1, value=texto)
+        c.fill = fill_header
+        c.font = font_header
+        c.alignment = Alignment(horizontal="left", vertical="center", indent=1)
+        for r in range(fila, fila + filas_alto):
+            for col in range(1, 9):
+                ws.cell(row=r, column=col).fill = fill_header
+        fila += filas_alto
+
+    def _subtitulo(texto):
+        nonlocal fila
+        ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=8)
+        c = ws.cell(row=fila, column=1, value=texto)
+        c.font = font_subheader
+        c.fill = fill_subheader
+        c.alignment = Alignment(horizontal="left", vertical="center", indent=1)
+        fila += 1
+
+    def _fila_cabecera(cols):
+        nonlocal fila
+        for i, texto in enumerate(cols, start=1):
+            c = ws.cell(row=fila, column=i, value=texto)
+            c.font = font_col
+            c.fill = fill_header
+            c.border = border
+            c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        fila += 1
+
+    _titulo(f"Resumen patrimonial — {cliente['nombre']} ({cliente['cuit']}) — Período {periodo}", filas_alto=2)
+    fila += 1
+
+    # ── Sección 1: Composición de tenencias al cierre ────────────────────
+    _subtitulo("Composición de tenencias al cierre (a costo histórico y a valor de cierre)")
+    fila_header_tenencias = fila
+    _fila_cabecera([
+        "Instrumento", "Tipo", "Cantidad", "Costo histórico $ (Ganancias)",
+        "Cotización cierre", "Moneda cotiz.", "TC cierre (31/12)", "Valor de cierre $ (Bienes Pers.)",
+    ])
+    primera_fila_tenencias = fila
+    tc_cierre_celda = None
+    for t in resumen["tenencias"]:
+        ws.cell(row=fila, column=1, value=t["instrumento"]).border = border
+        ws.cell(row=fila, column=2, value=idb.TIPO_LABEL.get(t["tipo"], t["tipo"])).border = border
+        ws.cell(row=fila, column=3, value=t["cantidad"]).border = border
+        ws.cell(row=fila, column=3).number_format = "#,##0.0000"
+        ws.cell(row=fila, column=4, value=t["costo_historico_ars"]).border = border
+        ws.cell(row=fila, column=4).number_format = '"$" #,##0.00'
+        ws.cell(row=fila, column=5, value=t["cotizacion_cierre"]).border = border
+        ws.cell(row=fila, column=5).number_format = "#,##0.0000"
+        ws.cell(row=fila, column=6, value=t["moneda_cotizacion"]).border = border
+        ws.cell(row=fila, column=7, value=resumen["tc_cierre"]).border = border
+        ws.cell(row=fila, column=7).number_format = "#,##0.00"
+        if tc_cierre_celda is None:
+            tc_cierre_celda = f"G{fila}"
+        col_letra_cant, col_letra_cotiz, col_letra_mon, col_letra_tc = "C", "E", "F", "G"
+        formula = (
+            f"={col_letra_cant}{fila}*{col_letra_cotiz}{fila}"
+            f"*IF({col_letra_mon}{fila}=\"USD\",{col_letra_tc}{fila},1)"
+        )
+        cvc = ws.cell(row=fila, column=8, value=formula)
+        cvc.border = border
+        cvc.number_format = '"$" #,##0.00'
+        fila += 1
+    ultima_fila_tenencias = fila - 1
+
+    # Totales de la sección 1 (fórmulas SUM sobre el rango de arriba)
+    ws.cell(row=fila, column=1, value="TOTAL").font = Font(bold=True)
+    ws.cell(row=fila, column=4, value=f"=SUM(D{primera_fila_tenencias}:D{ultima_fila_tenencias})")
+    ws.cell(row=fila, column=4).font = Font(bold=True)
+    ws.cell(row=fila, column=4).number_format = '"$" #,##0.00'
+    ws.cell(row=fila, column=8, value=f"=SUM(H{primera_fila_tenencias}:H{ultima_fila_tenencias})")
+    ws.cell(row=fila, column=8).font = Font(bold=True)
+    ws.cell(row=fila, column=8).number_format = '"$" #,##0.00'
+    for col in range(1, 9):
+        ws.cell(row=fila, column=col).fill = fill_gris
+        ws.cell(row=fila, column=col).border = border
+    fila_total_costo_hist = fila
+    fila_total_valor_cierre = fila
+    fila += 2
+
+    # ── Sección 2: Detalle de variación patrimonial (por operación) ──────
+    _subtitulo("Detalle de variación patrimonial (rendimientos / compra-venta / diferencia de cambio)")
+    _fila_cabecera([
+        "Fecha", "Instrumento", "Movimiento", "Rendimientos/intereses/rentas $",
+        "Compra-venta $", "Diferencia de cambio $", "", "",
+    ])
+    primera_fila_var = fila
+    for d in resumen["detalle_variacion"]:
+        ws.cell(row=fila, column=1, value=str(d["fecha"])).border = border
+        ws.cell(row=fila, column=2, value=d["instrumento"]).border = border
+        ws.cell(row=fila, column=3, value=d["movimiento"]).border = border
+        c4 = ws.cell(row=fila, column=4, value=d["rendimiento_intereses_rentas_ars"])
+        c4.border = border
+        c4.number_format = '"$" #,##0.00'
+        c5 = ws.cell(row=fila, column=5, value=d["compraventa_ars"])
+        c5.border = border
+        c5.number_format = '"$" #,##0.00'
+        c6 = ws.cell(row=fila, column=6, value=d["diferencia_cambio_ars"])
+        c6.border = border
+        c6.number_format = '"$" #,##0.00'
+        fila += 1
+    ultima_fila_var = fila - 1 if resumen["detalle_variacion"] else primera_fila_var
+
+    fila_var_rend, fila_var_cv, fila_var_dif, fila_var_total = fila, fila + 1, fila + 2, fila + 3
+    if resumen["detalle_variacion"]:
+        rango_d = f"D{primera_fila_var}:D{ultima_fila_var}"
+        rango_e = f"E{primera_fila_var}:E{ultima_fila_var}"
+        rango_f = f"F{primera_fila_var}:F{ultima_fila_var}"
+    else:
+        rango_d = rango_e = rango_f = "D1:D1"  # sin movimientos: no hay rango, queda en 0
+
+    def _fila_total_variacion(etiqueta, formula):
+        nonlocal fila
+        ws.cell(row=fila, column=1, value=etiqueta).font = Font(bold=True)
+        ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=3)
+        c = ws.cell(row=fila, column=4, value=formula if resumen["detalle_variacion"] else 0)
+        c.font = Font(bold=True)
+        c.number_format = '"$" #,##0.00'
+        for col in range(1, 5):
+            ws.cell(row=fila, column=col).fill = fill_gris
+            ws.cell(row=fila, column=col).border = border
+        fila += 1
+        return f"D{fila - 1}"
+
+    ref_rend = _fila_total_variacion("Total Rendimientos/intereses/rentas", f"=SUM({rango_d})")
+    ref_cv = _fila_total_variacion("Total Compra-venta", f"=SUM({rango_e})")
+    ref_dif = _fila_total_variacion("Total Diferencia de cambio", f"=SUM({rango_f})")
+    ws.cell(row=fila, column=1, value="TOTAL variación patrimonial").font = Font(bold=True)
+    ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=3)
+    ctv = ws.cell(row=fila, column=4, value=f"={ref_rend}+{ref_cv}+{ref_dif}")
+    ctv.font = Font(bold=True)
+    ctv.number_format = '"$" #,##0.00'
+    for col in range(1, 5):
+        ws.cell(row=fila, column=col).fill = fill_subheader
+        ws.cell(row=fila, column=col).border = border
+    fila += 2
+
+    # ── Sección 3: Desglose de impuesto por operación/instrumento ────────
+    _subtitulo("Desglose de impuesto aproximado por operación/instrumento")
+    fila_alicuota_ref = fila
+    ws.cell(row=fila, column=1, value="Alícuota de referencia 'Gravado a escala' (editable):").font = Font(bold=True)
+    ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=3)
+    calic = ws.cell(row=fila, column=4, value=resumen["alicuota_escala"])
+    calic.number_format = "0%"
+    calic.fill = PatternFill("solid", fgColor="FFF3CD")
+    calic.font = Font(bold=True)
+    celda_alicuota = f"D{fila}"
+    fila += 2
+
+    _fila_cabecera(["Fecha", "Instrumento", "Movimiento", "Tratamiento", "Base imponible $", "Alícuota", "Impuesto aprox. $", ""])
+    primera_fila_imp = fila
+    for d in resumen["detalle_impuesto"]:
+        ws.cell(row=fila, column=1, value=str(d["fecha"])).border = border
+        ws.cell(row=fila, column=2, value=d["instrumento"]).border = border
+        ws.cell(row=fila, column=3, value=d["movimiento"]).border = border
+        ws.cell(row=fila, column=4, value=idb.FIS_LABEL.get(d["tratamiento_fiscal"], d["tratamiento_fiscal"])).border = border
+        cb = ws.cell(row=fila, column=5, value=d["base_ars"])
+        cb.border = border
+        cb.number_format = '"$" #,##0.00'
+        es_escala = d["tratamiento_fiscal"] in ("gravado", "ordinario")
+        ca = ws.cell(row=fila, column=6, value=(f"={celda_alicuota}" if es_escala else d["alicuota"]))
+        ca.border = border
+        ca.number_format = "0%"
+        ci = ws.cell(row=fila, column=7, value=f"=E{fila}*F{fila}")
+        ci.border = border
+        ci.number_format = '"$" #,##0.00'
+        fila += 1
+    ultima_fila_imp = fila - 1 if resumen["detalle_impuesto"] else primera_fila_imp
+
+    if resumen["detalle_impuesto"]:
+        ws.cell(row=fila, column=1, value="TOTAL impuesto aproximado").font = Font(bold=True)
+        ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=6)
+        ctot = ws.cell(row=fila, column=7, value=f"=SUM(G{primera_fila_imp}:G{ultima_fila_imp})")
+        ctot.font = Font(bold=True)
+        ctot.number_format = '"$" #,##0.00'
+        for col in range(1, 8):
+            ws.cell(row=fila, column=col).fill = fill_gris
+            ws.cell(row=fila, column=col).border = border
+        fila += 1
+
+    ws.freeze_panes = "A4"
+    ws.sheet_view.showGridLines = False
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
 def _color_monto(valor: float) -> str:
     """Verde si es positivo, rojo si es negativo, gris si es cero — para
     remarcar de un vistazo si un rendimiento o diferencia de cambio favorece
@@ -1222,23 +1553,7 @@ def _html_metric(label: str, valor: float, moneda: str = "$") -> str:
     )
 
 
-def _tab_movimientos() -> None:
-    clientes = db.listar_clientes()
-    if not clientes:
-        st.warning("Todavía no hay clientes cargados en el estudio.")
-        return
-
-    opciones = {f"{c['nombre']} ({c['cuit']})": c for c in clientes}
-    nombre_sel = st.selectbox("Cliente", list(opciones.keys()), key="mov_cli_sel")
-    cliente = opciones[nombre_sel]
-
-    anio_actual = _dt.date.today().year
-    periodo = st.selectbox(
-        "Período (año fiscal)",
-        [str(a) for a in range(anio_actual + 1, anio_actual - 6, -1)],
-        key="mov_periodo",
-    )
-
+def _tab_movimientos(cliente: dict, periodo: str) -> None:
     st.caption(
         "Todas las operaciones del período, agrupadas por instrumento y en "
         "orden cronológico. Cada venta/rescate muestra el resultado realizado "
