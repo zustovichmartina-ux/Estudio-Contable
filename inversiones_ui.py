@@ -484,6 +484,43 @@ def _form_saldo_inicial(cliente: dict, periodo: str) -> None:
     vn = c2.number_input("VN / Cantidad", min_value=0.0, step=1.0, key=f"inv_si_vn_{version}")
     total_ars = c3.number_input("Valor total en pesos", min_value=0.0, step=100.0, key=f"inv_si_ars_{version}")
 
+    # El valor en pesos suele salir de la última DDJJ (Bienes Personales /
+    # Ganancias) del cliente. Si esa tenencia venía de una compra en dólares,
+    # hace falta un TC de origen para que, cuando más adelante se venda parte
+    # de esta posición, calcular_movimientos pueda separar Rendimiento vs.
+    # Diferencia de cambio — igual que ya hace con una Compra asignada en
+    # Depuración. Sin esto, un lote de Alta queda siempre en pesos puros (sin
+    # TC) y su venta futura carga el 100% del resultado a Rendimiento, sin
+    # posibilidad de diferencia de cambio, aunque la tenencia real haya sido
+    # en dólares.
+    fecha_str = f"{periodo}-01-01"
+    tc_bna_aprox = idb.obtener_tc(fecha_str, "venta") or 0.0
+
+    c4, c5 = st.columns(2)
+    usa_tc_origen = c4.checkbox(
+        "¿Costo original en dólares?", value=(tc_bna_aprox > 0),
+        key=f"inv_si_usatc_{version}",
+        help="Marcalo si esta tenencia viene de una compra en dólares (aunque "
+             "el valor de arriba esté en pesos, como en la DDJJ). Así, cuando "
+             "más adelante vendas parte de esta posición, el resultado se "
+             "separa en Rendimiento vs. Diferencia de cambio en vez de "
+             "cargarse todo a Rendimiento.",
+    )
+    tc_origen = 0.0
+    if usa_tc_origen:
+        tc_origen = c5.number_input(
+            "TC de origen (aprox.)", min_value=0.0, step=0.01,
+            value=float(tc_bna_aprox), key=f"inv_si_tcorigen_{version}",
+            help="Precargado con el TC BNA vendedor al 01/01 del período (≈ "
+                 "31/12 del año anterior) — es una aproximación, no "
+                 "necesariamente el TC real al que el cliente compró "
+                 "originalmente. Corregilo si tenés un dato más preciso.",
+        )
+        if tc_origen > 0 and total_ars > 0:
+            c5.caption(f"≈ {_fmt_usd(total_ars / tc_origen)}")
+        if tc_bna_aprox <= 0:
+            c5.caption("⚠️ Sin TC BNA cargado cerca de esta fecha — ingresalo a mano.")
+
     sugerencia = idb.sugerir_fiscal(tipo, "apertura", "ARS")
 
     if st.button("Guardar saldo inicial", key=f"inv_si_guardar_{version}"):
@@ -491,13 +528,18 @@ def _form_saldo_inicial(cliente: dict, periodo: str) -> None:
             st.error("Ingresá el instrumento.")
             return
 
-        fecha_str = f"{periodo}-01-01"
+        es_usd_origen = usa_tc_origen and tc_origen > 0
+        total_usd = (total_ars / tc_origen) if es_usd_origen else 0.0
+
         idb.crear_operacion(
             cliente_id=cliente["id"], fecha=fecha_str, instrumento=instrumento, tipo=tipo,
             movimiento="apertura", tratamiento_fiscal=idb.default_fis(tipo),
-            vn=vn, precio_ars=(total_ars / vn if vn else total_ars), precio_usd=0,
-            tc=1, tc_origen=0, total_ars=total_ars, total_usd=0, div_usd=0, div_ars=0,
-            comision=0, moneda="ARS", notas="Saldo inicial DDJJ anterior",
+            vn=vn, precio_ars=(total_ars / vn if vn else total_ars),
+            precio_usd=(total_usd / vn if (vn and es_usd_origen) else 0),
+            tc=1, tc_origen=(tc_origen if es_usd_origen else 0),
+            total_ars=total_ars, total_usd=total_usd, div_usd=0, div_ars=0,
+            comision=0, moneda=("USD" if es_usd_origen else "ARS"),
+            notas="Saldo inicial DDJJ anterior",
             costo_fiscal=total_ars, es_saldo_inicial=True,
             alcanza_bienes_personales=sugerencia["alcanza_bienes_personales"],
         )
