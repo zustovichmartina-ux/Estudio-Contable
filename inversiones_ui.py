@@ -185,31 +185,42 @@ def _asegurar_tablas_inversiones() -> bool:
 
 
 def _selector_cliente_periodo() -> tuple[Optional[dict], str]:
-    """Selector único de Cliente y Período, compartido por todas las
-    solapas de Inversiones: elegirlos acá alcanza para que el resto de las
+    """Cliente activo + Período de Inversiones, compartidos por todas sus
     solapas (Carga de datos, Tenencia USD, Depuración, Movimientos,
-    Patrimonio) ya los tengan seleccionados, sin tener que volver a elegir
-    en cada una."""
-    clientes = db.listar_clientes()
-    if not clientes:
-        st.warning("Todavía no hay clientes cargados en el estudio.")
+    Patrimonio): elegirlos acá alcanza para que el resto ya los tenga
+    seleccionados, sin tener que volver a elegir en cada una.
+
+    El cliente NO tiene un selector propio acá: es el mismo "Sociedad
+    activa" del panel izquierdo, compartido con todo el resto de la app
+    (Devengamiento, Conciliación, Préstamos, Herramientas, Tango, ARCA) —
+    cambiarlo en cualquiera de los dos lados cambia el mismo cliente en
+    todos lados. El período sí es propio de Inversiones y arranca por
+    defecto en el año anterior al actual (la última DDJJ cerrada — p. ej.
+    en 2026 arranca en 2025), editable si hace falta ver otro año."""
+    cliente_id = st.session_state.get("cliente_id_seleccionado") or st.session_state.get("sociedad_activa")
+    cliente = db.obtener_cliente(cliente_id) if cliente_id else None
+    if not cliente:
+        st.warning(
+            "Elegí una sociedad activa en el panel de la izquierda para "
+            "trabajar en Inversiones."
+        )
         return None, ""
 
-    opciones = {f"{c['nombre']} ({c['cuit']})": c for c in clientes}
     anio_actual = _dt.date.today().year
+    opciones_periodo = [str(a) for a in range(anio_actual + 1, anio_actual - 6, -1)]
+    periodo_default = str(anio_actual - 1)
+    idx_default = opciones_periodo.index(periodo_default) if periodo_default in opciones_periodo else 0
 
     c1, c2 = st.columns([2, 1])
-    nombre_sel = c1.selectbox("Cliente", list(opciones.keys()), key="inv_cliente_global")
-    cliente = opciones[nombre_sel]
+    c1.markdown(f"**Cliente:** {cliente['nombre']} ({cliente['cuit']})")
     periodo = c2.selectbox(
-        "Período (año fiscal)",
-        [str(a) for a in range(anio_actual + 1, anio_actual - 6, -1)],
-        key="inv_periodo_global",
+        "Período (año fiscal)", opciones_periodo,
+        index=idx_default, key="inv_periodo_global",
     )
     st.caption(
-        "El cliente y el período elegidos acá se usan en todas las solapas "
-        "de Inversiones (Carga de datos, Tenencia USD, Depuración, "
-        "Movimientos, Patrimonio)."
+        "El cliente es el mismo elegido como \"Sociedad activa\" en el panel "
+        "izquierdo (compartido con toda la app). El período por defecto es "
+        "el año anterior al actual — cambialo acá si necesitás ver otro."
     )
     return cliente, periodo
 
