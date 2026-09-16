@@ -137,11 +137,10 @@ def render_conciliacion_ae(
     nombre_activo: str | None,
     plan_vinculado: bool,
 ) -> None:
+    st.markdown("##### 1. Subí el extracto de este banco")
     st.caption(
-        "Formato AE-Studio (cliente → extracto → Ingresos / Egresos / Retenciones / "
-        "Deducciones / Inter-cuentas). La cuenta la arma la web: **Conceptos Bancos**, "
-        "reglas locales, padrón de proveedores/VEPs y el **plan de cuentas de esta sociedad**. "
-        "OCR siempre, también si el PDF es escaneo."
+        "PDF o Excel del homebanking. La web lo lee (OCR si es escaneo) y lo clasifica "
+        "con Conceptos Bancos + el plan de **esta** sociedad. Proveedores y VEPs son opcionales."
     )
 
     periodo_key = f"ae_periodo_{sociedad_id}"
@@ -149,128 +148,114 @@ def render_conciliacion_ae(
         st.session_state[periodo_key] = date.today().replace(day=1)
     preview_key = f"ae_preview_{sociedad_id}"
 
-    tab_imp, tab_an, tab_mov, tab_ing, tab_egr, tab_ret, tab_ded, tab_ic, tab_as, tab_reg = st.tabs(
-        [
-            "Importar extracto",
-            "Análisis",
-            "Movimientos",
-            "Ingresos",
-            "Egresos",
-            "Retenciones",
-            "Deducciones",
-            "Inter-cuentas",
-            "Asiento Tango",
-            "Reglas",
-        ]
-    )
-
-    with tab_imp:
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            archivos = st.file_uploader(
-                "Extracto (PDF, Excel o CSV)",
-                type=["pdf", "xlsx", "xls", "csv"],
-                accept_multiple_files=True,
-                key=f"ae_pdfs_{sociedad_id}",
-            )
-        with c2:
-            excel_prov = st.file_uploader(
-                "Proveedores pendientes (Excel Tango)",
-                type=["xlsx", "xls", "csv"],
-                key=f"ae_prov_{sociedad_id}",
-            )
-        with c3:
-            excel_vep = st.file_uploader(
-                "Padrón VEPs AFIP (Excel)",
-                type=["xlsx", "xls", "csv"],
-                key=f"ae_vep_{sociedad_id}",
-            )
-        periodo_ui = st.date_input(
-            "Período (mes del extracto)",
-            value=st.session_state[periodo_key],
-            key=f"ae_periodo_ui_{sociedad_id}",
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        archivos = st.file_uploader(
+            "Extracto (PDF, Excel o CSV)",
+            type=["pdf", "xlsx", "xls", "csv"],
+            accept_multiple_files=True,
+            key=f"ae_pdfs_{sociedad_id}",
         )
-        st.session_state[periodo_key] = periodo_ui.replace(day=1)
-        periodo = _periodo_str(st.session_state[periodo_key])
+    with c2:
+        excel_prov = st.file_uploader(
+            "Proveedores pendientes (Excel Tango) — opcional",
+            type=["xlsx", "xls", "csv"],
+            key=f"ae_prov_{sociedad_id}",
+        )
+    with c3:
+        excel_vep = st.file_uploader(
+            "Padrón VEPs AFIP (Excel) — opcional",
+            type=["xlsx", "xls", "csv"],
+            key=f"ae_vep_{sociedad_id}",
+        )
+    periodo_ui = st.date_input(
+        "Período (mes del extracto)",
+        value=st.session_state[periodo_key],
+        key=f"ae_periodo_ui_{sociedad_id}",
+    )
+    st.session_state[periodo_key] = periodo_ui.replace(day=1)
+    periodo = _periodo_str(st.session_state[periodo_key])
 
-        if not plan_vinculado:
-            st.error("Vinculá el plan de cuentas de esta sociedad antes de clasificar.")
+    if not plan_vinculado:
+        st.error("Vinculá el plan de cuentas de esta sociedad antes de clasificar.")
 
-        if st.button("Leer y clasificar", type="primary", key=f"ae_run_{sociedad_id}"):
-            if not archivos:
-                st.error("Subí al menos un extracto.")
-            elif not plan_vinculado:
-                st.error("Falta el plan de cuentas de la sociedad.")
-            else:
-                with st.spinner("Leyendo extracto (OCR si es escaneo) con las reglas de la web…"):
-                    df, meta, errores = procesar_extractos_bancarios_pdfs(archivos)
-                    if errores:
-                        st.warning(
-                            "Algunos archivos tuvieron problemas: "
-                            + "; ".join(
-                                f"{e.get('archivo')}: {e.get('motivo')}" for e in errores[:5]
-                            )
+    if st.button("Leer y clasificar", type="primary", key=f"ae_run_{sociedad_id}"):
+        if not archivos:
+            st.error("Subí al menos un extracto arriba.")
+        elif not plan_vinculado:
+            st.error("Falta el plan de cuentas de la sociedad.")
+        else:
+            with st.spinner("Leyendo extracto (OCR si es escaneo) con las reglas de la web…"):
+                df, meta, errores = procesar_extractos_bancarios_pdfs(archivos)
+                if errores:
+                    st.warning(
+                        "Algunos archivos tuvieron problemas: "
+                        + "; ".join(
+                            f"{e.get('archivo')}: {e.get('motivo')}" for e in errores[:5]
                         )
-                    if df is None or getattr(df, "empty", True):
-                        st.error("No salieron movimientos del extracto.")
-                    else:
-                        if excel_prov is not None:
-                            n_p = db.reemplazar_proveedores_pendientes(
-                                sociedad_id, _cargar_proveedores_desde_upload(excel_prov)
-                            )
-                            st.info(f"Proveedores cargados: {n_p}")
-                        if excel_vep is not None:
-                            raw = excel_vep.read() if hasattr(excel_vep, "read") else excel_vep
-                            n_v = db.reemplazar_veps_afip(
-                                sociedad_id,
-                                _cargar_veps_excel(BytesIO(raw) if isinstance(raw, bytes) else excel_vep),
-                            )
-                            st.info(f"VEPs cargados: {n_v}")
-
-                        filas = df_extracto_a_filas(df)
-                        ok_saldo, msg_saldo = validar_saldos_corridos(filas)
-                        if not ok_saldo:
-                            st.error(f"Extracto sospechoso: {msg_saldo}")
-                        reglas = db.listar_reglas_clasificacion(solo_activas=True)
-                        proveedores = db.listar_proveedores_pendientes(sociedad_id, solo_libres=False)
-                        veps = db.listar_veps_afip(sociedad_id)
-                        banco = (
-                            str((meta or {}).get("banco") or "")
-                            or banco_elegido
-                            or ""
+                    )
+                if df is None or getattr(df, "empty", True):
+                    st.error("No salieron movimientos del extracto.")
+                else:
+                    if excel_prov is not None:
+                        n_p = db.reemplazar_proveedores_pendientes(
+                            sociedad_id, _cargar_proveedores_desde_upload(excel_prov)
                         )
-                        resultados = correr_motor(
-                            filas,
-                            reglas,
-                            proveedores,
-                            veps,
-                            cliente_id=sociedad_id,
-                            banco=banco,
-                            periodo=st.session_state[periodo_key],
-                            saldo_ok=ok_saldo,
+                        st.info(f"Proveedores cargados: {n_p}")
+                    if excel_vep is not None:
+                        raw = excel_vep.read() if hasattr(excel_vep, "read") else excel_vep
+                        n_v = db.reemplazar_veps_afip(
+                            sociedad_id,
+                            _cargar_veps_excel(BytesIO(raw) if isinstance(raw, bytes) else excel_vep),
                         )
-                        plan_df = st.session_state.get("plan_cuentas_df")
-                        movs = _aplicar_plan(_enriquecer(resultados), plan_df)
-                        st.session_state[preview_key] = {
-                            "movimientos": movs,
-                            "proveedores": proveedores,
-                            "banco": banco,
-                            "periodo": periodo,
-                            "meta": meta or {},
-                        }
-                        st.rerun()
+                        st.info(f"VEPs cargados: {n_v}")
 
-        preview = st.session_state.get(preview_key)
-        if preview:
-            movs = preview.get("movimientos") or []
-            st.success(
-                f"Propuesta lista: **{len(movs)}** movimientos · banco **{preview.get('banco') or '—'}**. "
-                "Todavía no se guardó. Revisá Análisis / Movimientos y confirmá."
-            )
-            reviso = st.checkbox(
-                "Revisé las pendientes. El motor propone; yo confirmo.",
-                key=f"ae_confirm_rev_{sociedad_id}",
-            )
+                    filas = df_extracto_a_filas(df)
+                    ok_saldo, msg_saldo = validar_saldos_corridos(filas)
+                    if not ok_saldo:
+                        st.error(f"Extracto sospechoso: {msg_saldo}")
+                    reglas = db.listar_reglas_clasificacion(solo_activas=True)
+                    proveedores = db.listar_proveedores_pendientes(sociedad_id, solo_libres=False)
+                    veps = db.listar_veps_afip(sociedad_id)
+                    banco = (
+                        str((meta or {}).get("banco") or "")
+                        or banco_elegido
+                        or ""
+                    )
+                    resultados = correr_motor(
+                        filas,
+                        reglas,
+                        proveedores,
+                        veps,
+                        cliente_id=sociedad_id,
+                        banco=banco,
+                        periodo=st.session_state[periodo_key],
+                        saldo_ok=ok_saldo,
+                    )
+                    plan_df = st.session_state.get("plan_cuentas_df")
+                    movs = _aplicar_plan(_enriquecer(resultados), plan_df)
+                    st.session_state[preview_key] = {
+                        "movimientos": movs,
+                        "proveedores": proveedores,
+                        "banco": banco,
+                        "periodo": periodo,
+                        "meta": meta or {},
+                    }
+                    st.rerun()
+
+    preview = st.session_state.get(preview_key)
+    if preview:
+        movs = preview.get("movimientos") or []
+        st.success(
+            f"Propuesta lista: **{len(movs)}** movimientos · banco **{preview.get('banco') or '—'}**. "
+            "Revisá las solapas de abajo y confirmá."
+        )
+        reviso = st.checkbox(
+            "Revisé las pendientes. El motor propone; yo confirmo.",
+            key=f"ae_confirm_rev_{sociedad_id}",
+        )
+        col_ok, col_no = st.columns(2)
+        with col_ok:
             if st.button("Confirmar y guardar", type="primary", key=f"ae_save_{sociedad_id}"):
                 if not reviso:
                     st.error("Tildá que revisaste antes de guardar.")
@@ -295,11 +280,25 @@ def render_conciliacion_ae(
                     st.session_state.pop(preview_key, None)
                     st.success("Guardado.")
                     st.rerun()
+        with col_no:
             if st.button("Descartar propuesta", key=f"ae_discard_{sociedad_id}"):
                 st.session_state.pop(preview_key, None)
                 st.rerun()
-        else:
-            st.info("Subí el extracto de esta sociedad y dale a **Leer y clasificar**.")
+
+    st.markdown("##### 2. Revisá cómo clasificó")
+    tab_an, tab_mov, tab_ing, tab_egr, tab_ret, tab_ded, tab_ic, tab_as, tab_reg = st.tabs(
+        [
+            "Análisis",
+            "Movimientos",
+            "Ingresos",
+            "Egresos",
+            "Retenciones",
+            "Deducciones",
+            "Inter-cuentas",
+            "Asiento Tango",
+            "Reglas",
+        ]
+    )
 
     preview = st.session_state.get(preview_key)
     if preview:
@@ -325,7 +324,7 @@ def render_conciliacion_ae(
 
     with tab_an:
         if not movs_vista:
-            st.info("Todavía no hay movimientos. Importá un extracto.")
+            st.info("Todavía no hay movimientos. Arriba subí el PDF del extracto y dale a **Leer y clasificar**.")
         else:
             _kpis(movs_vista)
             st.caption(
@@ -356,7 +355,10 @@ def render_conciliacion_ae(
             plan_cuentas=st.session_state.get("plan_cuentas_df"),
         )
         if not bridge:
-            st.info("No hay filas confirmadas para armar asiento.")
+            st.warning(
+                "Todavía no hay extracto. Arriba subí el PDF (o el Excel del banco) y dale a "
+                "**Leer y clasificar**. Recién después aparecen los renglones del asiento."
+            )
         else:
             df_as = pd.DataFrame(bridge)
             debe = float(df_as["debe"].sum()) if "debe" in df_as.columns else 0.0
