@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Demo motor extractos — Galicia</title>
+<style>
+  :root { --azul:#1F4E79; --tinta:#1a1a1a; --suave:#666; --zebra:#F2F2F2; --linea:#d9d9d9; --ok:#1B7A4A; --mal:#B42318; }
+  * { box-sizing: border-box; }
+  body { margin:0; font: 15px/1.45 Calibri, Segoe UI, sans-serif; color:var(--tinta); background:#fff; }
+  header { background:var(--azul); color:#fff; padding:22px 28px; }
+  header h1 { margin:0 0 4px; font-size:22px; font-weight:700; }
+  header p { margin:0; opacity:.85; font-size:14px; }
+  main { max-width:1180px; margin:0 auto; padding:22px 24px 48px; }
+  .kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:18px 0 22px; }
+  .kpi { border:1px solid var(--linea); padding:12px 14px; }
+  .kpi label { display:block; color:var(--suave); font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
+  .kpi b { font-size:20px; color:var(--azul); }
+  .pipe { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin:8px 0 22px; }
+  .step { border:1px solid var(--linea); padding:12px; min-height:92px; }
+  .step n { display:block; color:var(--azul); font-weight:700; font-size:12px; }
+  .drop { border:1px dashed var(--azul); padding:16px; text-align:center; margin:0 0 22px; background:#f7fafc; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { background:var(--azul); color:#fff; text-align:left; padding:8px 10px; font-weight:600; }
+  td { padding:7px 10px; border-bottom:1px solid var(--linea); vertical-align:top; }
+  tr:nth-child(even) td { background:var(--zebra); }
+  td.num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  td.cred { color:var(--ok); }
+  td.deb { color:var(--mal); }
+  .det { color:var(--suave); font-size:12px; max-width:420px; }
+  .pill { display:inline-block; padding:2px 8px; font-size:11px; border:1px solid var(--linea); }
+  .pill.ingreso { border-color:var(--ok); color:var(--ok); }
+  .pill.egreso, .pill.retencion, .pill.impuesto { border-color:var(--azul); color:var(--azul); }
+  .pill.sin-cat { color:var(--mal); border-color:var(--mal); }
+  .note { color:var(--suave); font-size:13px; margin:10px 0 18px; }
+  .ok { color:var(--ok); font-weight:700; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Motor de extractos Galicia</h1>
+  <p>Demo con BANCO GALICIA 042026.pdf — SUNNY BEACH SA · CUIT 30-71666637-5</p>
+</header>
+<main>
+  <p class="note">Heuristica MM-Studio (Y + importe/saldo) <b>mas OCR EasyOCR del estudio</b> cuando el PDF es imagen. Cadena de saldos: <span class="ok" id="cadena">35 / 35</span>.</p>
+  <div class="pipe">
+    <div class="step"><n>1. PDF</n>Texto nativo, o escaneo</div>
+    <div class="step"><n>2. OCR si hace falta</n>Si hay menos de 50 caracteres: EasyOCR por pagina (cache)</div>
+    <div class="step"><n>3. Lineas por Y</n>Misma altura = un renglon · ultimos 2 numeros = importe + saldo</div>
+    <div class="step"><n>4. RULES</n>FCI, IIBB, Ley 25413, terceros</div>
+  </div>
+  <div class="kpis">
+    <div class="kpi"><label>Movimientos</label><b id="k-n">36</b></div>
+    <div class="kpi"><label>Creditos</label><b id="k-c">$ 84.549.702,35</b></div>
+    <div class="kpi"><label>Debitos</label><b id="k-d">$ 7.646.290,15</b></div>
+    <div class="kpi"><label>Saldo final</label><b id="k-s">$ 114.394.451,84</b></div>
+  </div>
+  <div class="drop">
+    <b>Probar un extracto</b>
+    <div class="note" style="margin:6px 0 8px">Abril es digital. Junio 2025 es escaneado: ahi corre OCR (la primera vez tarda; despues usa cache).</div>
+    <button type="button" id="btn-abr" style="margin:4px">Abril 2026 digital</button>
+    <button type="button" id="btn-jun" style="margin:4px">Junio 2025 escaneado + OCR</button>
+    <div style="margin-top:10px"><input type="file" id="pdf" accept="application/pdf"/></div>
+    <div id="status" class="note"></div>
+  </div>
+  <table>
+    <thead><tr><th>Fecha</th><th>Descripcion</th><th>Credito</th><th>Debito</th><th>Saldo</th><th>Clasificacion</th></tr></thead>
+    <tbody id="tbody">
+    <tr><td>01/04/26</td><td><b>ANULACION DE TRANSFERENCIA</b><div class='det'>O/BCO O.S.U.T.H.G.R.A. 30531338657 CUOTAS</div></td><td class='num cred'>53.073,71</td><td class='num deb'></td><td class='num'>37.544.113,35</td><td><span class='pill sin-cat'>sin-cat</span></td></tr>
+<tr><td>01/04/26</td><td><b>TRANSFERENCIA DE TERCEROS</b><div class='det'>VENOM S.A. 30717455033 14300017250409437400 200040943 589244014325855582 FACTURA</div></td><td class='num cred'>51.053.280,00</td><td class='num deb'></td><td class='num'>88.597.393,35</td><td><span class='pill ingreso'>Transferencia de tercero</span></td></tr>
+<tr><td>01/04/26</td><td><b>ING. BRUTOS S/ CRED</b><div class='det'>LEY 12837-BS.AS.</div></td><td class='num cred'></td><td class='num deb'>1.276.332,00</td><td class='num'>87.321.061,35</td><td><span class='pill impuesto'>IIBB</span></td></tr>
+<tr><td>01/04/26</td><td><b>IMP. DEB. LEY 25413 GRAL.</b><div class='det'></div></td><td class='num cred'></td><td class='num deb'>7.657,99</td><td class='num'>87.313.403,36</td><td><span class='pill retencion'>ICDB Ley 25.413</span></td></tr>
+<tr><td>01/04/26</td><td><b>IMP. CRE. LEY 25413</b><div class='det'></div></td><td class='num cred'></td><td class='num deb'>306.319,68</td><td class='num'>87.007.083,68</td><td><span class='pill retencion'>ICDB Ley 25.413</span></td></tr>
+<tr><td>01/04/26</td><td><b>DEV.IMP.DEB.LEY</b><div class='det'>25413-ALIC.GENERAL</div></td><td class='num cred'>318,44</td><td class='num deb'></td><td class='num'>87.007.402,12</td><td><span class='pill sin-cat'>sin-cat</span></td></tr>
+<tr><td>01/04/26</td><td><b>COMISION SERVICIO DE CUENTA</b><div class='det'>Marzo 2026</div></td><td class='num cred'></td><td class='num deb'>60.000,00</td><td class='num'>86.947.402,12</td><td><span class='pill egreso'>Comisiones y gastos bancarios</span></td></tr>
+<tr><td>01/04/26</td><td><b>IVA</b><div class='det'>Marzo 2026</div></td><td class='num cred'></td><td class='num deb'>12.600,00</td><td class='num'>86.934.802,12</td><td><span class='pill impuesto'>IVA banco</span></td></tr>
+<tr><td>01/04/26</td><td><b>PERCEP. IVA</b><div class='det'>Marzo 2026</div></td><td class='num cred'></td><td class='num deb'>1.800,00</td><td class='num'>86.933.002,12</td><td><span class='pill retencion'>Percepcion IVA</span></td></tr>
+<tr><td>01/04/26</td><td><b>IMP. ING. BRUTOS</b><div class='det'>Marzo 2026 Pcia de Bs As</div></td><td class='num cred'></td><td class='num deb'>2.400,00</td><td class='num'>86.930.602,12</td><td><span class='pill impuesto'>IIBB</span></td></tr>
+<tr><td>01/04/26</td><td><b>IMP. DEB. LEY 25413 GRAL.</b><div class='det'></div></td><td class='num cred'></td><td class='num deb'>460,80</td><td class='num'>86.930.141,32</td><td><span class='pill retencion'>ICDB Ley 25.413</span></td></tr>
+<tr><td>06/04/26</td><td><b>PAGO VISA EMPRESA</b><div class='det'>D.A. AL VTO BUSINESS</div></td><td class='num cred'></td><td class='num deb'>20.511,91</td><td class='num'>86.909.629,41</td><td><span class='pill egreso'>Pago tarjeta VISA</span></td></tr>
+<tr><td>06/04/26</td><td><b>PAGO VISA EMPRESA</b><div class='det'>D.A. AL VTO BUSINESS</div></td><td class='num cred'></td><td class='num deb'>42.435,85</td><td class='num'>86.867.193,56</td><td><span class='pill egreso'>Pago tarjeta VISA</span></td></tr>
+<tr><td>06/04/26</td><td><b>IMP. DEB. LEY 25413 GRAL.</b><div class='det'></div></td><td class='num cred'></td><td class='num deb'>377,69</td><td class='num'>86.866.815,87</td><td><span class='pill retencion'>ICDB Ley 25.413</span></td></tr>
+<tr><td>09/04/26</td><td><b>TRANSF. AFIP</b><div class='det'>5650456495 VEP 1610798570</div></td><td class='num cred'></td><td class='num deb'>396.769,80</td><td class='num'>86.470.046,07</td><td><span class='pill impuesto'>Pago AFIP</span></td></tr>
+<tr><td>09/04/26</td><td><b>IMP. DEB. LEY 25413 GRAL.</b><div class='det'></div></td><td class='num cred'></td><td class='num deb'>2.380,62</td><td class='num'>86.467.665,45</td><td><span class='pill retencion'>ICDB Ley 25.413</span></td></tr>
+<tr><td>10/04/26</td><td><b>SERVICIO PAGO A PROVEEDORES</b><div class='det'>B SIDE SA 30709999474 FACTURAS</div></td><td class='num cred'>3.690.343,40</td><td class='num deb'></td><td class='num'>90.158.008,85</td><td><span class='pill sin-cat'>sin-cat</span></td></tr>
+<tr><td>10/04/26</td><td><b>ING. BRUTOS S/ CRED</b><div class='det'>LEY 12837-BS.AS.</div></td><td class='num cred'></td><td class='num deb'>92.258,59</td><td class='num'>90.065.750,26</td><td><span class='pill impuesto'>IIBB</span></td></tr>
+<tr><td>10/04/26</td><td><b>IMP. DEB. LEY 25413 GRAL.</b><div class='det'></div></td><td class='num cred'></td><td class='num deb'>553,55</td><td class='num'>90.065.196,71</td><td><span class='pill retencion'>ICDB Ley 25.413</span></td></tr>
+<tr><td>10/04/26</td><td><b>IMP. CRE. LEY 25413</b><div class='det'></div></td><td class='num cred'></td><td class='num deb'>22.142,06</td><td class='num'>90.043.054,65</td><td><span class='pill retencion'>ICDB Ley 25.413</span></td></tr>
+<tr><td>20/04/26</td><td><b>COM. DEPOSITO DE CHEQUE</b><div class='det'>80005797</div></td><td class='num cred'></td><td class='num deb'>166.609,40</td><td class='num'>89.876.445,25</td><td><span class='pill sin-cat'>sin-cat</span></td></tr>
+<tr><td>20/04/26</td><td><b>IVA</b><div class='det'></div></td><td class='num cred'></td><td class='num deb'>34.987,97</td><td class='num'>89.841.457,28</td><td><span class='pill impuesto'>IVA banco</span></td></tr>
+<tr><td>20/04/26</td><td><b>PERCEP. IVA</b><div class='det'></div></td><td class='num cred'></td><td class='num deb'>4.998,28</td><td class='num'>89.836.459,00</td><td><span class='pill retencion'>Percepcion IVA</span></td></tr>
+<tr><td>20/04/26</td><td><b>IMP. ING. BRUTOS</b><div class='det'>Pcia de Bs As</div></td><td class='num cred'></td><td class='num deb'>6.664,38</td><td class='num'>89.829.794,62</td><td><span class='pill impuesto'>IIBB</span></td></tr>
+<tr><td>20/04/26</td><td><b>IMP. DEB. LEY 25413 GRAL.</b><div class='det'></div></td><td class='num cred'></td><td class='num deb'>1.279,56</td><td class='num'>89.828.515,06</td><td><span class='pill retencion'>ICDB Ley 25.413</span></td></tr>
+<tr><td>21/04/26</td><td><b>G.DE ECHEQ Q80005797</b><div class='det'>BOL74380591</div></td><td class='num cred'>23.801.343,40</td><td class='num deb'></td><td class='num'>113.629.858,46</td><td><span class='pill sin-cat'>sin-cat</span></td></tr>
+<tr><td>21/04/26</td><td><b>ING. BRUTOS S/ CRED</b><div class='det'>LEY 12837-BS.AS.</div></td><td class='num cred'></td><td class='num deb'>595.033,59</td><td class='num'>113.034.824,87</td><td><span class='pill impuesto'>IIBB</span></td></tr>
+<tr><td>21/04/26</td><td><b>IMP. DEB. LEY 25413 GRAL.</b><div class='det'></div></td><td class='num cred'></td><td class='num deb'>3.570,20</td><td class='num'>113.031.254,67</td><td><span class='pill retencion'>ICDB Ley 25.413</span></td></tr>
+<tr><td>21/04/26</td><td><b>IMP. CRE. LEY 25413</b><div class='det'></div></td><td class='num cred'></td><td class='num deb'>142.808,06</td><td class='num'>112.888.446,61</td><td><span class='pill retencion'>ICDB Ley 25.413</span></td></tr>
+<tr><td>23/04/26</td><td><b>PAGO DE SERVICIOS 0001</b><div class='det'>ARBA IIBB 270307166663 589244000757079312</div></td><td class='num cred'></td><td class='num deb'>2.064.411,50</td><td class='num'>110.824.035,11</td><td><span class='pill retencion'>Ret. IIBB - ARBA</span></td></tr>
+<tr><td>23/04/26</td><td><b>TRANSF. AFIP</b><div class='det'>2850428101 VEP 1616818782</div></td><td class='num cred'></td><td class='num deb'>2.170.135,04</td><td class='num'>108.653.900,07</td><td><span class='pill impuesto'>Pago AFIP</span></td></tr>
+<tr><td>23/04/26</td><td><b>IMP. DEB. LEY 25413 GRAL.</b><div class='det'></div></td><td class='num cred'></td><td class='num deb'>25.407,28</td><td class='num'>108.628.492,79</td><td><span class='pill retencion'>ICDB Ley 25.413</span></td></tr>
+<tr><td>24/04/26</td><td><b>TRANSFERENCIAS CASH</b><div class='det'>PROVEEDORES ACTITUD ARGENTINA SA 30710787588 BANCO BBVA ARGENTINA</div></td><td class='num cred'>5.951.343,40</td><td class='num deb'></td><td class='num'>114.579.836,19</td><td><span class='pill sin-cat'>sin-cat</span></td></tr>
+<tr><td>24/04/26</td><td><b>ING. BRUTOS S/ CRED</b><div class='det'>LEY 12837-BS.AS.</div></td><td class='num cred'></td><td class='num deb'>148.783,59</td><td class='num'>114.431.052,60</td><td><span class='pill impuesto'>IIBB</span></td></tr>
+<tr><td>24/04/26</td><td><b>IMP. DEB. LEY 25413 GRAL.</b><div class='det'></div></td><td class='num cred'></td><td class='num deb'>892,70</td><td class='num'>114.430.159,90</td><td><span class='pill retencion'>ICDB Ley 25.413</span></td></tr>
+<tr><td>24/04/26</td><td><b>IMP. CRE. LEY 25413</b><div class='det'></div></td><td class='num cred'></td><td class='num deb'>35.708,06</td><td class='num'>114.394.451,84</td><td><span class='pill retencion'>ICDB Ley 25.413</span></td></tr>
+    </tbody>
+  </table>
+</main>
+<script>
+function ar(n){
+  if(n==null||n==="") return "";
+  const neg=n<0; const v=Math.abs(Number(n)).toFixed(2);
+  const [e,d]=v.split(".");
+  const e2=e.replace(/\B(?=(\d{3})+(?!\d))/g,".");
+  return (neg?"-":"")+e2+","+d;
+}
+function pintar(data){
+  const movs=data.movimientos||[];
+  document.getElementById("k-n").textContent=String(data.n||movs.length);
+  document.getElementById("k-c").textContent="$ "+ar(data.creditos||0);
+  document.getElementById("k-d").textContent="$ "+ar(data.debitos||0);
+  document.getElementById("k-s").textContent=data.saldo_final!=null?("$ "+ar(data.saldo_final)):"";
+  document.getElementById("cadena").textContent=(data.cadena_ok||0)+" / "+(data.cadena_total||0);
+  const origen=data.ocr?"OCR EasyOCR (escaneado)":"texto nativo";
+  document.getElementById("status").textContent=
+    (data.archivo||"")+" · "+origen+" · "+(data.n||0)+" movimientos · cadena "+(data.cadena_ok||0)+"/"+(data.cadena_total||0);
+  document.getElementById("tbody").innerHTML=movs.map(m=>
+    `<tr><td>${m.fecha}</td><td><b>${m.descripcion||""}</b><div class="det">${m.detalle||""}</div></td>`+
+    `<td class="num cred">${m.credito?ar(m.credito):""}</td>`+
+    `<td class="num deb">${m.debito?ar(m.debito):""}</td>`+
+    `<td class="num">${ar(m.saldo)}</td>`+
+    `<td><span class="pill ${m.categoria}">${m.sub && m.sub!=="-" ? m.sub : m.categoria}</span></td></tr>`
+  ).join("");
+}
+async function sample(id, label){
+  const st=document.getElementById("status");
+  st.textContent=label+"… si es escaneo la primera vez tarda (OCR).";
+  const r=await fetch("/parse-sample?id="+encodeURIComponent(id));
+  const data=await r.json();
+  if(!r.ok){ st.textContent=data.error||"Error"; return; }
+  pintar(data);
+}
+document.getElementById("btn-abr").onclick=()=>sample("042026","Abril 2026 digital");
+document.getElementById("btn-jun").onclick=()=>sample("062025","Junio 2025 escaneado + OCR");
+document.getElementById("pdf").addEventListener("change", async (ev)=>{
+  const f=ev.target.files[0]; if(!f) return;
+  const st=document.getElementById("status");
+  st.textContent="Parseando "+f.name+"… (OCR automatico si es escaneo)";
+  const r=await fetch("/parse", {method:"POST", headers:{"X-Filename": f.name}, body: await f.arrayBuffer()});
+  const data=await r.json();
+  if(!r.ok){ st.textContent=data.error||"Error"; return; }
+  pintar(data);
+});
+</script>
+</body></html>

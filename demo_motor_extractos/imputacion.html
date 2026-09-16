@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>AE-Studio · Imputación bancaria</title>
+<style>
+  :root { --bg:#0b1220; --side:#0e1628; --card:#141c2e; --line:#243049; --txt:#e8eef8; --dim:#8b9bb4; --ok:#3dd68c; --mal:#ff6b6b; --warn:#f5a524; --azul:#3b82f6; --lock:#64748b; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.4 Segoe UI, sans-serif; background:var(--bg); color:var(--txt); display:flex; min-height:100vh; }
+  aside { width:220px; background:var(--side); border-right:1px solid var(--line); padding:18px 14px; }
+  aside h1 { font-size:15px; margin:0 0 18px; letter-spacing:.04em; }
+  aside a { display:block; color:var(--dim); text-decoration:none; padding:8px 10px; border-radius:6px; }
+  aside a.on, aside a:hover { background:var(--card); color:var(--txt); }
+  aside .sec { margin:16px 0 6px; font-size:11px; color:var(--dim); text-transform:uppercase; letter-spacing:.08em; }
+  main { flex:1; padding:20px 24px 48px; overflow:auto; }
+  .top { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+  .kpis { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-bottom:16px; }
+  .kpi { background:var(--card); border:1px solid var(--line); padding:12px; }
+  .kpi b { display:block; font-size:18px; }
+  .kpi span { color:var(--dim); font-size:11px; text-transform:uppercase; }
+  .kpi.ok b { color:var(--ok); } .kpi.mal b { color:var(--mal); } .kpi.warn b { color:var(--warn); } .kpi.azul b { color:var(--azul); }
+  table { width:100%; border-collapse:collapse; font-size:13px; background:var(--card); }
+  th { text-align:left; color:var(--dim); font-weight:600; padding:8px 10px; border-bottom:1px solid var(--line); }
+  td { padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  td.num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .det { color:var(--dim); font-size:12px; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; }
+  .pill.fija { background:#1f2937; color:#cbd5e1; }
+  .pill.sugerida { background:#16325c; color:#93c5fd; }
+  .pill.pendiente { background:#3a2710; color:var(--warn); }
+  select { background:var(--bg); color:var(--txt); border:1px solid var(--line); padding:4px 6px; max-width:280px; }
+  select:disabled { opacity:.7; }
+  button { background:var(--azul); color:#fff; border:0; padding:8px 14px; border-radius:6px; cursor:pointer; }
+  button.ghost { background:transparent; border:1px solid var(--line); color:var(--txt); }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  .note { color:var(--dim); font-size:12px; margin-top:8px; }
+  .foot { display:flex; gap:8px; margin-top:16px; align-items:center; }
+</style>
+</head>
+<body>
+<aside>
+  <h1>AE · Estudio</h1>
+  <div class="sec">Analisis</div>
+  <a href="imputacion.html" class="on">Movimientos</a>
+  <a href="#deudores">Deudores</a>
+  <a href="#proveedores">Proveedores</a>
+  <div class="sec">Salida</div>
+  <a href="#tango">Asiento Tango</a>
+  <a href="#papeles">Papeles de trabajo</a>
+  <div class="sec">Sistema</div>
+  <a href="index.html">Buzon OCR</a>
+</aside>
+<main>
+  <div class="top">
+    <div>
+      <div style="font-size:20px;font-weight:700">SUNNY BEACH SA · Banco Galicia</div>
+      <div class="note">Misma grilla del extracto, con imputacion. Generales = cuenta fija. Transferencias = deudor/proveedor.</div>
+    </div>
+    <button type="button" onclick="location.href='index.html'">Importar extracto</button>
+  </div>
+  <div class="kpis">
+    <div class="kpi"><span>Movimientos</span><b id="k-n">0</b></div>
+    <div class="kpi ok"><span>Fijas</span><b id="k-f">0</b></div>
+    <div class="kpi azul"><span>Sugeridas padron</span><b id="k-s">0</b></div>
+    <div class="kpi warn"><span>A imputar</span><b id="k-p">0</b></div>
+    <div class="kpi ok"><span>Creditos</span><b id="k-c">0</b></div>
+    <div class="kpi mal"><span>Debitos</span><b id="k-d">0</b></div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Fecha</th><th>Descripcion</th><th>Credito</th><th>Debito</th><th>Saldo</th>
+        <th>Imputacion</th><th>Contraparte</th><th>Origen</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+  <div class="foot">
+    <button type="button" disabled title="Plantilla vacia pendiente">Generar asiento Tango</button>
+    <button type="button" class="ghost" disabled title="Plantilla vacia pendiente">Armar papeles de trabajo</button>
+    <span class="note">Esas dos salidas usan las plantillas vacias que me vas a pasar. Hasta entonces no invento el formato.</span>
+  </div>
+  <h3 id="deudores" style="margin-top:28px">Deudores (padron)</h3>
+  <div id="lst-deu" class="note"></div>
+  <h3 id="proveedores">Proveedores (padron)</h3>
+  <div id="lst-prv" class="note"></div>
+</main>
+<script>
+const DATA = {"movimientos": [{"fecha": "01/04/26", "descripcion": "ANULACION DE TRANSFERENCIA", "detalle": "O/BCO O.S.U.T.H.G.R.A. 30531338657 CUOTAS", "credito": 53073.71, "debito": 0, "monto": 53073.71, "saldo": 37544113.35, "categoria": "ingreso", "sub": "-", "imputacion": "Proveedores · O.S.U.T.H.G.R.A.", "cuenta": "211011", "origen_imputacion": "sugerida", "contraparte": "O.S.U.T.H.G.R.A.", "tipo_contraparte": "Proveedor", "cuit_contraparte": "30531338657", "editable": true}, {"fecha": "01/04/26", "descripcion": "TRANSFERENCIA DE TERCEROS", "detalle": "VENOM S.A. 30717455033 14300017250409437400 200040943 589244014325855582 FACTURA", "credito": 51053280.0, "debito": 0, "monto": 51053280.0, "saldo": 88597393.35, "categoria": "ingreso", "sub": "Transferencia de tercero", "imputacion": "Deudores por ventas · VENOM S.A.", "cuenta": "113001", "origen_imputacion": "sugerida", "contraparte": "VENOM S.A.", "tipo_contraparte": "Deudor", "cuit_contraparte": "30717455033", "editable": true}, {"fecha": "01/04/26", "descripcion": "ING. BRUTOS S/ CRED", "detalle": "LEY 12837-BS.AS.", "credito": 0, "debito": 1276332.0, "monto": -1276332.0, "saldo": 87321061.35, "categoria": "impositivo", "sub": "IIBB", "imputacion": "IIBB", "cuenta": "532003", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "01/04/26", "descripcion": "IMP. DEB. LEY 25413 GRAL.", "detalle": "", "credito": 0, "debito": 7657.99, "monto": -7657.99, "saldo": 87313403.36, "categoria": "retencion", "sub": "ICDB Ley 25.413", "imputacion": "Impuesto Ley 25.413", "cuenta": "532001", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "01/04/26", "descripcion": "IMP. CRE. LEY 25413", "detalle": "", "credito": 0, "debito": 306319.68, "monto": -306319.68, "saldo": 87007083.68, "categoria": "retencion", "sub": "ICDB Ley 25.413", "imputacion": "Impuesto Ley 25.413", "cuenta": "532001", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "01/04/26", "descripcion": "DEV.IMP.DEB.LEY", "detalle": "25413-ALIC.GENERAL", "credito": 318.44, "debito": 0, "monto": 318.44, "saldo": 87007402.12, "categoria": "retencion", "sub": "-", "imputacion": "Impuesto Ley 25.413", "cuenta": "532001", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "01/04/26", "descripcion": "COMISION SERVICIO DE CUENTA", "detalle": "Marzo 2026", "credito": 0, "debito": 60000.0, "monto": -60000.0, "saldo": 86947402.12, "categoria": "egreso", "sub": "Comisiones y gastos bancarios", "imputacion": "Gastos bancarios", "cuenta": "521001", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "01/04/26", "descripcion": "IVA", "detalle": "Marzo 2026", "credito": 0, "debito": 12600.0, "monto": -12600.0, "saldo": 86934802.12, "categoria": "impositivo", "sub": "IVA banco", "imputacion": "IVA comisiones bancarias", "cuenta": "532002", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "01/04/26", "descripcion": "PERCEP. IVA", "detalle": "Marzo 2026", "credito": 0, "debito": 1800.0, "monto": -1800.0, "saldo": 86933002.12, "categoria": "retencion", "sub": "Percepcion IVA", "imputacion": "Percepción IVA", "cuenta": "114002", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "01/04/26", "descripcion": "IMP. ING. BRUTOS", "detalle": "Marzo 2026 Pcia de Bs As", "credito": 0, "debito": 2400.0, "monto": -2400.0, "saldo": 86930602.12, "categoria": "impositivo", "sub": "IIBB", "imputacion": "IIBB", "cuenta": "532003", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "01/04/26", "descripcion": "IMP. DEB. LEY 25413 GRAL.", "detalle": "", "credito": 0, "debito": 460.8, "monto": -460.8, "saldo": 86930141.32, "categoria": "retencion", "sub": "ICDB Ley 25.413", "imputacion": "Impuesto Ley 25.413", "cuenta": "532001", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "06/04/26", "descripcion": "PAGO VISA EMPRESA", "detalle": "D.A. AL VTO BUSINESS", "credito": 0, "debito": 20511.91, "monto": -20511.91, "saldo": 86909629.41, "categoria": "egreso", "sub": "Pago tarjeta VISA", "imputacion": "Tarjeta corporativa", "cuenta": "211002", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "06/04/26", "descripcion": "PAGO VISA EMPRESA", "detalle": "D.A. AL VTO BUSINESS", "credito": 0, "debito": 42435.85, "monto": -42435.85, "saldo": 86867193.56, "categoria": "egreso", "sub": "Pago tarjeta VISA", "imputacion": "Tarjeta corporativa", "cuenta": "211002", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "06/04/26", "descripcion": "IMP. DEB. LEY 25413 GRAL.", "detalle": "", "credito": 0, "debito": 377.69, "monto": -377.69, "saldo": 86866815.87, "categoria": "retencion", "sub": "ICDB Ley 25.413", "imputacion": "Impuesto Ley 25.413", "cuenta": "532001", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "09/04/26", "descripcion": "TRANSF. AFIP", "detalle": "5650456495 VEP 1610798570", "credito": 0, "debito": 396769.8, "monto": -396769.8, "saldo": 86470046.07, "categoria": "impositivo", "sub": "Pago AFIP", "imputacion": "Pagos AFIP", "cuenta": "211001", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "09/04/26", "descripcion": "IMP. DEB. LEY 25413 GRAL.", "detalle": "", "credito": 0, "debito": 2380.62, "monto": -2380.62, "saldo": 86467665.45, "categoria": "retencion", "sub": "ICDB Ley 25.413", "imputacion": "Impuesto Ley 25.413", "cuenta": "532001", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "10/04/26", "descripcion": "SERVICIO PAGO A PROVEEDORES", "detalle": "B SIDE SA 30709999474 FACTURAS", "credito": 3690343.4, "debito": 0, "monto": 3690343.4, "saldo": 90158008.85, "categoria": "ingreso", "sub": "-", "imputacion": "Proveedores · B SIDE SA", "cuenta": "211010", "origen_imputacion": "sugerida", "contraparte": "B SIDE SA", "tipo_contraparte": "Proveedor", "cuit_contraparte": "30709999474", "editable": true}, {"fecha": "10/04/26", "descripcion": "ING. BRUTOS S/ CRED", "detalle": "LEY 12837-BS.AS.", "credito": 0, "debito": 92258.59, "monto": -92258.59, "saldo": 90065750.26, "categoria": "impositivo", "sub": "IIBB", "imputacion": "IIBB", "cuenta": "532003", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "10/04/26", "descripcion": "IMP. DEB. LEY 25413 GRAL.", "detalle": "", "credito": 0, "debito": 553.55, "monto": -553.55, "saldo": 90065196.71, "categoria": "retencion", "sub": "ICDB Ley 25.413", "imputacion": "Impuesto Ley 25.413", "cuenta": "532001", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "10/04/26", "descripcion": "IMP. CRE. LEY 25413", "detalle": "", "credito": 0, "debito": 22142.06, "monto": -22142.06, "saldo": 90043054.65, "categoria": "retencion", "sub": "ICDB Ley 25.413", "imputacion": "Impuesto Ley 25.413", "cuenta": "532001", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "20/04/26", "descripcion": "COM. DEPOSITO DE CHEQUE", "detalle": "80005797", "credito": 0, "debito": 166609.4, "monto": -166609.4, "saldo": 89876445.25, "categoria": "egreso", "sub": "-", "imputacion": "Gastos bancarios", "cuenta": "521001", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "20/04/26", "descripcion": "IVA", "detalle": "", "credito": 0, "debito": 34987.97, "monto": -34987.97, "saldo": 89841457.28, "categoria": "impositivo", "sub": "IVA banco", "imputacion": "IVA comisiones bancarias", "cuenta": "532002", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "20/04/26", "descripcion": "PERCEP. IVA", "detalle": "", "credito": 0, "debito": 4998.28, "monto": -4998.28, "saldo": 89836459.0, "categoria": "retencion", "sub": "Percepcion IVA", "imputacion": "Percepción IVA", "cuenta": "114002", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "20/04/26", "descripcion": "IMP. ING. BRUTOS", "detalle": "Pcia de Bs As", "credito": 0, "debito": 6664.38, "monto": -6664.38, "saldo": 89829794.62, "categoria": "impositivo", "sub": "IIBB", "imputacion": "IIBB", "cuenta": "532003", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "20/04/26", "descripcion": "IMP. DEB. LEY 25413 GRAL.", "detalle": "", "credito": 0, "debito": 1279.56, "monto": -1279.56, "saldo": 89828515.06, "categoria": "retencion", "sub": "ICDB Ley 25.413", "imputacion": "Impuesto Ley 25.413", "cuenta": "532001", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "21/04/26", "descripcion": "G.DE ECHEQ Q80005797", "detalle": "BOL74380591", "credito": 23801343.4, "debito": 0, "monto": 23801343.4, "saldo": 113629858.46, "categoria": "ingreso", "sub": "-", "imputacion": "A imputar · Deudor (cobranza)", "cuenta": "", "origen_imputacion": "pendiente", "contraparte": "", "tipo_contraparte": "Deudor", "cuit_contraparte": "", "editable": true}, {"fecha": "21/04/26", "descripcion": "ING. BRUTOS S/ CRED", "detalle": "LEY 12837-BS.AS.", "credito": 0, "debito": 595033.59, "monto": -595033.59, "saldo": 113034824.87, "categoria": "impositivo", "sub": "IIBB", "imputacion": "IIBB", "cuenta": "532003", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "21/04/26", "descripcion": "IMP. DEB. LEY 25413 GRAL.", "detalle": "", "credito": 0, "debito": 3570.2, "monto": -3570.2, "saldo": 113031254.67, "categoria": "retencion", "sub": "ICDB Ley 25.413", "imputacion": "Impuesto Ley 25.413", "cuenta": "532001", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "21/04/26", "descripcion": "IMP. CRE. LEY 25413", "detalle": "", "credito": 0, "debito": 142808.06, "monto": -142808.06, "saldo": 112888446.61, "categoria": "retencion", "sub": "ICDB Ley 25.413", "imputacion": "Impuesto Ley 25.413", "cuenta": "532001", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "23/04/26", "descripcion": "PAGO DE SERVICIOS 0001", "detalle": "ARBA IIBB 270307166663 589244000757079312", "credito": 0, "debito": 2064411.5, "monto": -2064411.5, "saldo": 110824035.11, "categoria": "impositivo", "sub": "Ret. IIBB - ARBA", "imputacion": "ARBA IIBB", "cuenta": "211003", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "23/04/26", "descripcion": "TRANSF. AFIP", "detalle": "2850428101 VEP 1616818782", "credito": 0, "debito": 2170135.04, "monto": -2170135.04, "saldo": 108653900.07, "categoria": "impositivo", "sub": "Pago AFIP", "imputacion": "Pagos AFIP", "cuenta": "211001", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "23/04/26", "descripcion": "IMP. DEB. LEY 25413 GRAL.", "detalle": "", "credito": 0, "debito": 25407.28, "monto": -25407.28, "saldo": 108628492.79, "categoria": "retencion", "sub": "ICDB Ley 25.413", "imputacion": "Impuesto Ley 25.413", "cuenta": "532001", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "24/04/26", "descripcion": "TRANSFERENCIAS CASH", "detalle": "PROVEEDORES ACTITUD ARGENTINA SA 30710787588 BANCO BBVA ARGENTINA", "credito": 5951343.4, "debito": 0, "monto": 5951343.4, "saldo": 114579836.19, "categoria": "ingreso", "sub": "-", "imputacion": "Deudores por ventas · ACTITUD ARGENTINA SA", "cuenta": "113002", "origen_imputacion": "sugerida", "contraparte": "ACTITUD ARGENTINA SA", "tipo_contraparte": "Deudor", "cuit_contraparte": "30710787588", "editable": true}, {"fecha": "24/04/26", "descripcion": "ING. BRUTOS S/ CRED", "detalle": "LEY 12837-BS.AS.", "credito": 0, "debito": 148783.59, "monto": -148783.59, "saldo": 114431052.6, "categoria": "impositivo", "sub": "IIBB", "imputacion": "IIBB", "cuenta": "532003", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "24/04/26", "descripcion": "IMP. DEB. LEY 25413 GRAL.", "detalle": "", "credito": 0, "debito": 892.7, "monto": -892.7, "saldo": 114430159.9, "categoria": "retencion", "sub": "ICDB Ley 25.413", "imputacion": "Impuesto Ley 25.413", "cuenta": "532001", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}, {"fecha": "24/04/26", "descripcion": "IMP. CRE. LEY 25413", "detalle": "", "credito": 0, "debito": 35708.06, "monto": -35708.06, "saldo": 114394451.84, "categoria": "retencion", "sub": "ICDB Ley 25.413", "imputacion": "Impuesto Ley 25.413", "cuenta": "532001", "origen_imputacion": "fija", "contraparte": "", "tipo_contraparte": "", "editable": false}], "resumen": {"total": 36, "fijas": 31, "sugeridas": 4, "pendientes": 1}, "archivo": "BANCO GALICIA 042026.pdf", "cliente": "SUNNY BEACH SA"};
+const PADRON = {"cliente": "SUNNY BEACH SA", "cuit": "30716666375", "deudores": [{"cuit": "30717455033", "nombre": "VENOM S.A.", "cuenta": "113001", "imputacion": "Deudores por ventas · VENOM S.A."}, {"cuit": "30710787588", "nombre": "ACTITUD ARGENTINA SA", "cuenta": "113002", "imputacion": "Deudores por ventas · ACTITUD ARGENTINA SA"}], "proveedores": [{"cuit": "30709999474", "nombre": "B SIDE SA", "cuenta": "211010", "imputacion": "Proveedores · B SIDE SA"}, {"cuit": "30531338657", "nombre": "O.S.U.T.H.G.R.A.", "cuenta": "211011", "imputacion": "Proveedores · O.S.U.T.H.G.R.A."}]};
+function ar(n){ if(!n) return ""; const neg=n<0; const [e,d]=Math.abs(n).toFixed(2).split("."); return (neg?"-":"")+e.replace(/\B(?=(\d{3})+(?!\d))/g,".")+","+d; }
+function opciones(m){
+  const opts=["Gastos bancarios","Deudores por ventas","Proveedores","Cheques a depositar","Valores diferidos","A imputar"];
+  (PADRON.deudores||[]).forEach(p=>opts.push("Deudores por ventas · "+p.nombre));
+  (PADRON.proveedores||[]).forEach(p=>opts.push("Proveedores · "+p.nombre));
+  const cur=m.imputacion||"A imputar";
+  if(!opts.includes(cur)) opts.unshift(cur);
+  return opts.map(o=>`<option ${o===cur?"selected":""}>${o}</option>`).join("");
+}
+function pintar(){
+  const movs=DATA.movimientos||[];
+  const r=DATA.resumen||{};
+  document.getElementById("k-n").textContent=r.total||movs.length;
+  document.getElementById("k-f").textContent=r.fijas||0;
+  document.getElementById("k-s").textContent=r.sugeridas||0;
+  document.getElementById("k-p").textContent=r.pendientes||0;
+  document.getElementById("k-c").textContent="$ "+ar(movs.reduce((s,m)=>s+(m.credito||0),0));
+  document.getElementById("k-d").textContent="$ "+ar(movs.reduce((s,m)=>s+(m.debito||0),0));
+  document.getElementById("tbody").innerHTML=movs.map((m,i)=>{
+    const lock=m.origen_imputacion==="fija";
+    const imp = lock
+      ? `<span title="Cuenta fija ${m.cuenta||""}">${m.imputacion}</span>`
+      : `<select data-i="${i}">${opciones(m)}</select>`;
+    return `<tr>
+      <td>${m.fecha}</td>
+      <td><b>${m.descripcion||""}</b><div class="det">${m.detalle||""}</div></td>
+      <td class="num" style="color:var(--ok)">${m.credito?ar(m.credito):""}</td>
+      <td class="num" style="color:var(--mal)">${m.debito?ar(m.debito):""}</td>
+      <td class="num">${ar(m.saldo)}</td>
+      <td>${imp}</td>
+      <td>${m.contraparte||""}</td>
+      <td><span class="pill ${m.origen_imputacion}">${m.origen_imputacion}</span></td>
+    </tr>`;
+  }).join("");
+  document.getElementById("lst-deu").textContent=(PADRON.deudores||[]).map(p=>p.nombre+" · "+p.cuit+" · "+p.cuenta).join("  |  ")||"Sin padron";
+  document.getElementById("lst-prv").textContent=(PADRON.proveedores||[]).map(p=>p.nombre+" · "+p.cuit+" · "+p.cuenta).join("  |  ")||"Sin padron";
+}
+pintar();
+</script>
+</body></html>

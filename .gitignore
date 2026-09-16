@@ -46,6 +46,8 @@ debug*.png
 debug*.log
 *_ocr.json
 image_*.png
+_cache_extractos*/
+_cache_fcc_rele/
 
 # Client / work data (do not upload real client files)
 clientes/

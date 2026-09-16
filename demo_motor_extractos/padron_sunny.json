@@ -1,0 +1,12 @@
+{
+  "cliente": "SUNNY BEACH SA",
+  "cuit": "30716666375",
+  "deudores": [
+    {"cuit": "30717455033", "nombre": "VENOM S.A.", "cuenta": "113001", "imputacion": "Deudores por ventas · VENOM S.A."},
+    {"cuit": "30710787588", "nombre": "ACTITUD ARGENTINA SA", "cuenta": "113002", "imputacion": "Deudores por ventas · ACTITUD ARGENTINA SA"}
+  ],
+  "proveedores": [
+    {"cuit": "30709999474", "nombre": "B SIDE SA", "cuenta": "211010", "imputacion": "Proveedores · B SIDE SA"},
+    {"cuit": "30531338657", "nombre": "O.S.U.T.H.G.R.A.", "cuenta": "211011", "imputacion": "Proveedores · O.S.U.T.H.G.R.A."}
+  ]
+}
