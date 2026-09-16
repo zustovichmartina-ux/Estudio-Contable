@@ -34,6 +34,7 @@ from afip_worker.ui_streamlit import render_arca_module
 from inversiones_ui import seccion_inversiones_arg
 from cruce_facturas_arca import procesar_cruce_facturas_arca
 from ui_extractos import render_herramienta_extractos
+from ui_conciliacion_ae import render_conciliacion_ae
 from procesador import (
     BANCOS_ARGENTINOS,
     COMPRAS_TANGO_PATH,
@@ -11226,11 +11227,10 @@ def _seccion_conciliacion_bancaria_balance() -> None:
     with st.container():
         _mostrar_aviso_cambio_sociedad()
         st.caption(
-            "Extracción mensual desde el Balance por solapa de banco. El motor de coordenadas "
-            "Debe/Haber congela columnas mellizas y genera asientos listos para Tango "
-            "(PES, Ingresado, tipo **CN** según el instructivo de asientos). "
-            "IVA/IIBB siguen exportándose como VARIOS. "
-            "Si el asiento no cierra o hay 99999, no se archiva ni se exporta."
+            "Cliente → extracto → las mismas reglas de la web (Conceptos Bancos, reglas locales, "
+            "padrón, plan de esta sociedad), mostradas como en AE-Studio: Ingresos, Egresos, "
+            "Retenciones, Deducciones e Inter-cuentas. El asiento CN desde el Balance Excel "
+            "sigue disponible abajo, plegado."
         )
 
         clientes = db.listar_clientes()
@@ -11280,22 +11280,18 @@ def _seccion_conciliacion_bancaria_balance() -> None:
         cuit_activo = st.session_state.cuit_activo
         nombre_activo = st.session_state.nombre_activo
 
-        _seccion_conciliacion_bancaria_banco(
-            banco_elegido, sociedad_id, cuit_activo, nombre_activo, plan_vinculado,
+        render_conciliacion_ae(
+            sociedad_id=int(sociedad_id),
+            banco_elegido=str(banco_elegido or ""),
+            cuit_activo=cuit_activo,
+            nombre_activo=nombre_activo,
+            plan_vinculado=bool(plan_vinculado),
         )
 
-        # Motor de conciliación (extracto PDF → reglas → match proveedores/VEPs)
-        try:
-            from ui_motor_conciliacion import render_motor_conciliacion
-
-            render_motor_conciliacion(
-                sociedad_id=int(sociedad_id),
-                banco_elegido=str(banco_elegido or ""),
-                cuit_activo=cuit_activo,
-                nombre_activo=nombre_activo,
+        with st.expander("Asiento CN desde el Balance Excel (flujo anterior)", expanded=False):
+            _seccion_conciliacion_bancaria_banco(
+                banco_elegido, sociedad_id, cuit_activo, nombre_activo, plan_vinculado,
             )
-        except Exception as exc:
-            st.error(f"Motor de conciliación no disponible: {exc}")
 
 
 def _seccion_devengamientos_iibb(
@@ -13659,7 +13655,7 @@ def main() -> None:
         st.markdown(
             f"""
             - **Devengamientos de Fin de Mes**: solo Personas Jurídicas → Excel asientos Tango.
-            - **Conciliación Bancaria**: extractos PDF + lista Tango → planilla Excel clonada.
+            - **Conciliación Bancaria**: extracto PDF → clasificación de la web (Conceptos Bancos + plan del cliente) en vistas Ingresos / Egresos / Retenciones / Deducciones / Inter-cuentas.
             - **Préstamos Financieros**: auditoría de cuotas desde PDFs bancarios.
             - **Inversiones**: carga de operaciones, depuración del pool USD y patrimonio (Ganancias / bienes personales).
             - **Herramientas**: recategorización monotributo; matcheo PDF + Tango; cuadro bancario; extractos; FCI FIFO; caja USD; liquidaciones; cruce facturas.

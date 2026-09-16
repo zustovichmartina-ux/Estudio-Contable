@@ -151,6 +151,96 @@ def _parse_fecha(val: Any) -> date | None:
     return None
 
 
+_TOKENS_INTER = (
+    "FIMA",
+    "FCI",
+    "FONDOS DE INVERSION",
+    "FONDOS COMUNES",
+    "CTAS PROPIAS",
+    "CUENTA PROPIA",
+    "E/CTAS",
+    "ENTRE CUENTAS",
+    "MONEDA EXTRANJ",
+)
+_TOKENS_RETENCION = (
+    "25413",
+    "PERCEPCION",
+    "RETENCION",
+    "SIRCREB",
+    "IIBB",
+    "ING BRUTOS",
+    "ING. BRUTOS",
+    "ARBA",
+    "DEBITOS Y CREDITOS",
+    "DEB/CRED",
+    "LEY 25",
+)
+_TOKENS_DEDUCCION = (
+    "AUTONOM",
+    "MONOTRIBUTO",
+    "OBRA SOCIAL",
+    "PREPAGA",
+    "SEGURO",
+)
+_LABEL_EXTRACTO_A_VISTA = {
+    "pago arba": "retencion",
+    "sircreb": "retencion",
+    "ingresos brutos tucuman": "retencion",
+    "impuestos a los debitos y creditos": "retencion",
+    "impuesto a los sellos": "retencion",
+    "percepcion iva": "retencion",
+    "iva": "retencion",
+    "iibb": "retencion",
+    "rescate fima": "inter-cta",
+    "suscripcion fci": "inter-cta",
+    "transferencias recibidas": "ingreso",
+    "pagos recibidos": "ingreso",
+    "acreditaciones comercios": "ingreso",
+    "depositos en efvo": "ingreso",
+    "cheques recibidos": "ingreso",
+    "intereses": "ingreso",
+    "transferencias emitidas": "egreso",
+    "cheques emitidos": "egreso",
+    "gastos bancarios": "egreso",
+    "pago de haberes": "egreso",
+    "pagos afip": "egreso",
+    "pagos tarjeta corporativa": "egreso",
+    "compras": "egreso",
+    "pago de servicios": "egreso",
+    "inversiones": "inter-cta",
+}
+
+
+def bucket_ae(mov: dict, *, extracto_label: str = "") -> str:
+    """Vista AE-Studio (Ingresos/Egresos/…) sobre la clasificación que ya hace la web."""
+    tipo = str(mov.get("tipo") or "")
+    cat = normalizar_texto(str(mov.get("categoria") or ""))
+    desc = normalizar_texto(str(mov.get("descripcion") or ""))
+    label = normalizar_texto(extracto_label)
+    blob = f"{cat} {desc} {label}"
+    credito = money(mov.get("credito"))
+    debito = money(mov.get("debito"))
+
+    if tipo == "INGRESO_O_DEBITO_PROPIO" or any(t in blob for t in _TOKENS_INTER):
+        return "inter-cta"
+    if tipo == "DEBITO_IMPUESTO" or any(t in blob for t in _TOKENS_RETENCION):
+        return "retencion"
+    if "IVA" in blob and ("PERCEP" in blob or "TASA GENERAL" in blob or "ALQUILER" in blob):
+        return "retencion"
+    if any(t in blob for t in _TOKENS_DEDUCCION):
+        return "deduccion"
+    mapped = _LABEL_EXTRACTO_A_VISTA.get(label.lower())
+    if mapped:
+        if mapped == "ingreso" and debito > credito:
+            return "egreso"
+        return mapped
+    if tipo == "INGRESO" or credito > debito:
+        return "ingreso"
+    if "IDENTIFICAR" in cat or tipo == "DEBITO_REVISAR":
+        return "sin-cat"
+    return "egreso"
+
+
 def clasificar(
     descripcion: str,
     reglas: list[dict] | None = None,
@@ -404,10 +494,11 @@ def correr_motor(
         desc = str(f.get("descripcion") or "")
         credito = money(f.get("credito"))
         debito = money(f.get("debito"))
+        banco_fila = str(f.get("banco") or "").strip() or str(banco or "")
         clf = clasificar(
             desc,
             reglas,
-            banco=banco or str(f.get("banco") or ""),
+            banco=banco_fila,
             debito=float(debito),
             credito=float(credito),
             instructivo=instructivo,
@@ -488,7 +579,7 @@ def correr_motor(
         resultados.append(
             {
                 "cliente_id": cliente_id,
-                "banco": banco or f.get("banco") or "",
+                "banco": banco_fila or f.get("banco") or "",
                 "periodo": periodo,
                 "fecha": f.get("fecha"),
                 "descripcion": desc,
