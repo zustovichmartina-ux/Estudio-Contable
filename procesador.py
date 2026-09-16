@@ -30,6 +30,8 @@ from openpyxl.utils import get_column_letter
 from PIL import Image
 from rapidfuzz import fuzz, process
 
+from extracto_layout import lineas_desde_paginas, lineas_por_y, parsear_lineas
+
 BASE_DIR = Path(__file__).resolve().parent
 RUTA_RAIZ_CLIENTES = BASE_DIR / "clientes"
 BALANCE_LOCAL_POR_SOCIEDAD: dict[str, str] = {
@@ -6584,6 +6586,55 @@ def _filas_desde_galicia_bytes(data: bytes, archivo: str) -> list[dict]:
     return [_movimiento_banco_a_fila_extracto(m) for m in movs]
 
 
+def _filas_desde_movs_layout(movs: list[dict], nombre: str, banco_slug: str) -> list[dict]:
+    """Convierte el parseo por Y (importe+saldo) al formato unificado del estudio."""
+    display = _nombre_display_banco(banco_slug)
+    out: list[dict] = []
+    for m in movs or []:
+        fecha = _parse_fecha_extracto(str(m.get("fecha") or ""))
+        if fecha is None:
+            continue
+        mov = MovimientoBanco(
+            fecha=fecha,
+            descripcion=str(m.get("descripcion") or ""),
+            comprobante="",
+            debito=float(m.get("debito") or 0),
+            credito=float(m.get("credito") or 0),
+            saldo=float(m["saldo"]) if m.get("saldo") is not None else None,
+            pagina=0,
+            banco=banco_slug or "desconocido",
+            archivo_origen=nombre,
+        )
+        fila = _movimiento_banco_a_fila_extracto(mov)
+        if m.get("detalle"):
+            fila["Detalle"] = m["detalle"]
+        fila["Banco"] = display
+        out.append(fila)
+    return out
+
+
+def _intentar_filas_layout_y(
+    data: bytes,
+    nombre: str,
+    banco_slug: str,
+    paginas: list[tuple[int, str]] | None = None,
+    chars_nativos: int | None = None,
+) -> list[dict]:
+    """Fallback MM-Studio: agrupar por Y (o líneas OCR) y tomar los 2 últimos números."""
+    lineas_nat, chars = lineas_por_y(data)
+    nativas = chars_nativos if chars_nativos is not None else chars
+    if nativas < 50:
+        lineas = lineas_desde_paginas(paginas or [])
+        if not lineas:
+            lineas = lineas_nat
+    else:
+        lineas = lineas_nat
+    movs = parsear_lineas(lineas)
+    if not movs:
+        return []
+    return _filas_desde_movs_layout(movs, nombre, banco_slug)
+
+
 def _meta_basica_desde_texto(texto: str) -> dict:
     """Heurística liviana de cliente/CUIT/cuenta/CBU en encabezado."""
     meta = {"cliente": "", "cuit": "", "cuenta": "", "cbu": ""}
@@ -6874,17 +6925,6 @@ def _procesar_un_pdf_extracto(nombre: str, data: bytes) -> tuple[list[dict], dic
         chars_nativos = _contar_texto_nativo_pdf(data)
     except Exception:
         chars_nativos = 0
-    if chars_nativos < 40 and (_es_entorno_cloud_ocr() or banco_slug == "nacion"):
-        return [], meta_base, {
-            "archivo": nombre,
-            "motivo": (
-                f"Este PDF está escaneado ({display}). En la web el OCR se cuelga "
-                "con el resumen de cuenta del BNA. Subí el Excel de Últimos movimientos "
-                "del homebanking (.xls / .xlsx, el de la misma carpeta Bancos)."
-            ),
-            "banco": display,
-            "formato": "escaneado",
-        }
 
     def _parsear(paginas: list[tuple[int, str]], estrategia: str) -> tuple[list[dict], dict]:
         movs_loc: list[dict] = []
@@ -6896,7 +6936,16 @@ def _procesar_un_pdf_extracto(nombre: str, data: bytes) -> tuple[list[dict], dic
         elif estrategia == "galicia":
             movs_loc = list(cache_galicia) if cache_galicia else _filas_desde_galicia_bytes(data, nombre)
             if not movs_loc:
-                # Fallback: layout tipo columnas D/C o texto genérico
+                movs_loc = _intentar_filas_layout_y(
+                    data, nombre, "galicia", paginas, chars_nativos
+                )
+                if movs_loc:
+                    texto_head = "\n".join(t for _, t in paginas[:2])
+                    meta_arch = _meta_basica_desde_texto(texto_head)
+                    meta_base["parser"] = "galicia_y"
+                    meta_base["formato_id"] = "galicia_texto"
+                    meta_base["formato"] = FORMATOS_EXTRACTO_LABEL.get("galicia_texto") or "Galicia · texto/OCR"
+            if not movs_loc:
                 movs_alt, meta_alt = _parsear_movimientos_santander_paginas(paginas, nombre)
                 if movs_alt:
                     movs_loc, meta_arch = movs_alt, meta_alt
@@ -6963,6 +7012,8 @@ def _procesar_un_pdf_extracto(nombre: str, data: bytes) -> tuple[list[dict], dic
                 banco_ocr = "nacion"
             elif "banco macro" in ocr_norm:
                 banco_ocr = "macro"
+            elif "mercado pago" in ocr_norm or "mercadopago" in ocr_norm:
+                banco_ocr = "mercadopago"
             if banco_ocr:
                 banco_slug = banco_ocr
                 display = _nombre_display_banco(banco_slug)
@@ -6996,7 +7047,7 @@ def _procesar_un_pdf_extracto(nombre: str, data: bytes) -> tuple[list[dict], dic
         meta_base["formato"] = info_fmt.get("formato") or ""
         meta_base["parser"] = estrategia
 
-        if (chars < 40 or fechas_txt < 2) and estrategia != "galicia":
+        if chars_nativos < 50 or chars < 40 or fechas_txt < 2:
             paginas = _paginas_texto_extracto_pdf(data, dpi_ocr=170, forzar_ocr=True)
             chars = sum(len(t) for _, t in paginas)
             texto_all = "\n".join(t for _, t in paginas)
@@ -7017,6 +7068,8 @@ def _procesar_un_pdf_extracto(nombre: str, data: bytes) -> tuple[list[dict], dic
                     banco_ocr = "nacion"
                 elif "banco macro" in ocr_norm:
                     banco_ocr = "macro"
+                elif "mercado pago" in ocr_norm or "mercadopago" in ocr_norm:
+                    banco_ocr = "mercadopago"
                 if banco_ocr:
                     banco_slug = banco_ocr
                     display = _nombre_display_banco(banco_slug)
@@ -7034,26 +7087,27 @@ def _procesar_un_pdf_extracto(nombre: str, data: bytes) -> tuple[list[dict], dic
             meta_base["formato"] = info_fmt.get("formato") or meta_base["formato"]
             meta_base["parser"] = estrategia
 
-        if chars < 40 and estrategia not in {"galicia", "provincia"}:
-            return [], meta_base, {
-                "archivo": nombre,
-                "motivo": (
-                    f"Este PDF está escaneado y no se pudo leer ({display}). "
-                    "En la web de la nube el OCR se cuelga con este tipo de resumen. "
-                    "Subí el Excel de Últimos movimientos del homebanking (.xls / .xlsx) "
-                    "que suele estar en la misma carpeta Bancos."
-                ),
-                "banco": display,
-                "formato": meta_base.get("formato") or "",
-            }
-
         movs, meta_arch = _parsear(paginas, estrategia)
 
         # Reintento OCR completo si el parser no encontró movimientos
         if not movs:
             paginas_ocr = _paginas_texto_extracto_pdf(data, dpi_ocr=180, forzar_ocr=True)
             if sum(len(t) for _, t in paginas_ocr) > chars:
-                movs, meta_arch = _parsear(paginas_ocr, estrategia)
+                paginas = paginas_ocr
+                chars = sum(len(t) for _, t in paginas)
+                texto_all = "\n".join(t for _, t in paginas)
+                movs, meta_arch = _parsear(paginas, estrategia)
+
+        if not movs:
+            movs_y = _intentar_filas_layout_y(
+                data, nombre, banco_slug, paginas, chars_nativos
+            )
+            if movs_y:
+                movs = movs_y
+                meta_arch = _meta_basica_desde_texto(texto_all)
+                meta_base["parser"] = "layout_y"
+                meta_base["formato_id"] = "texto_generico"
+                meta_base["formato"] = FORMATOS_EXTRACTO_LABEL.get("texto_generico") or "Texto genérico / OCR"
 
         # Si el formato elegido falló, probar parser alternativo (terceros suelen aparecer ahí)
         if not movs and estrategia not in {"santander"}:
@@ -7070,7 +7124,7 @@ def _procesar_un_pdf_extracto(nombre: str, data: bytes) -> tuple[list[dict], dic
                 "motivo": (
                     f"No se detectaron movimientos ({display} · "
                     f"{meta_base.get('formato') or estrategia}). "
-                    "Si es escaneo, probá un PDF más nítido o el extracto digital del homebanking."
+                    "El OCR corrió; si el escaneo está borroso, subí un PDF más nítido."
                 ),
                 "banco": display,
                 "formato": meta_base.get("formato") or "",
@@ -7257,7 +7311,33 @@ def _paginas_texto_extracto_pdf(
     """
     Extrae texto por página: nativo si existe; si la página está vacía (escaneada), OCR.
     Con forzar_ocr=True reaplica OCR a todas las páginas (útiles para Provincia/BIP escaneados).
+    Reusa cache en disco para no re-OCR el mismo PDF.
     """
+    cache_dir = BASE_DIR / "_cache_extractos_ocr"
+    cache_key = hashlib.sha1(data + f"|{dpi_ocr}|{int(forzar_ocr)}".encode("utf-8")).hexdigest()[:16]
+    cache_path = cache_dir / f"{cache_key}.json"
+
+    def _leer_cache() -> list[tuple[int, str]] | None:
+        if not cache_path.exists():
+            return None
+        try:
+            payload = json.loads(cache_path.read_text(encoding="utf-8"))
+            raw = payload.get("paginas") or []
+            out = [(int(n), str(t)) for n, t in raw]
+            return out or None
+        except Exception:
+            return None
+
+    def _guardar_cache(paginas_ok: list[tuple[int, str]]) -> None:
+        try:
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            cache_path.write_text(
+                json.dumps({"paginas": paginas_ok}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        except Exception:
+            return
+
     doc = fitz.open(stream=data, filetype="pdf")
     try:
         paginas: list[tuple[int, str]] = []
@@ -7271,10 +7351,14 @@ def _paginas_texto_extracto_pdf(
                 paginas.append((i + 1, ""))
         necesita_ocr = forzar_ocr or nativas_con_texto < max(1, doc.page_count // 3)
         if necesita_ocr:
+            cached = _leer_cache()
+            if cached:
+                return cached
             for i, (num, texto) in enumerate(paginas):
                 if forzar_ocr or not texto.strip():
                     lineas_ocr = _ocr_pagina_rapida(doc[i], dpi=dpi_ocr)
                     paginas[i] = (num, "\n".join(lineas_ocr))
+            _guardar_cache(paginas)
         return paginas
     finally:
         doc.close()

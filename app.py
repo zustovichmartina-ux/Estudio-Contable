@@ -33,6 +33,7 @@ import database as db
 from afip_worker.ui_streamlit import render_arca_module
 from inversiones_ui import seccion_inversiones_arg
 from cruce_facturas_arca import procesar_cruce_facturas_arca
+from ui_extractos import render_herramienta_extractos
 from procesador import (
     BANCOS_ARGENTINOS,
     COMPRAS_TANGO_PATH,
@@ -11445,195 +11446,8 @@ def _formulario_saldos_iniciales_bancos() -> list[dict]:
 
 
 def _herramienta_pdf_extractos_a_excel() -> None:
-    """Convierte extractos multi-banco: un Excel por banco (ZIP si hay varios)."""
-    bancos_txt = ", ".join(
-        sorted(
-            {
-                str(p.get("nombre_display") or k)
-                for k, p in PERFILES_BANCO.items()
-                if k != "desconocido"
-            }
-        )
-    )
-    st.markdown("#### PDF / Excel extractos → Excel")
-    st.caption(
-        "Subí extractos **PDF** (digital) o el **Excel/CSV del homebanking**. "
-        "Se detecta el banco automáticamente y **todos** salen con el **mismo formato universal**: "
-        "`Fecha | Descripcion | Detalle | Importe | Saldo | Clasificacion | Nueva_Clasificacion | Tipo Movimiento` "
-        "+ hoja `Resumen_Clasificacion`. "
-        "Importe con signo: **(−) resta** · **(+) suma**. Un Excel por banco. "
-        "Si el PDF del BNA es el resumen de cuenta **escaneado**, no lo uses acá: "
-        "subí el `.xls` de Últimos movimientos (en Aurora está en la misma carpeta Bancos). "
-        f"Soportados: {bancos_txt}."
-    )
-    pdfs_ext = st.file_uploader(
-        "Extractos (PDF o Excel del homebanking)",
-        type=["pdf", "xlsx", "xls", "csv"],
-        accept_multiple_files=True,
-        key="uploader_herramientas_extractos_bancarios",
-        help="PDF digital, o Excel de Últimos movimientos (BNA). Podés mezclar bancos.",
-    )
-    if st.button("Convertir a Excel", type="primary", key="btn_herramientas_extracto_excel"):
-        if not pdfs_ext:
-            st.warning("Subí al menos un PDF para convertir.")
-        else:
-            with st.spinner(
-                "Detectando banco(s) y leyendo archivos… "
-                "PDF escaneado del BNA: usá el Excel del homebanking. No cierres la ventana."
-            ):
-                df_ext, meta_ext, err_ext = procesar_extractos_bancarios_pdfs(pdfs_ext)
-                st.session_state.extracto_santander_df = df_ext
-                st.session_state.extracto_santander_meta = meta_ext
-                st.session_state.extracto_santander_errores = err_ext
-
-                paquetes_ui: list[dict] = []
-                for p in meta_ext.get("por_banco") or []:
-                    df_b = p.get("df")
-                    meta_b = p.get("meta") or {}
-                    if df_b is None or getattr(df_b, "empty", True):
-                        continue
-                    xlsx_b = exportar_extracto_bancario_excel(df_b, meta_b)
-                    paquetes_ui.append({
-                        "banco": p.get("banco") or meta_b.get("banco") or "Banco",
-                        "banco_slug": p.get("banco_slug") or "",
-                        "df": df_b,
-                        "meta": meta_b,
-                        "xlsx": xlsx_b,
-                        "pdf_merged": p.get("pdf_merged"),
-                    })
-                st.session_state.extracto_paquetes = paquetes_ui
-                if len(paquetes_ui) > 1:
-                    st.session_state.extracto_zip = exportar_zip_extractos_por_banco(
-                        paquetes_ui,
-                        cuit=str(meta_ext.get("cuit") or st.session_state.get("cuit_activo") or ""),
-                    )
-                else:
-                    st.session_state.extracto_zip = None
-
-                if paquetes_ui:
-                    # Compatibilidad: primer banco como xlsx "principal"
-                    st.session_state.extracto_santander_xlsx = paquetes_ui[0]["xlsx"]
-                    st.session_state.extracto_santander_pdf_merged = (
-                        None if len(paquetes_ui) > 1 else paquetes_ui[0].get("pdf_merged")
-                    )
-                else:
-                    st.session_state.extracto_santander_xlsx = None
-                    st.session_state.extracto_santander_pdf_merged = None
-            st.rerun()
-
-    err_ext = st.session_state.get("extracto_santander_errores") or []
-    if err_ext:
-        st.error(
-            "No pude armar el Excel con ese archivo. Leé el motivo abajo: "
-            "si el PDF está escaneado (BNA resumen de cuenta), subí el Excel de Últimos movimientos."
-        )
-        with st.expander(f"Detalle ({len(err_ext)})", expanded=True):
-            st.dataframe(pd.DataFrame(err_ext), use_container_width=True, hide_index=True)
-
-    paquetes = st.session_state.get("extracto_paquetes") or []
-    df_ext = st.session_state.get("extracto_santander_df")
-    meta_ext = st.session_state.get("extracto_santander_meta") or {}
-    if not paquetes or df_ext is None or df_ext.empty:
-        if not err_ext and st.session_state.get("extracto_santander_df") is not None:
-            st.warning("No salieron movimientos. Probá el Excel del homebanking, no el PDF escaneado.")
-        return
-
-    n_mov = int((df_ext["Tipo fila"] == "Movimiento").sum()) if "Tipo fila" in df_ext.columns else len(df_ext)
-    n_bancos = len(paquetes)
-    bancos_txt_ok = " · ".join(p["banco"] for p in paquetes)
-    st.success(
-        f"Listo: **{n_mov}** movimientos · **{n_bancos}** banco(s) · "
-        f"**{len(meta_ext.get('archivos') or [])}** archivo(s)"
-        + (f" · {bancos_txt_ok}" if bancos_txt_ok else "")
-    )
-    if n_bancos > 1:
-        st.info(
-            "Se generó **un Excel por banco**. Los meses se unifican solo dentro del mismo banco."
-        )
-
-    cuit_limpio = re.sub(
-        r"\D",
-        "",
-        str(meta_ext.get("cuit") or st.session_state.get("cuit_activo") or ""),
-    )
-    zip_bytes = st.session_state.get("extracto_zip")
-    if zip_bytes and n_bancos > 1:
-        st.download_button(
-            f"Descargar ZIP ({n_bancos} Excel, uno por banco)",
-            data=zip_bytes,
-            file_name=f"Extractos_por_banco_{cuit_limpio or 'cliente'}_{date.today().strftime('%Y%m%d')}.zip",
-            mime="application/zip",
-            type="primary",
-            key="dl_herramientas_extracto_zip",
-            use_container_width=True,
-        )
-
-    for i, p in enumerate(paquetes):
-        df_b = p["df"]
-        meta_b = p.get("meta") or {}
-        n_mov_b = int((df_b["Tipo fila"] == "Movimiento").sum()) if "Tipo fila" in df_b.columns else len(df_b)
-        n_meses_b = int(df_b["Mes"].nunique()) if "Mes" in df_b.columns else 0
-        banco = p.get("banco") or "Banco"
-        with st.expander(
-            f"{banco}: {n_mov_b} mov. · {n_meses_b} mes(es) · {len(meta_b.get('archivos') or [])} archivo(s)",
-            expanded=(n_bancos == 1),
-        ):
-            if meta_b.get("cliente") or meta_b.get("cuit") or meta_b.get("formato"):
-                partes_cap = []
-                if meta_b.get("cliente") or meta_b.get("cuit"):
-                    partes_cap.append(
-                        f"Cliente: **{meta_b.get('cliente') or '—'}** · "
-                        f"CUIT: `{meta_b.get('cuit') or '—'}` · "
-                        f"Cuenta: `{meta_b.get('cuenta') or '—'}`"
-                    )
-                if meta_b.get("formato"):
-                    partes_cap.append(f"Formato detectado: **{meta_b.get('formato')}**")
-                st.caption(" · ".join(partes_cap))
-            cols_preview = [
-                c for c in (
-                    "Fecha", "Descripcion", "Detalle", "Importe", "Saldo",
-                    "Clasificacion", "Tipo Movimiento",
-                ) if c in df_b.columns
-            ]
-            if "Clasificacion" not in df_b.columns or "Tipo Movimiento" not in df_b.columns:
-                df_prev = enriquecer_df_extracto_formato_banco(df_b)
-                cols_preview = [
-                    c for c in (
-                        "Fecha", "Descripcion", "Detalle", "Importe", "Saldo",
-                        "Clasificacion", "Tipo Movimiento",
-                    ) if c in df_prev.columns
-                ]
-            else:
-                df_prev = df_b
-            st.info(
-                "Formato banco: **Importe** con signo (− resta / + suma). "
-                "**Tipo Movimiento** = Debito/Credito según el signo. "
-                "Podés completar **Nueva_Clasificacion** en el Excel."
-            )
-            st.dataframe(df_prev[cols_preview].head(40), use_container_width=True, hide_index=True)
-            slug_banco = re.sub(r"[^A-Za-z0-9]+", "_", str(banco).strip())[:24] or "banco"
-            stamp = datetime.now().strftime("%Y-%m-%d_%H %M")
-            nombre_xlsx = f"{stamp}_{slug_banco}.xlsx"
-            st.download_button(
-                f"Descargar Excel — {banco}",
-                data=p["xlsx"],
-                file_name=nombre_xlsx,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                type="primary" if n_bancos == 1 else "secondary",
-                key=f"dl_herramientas_extracto_xlsx_{i}_{slug_banco}",
-                use_container_width=True,
-            )
-            pdf_merged = p.get("pdf_merged")
-            archivos_b = meta_b.get("archivos") or []
-            if pdf_merged and len(archivos_b) > 1:
-                st.download_button(
-                    f"Descargar PDF unificado — {banco}",
-                    data=pdf_merged,
-                    file_name=f"Extractos_{slug_banco}_{cuit_limpio or 'cliente'}.pdf",
-                    mime="application/pdf",
-                    key=f"dl_herramientas_extracto_pdf_{i}_{slug_banco}",
-                    use_container_width=True,
-                )
+    """Buzón OCR + grilla imputable (flujo del demo de extractos)."""
+    render_herramienta_extractos()
 
 
 def _herramienta_completar_cuadro_bancario() -> None:
@@ -13211,7 +13025,7 @@ def _seccion_herramientas() -> None:
             "Extracto FCI → Excel",
             "Completar cuadro bancario existente",
             "Matcheo inteligente PDF + Tango",
-            "Extractos de PDF ➔ Excel",
+            "Extractos bancarios",
             "Caja USD (dif. cotización)",
             "Convertidor de Liquidaciones de Tarjeta",
             "Liquidaciones de tarjetas",
@@ -13220,7 +13034,7 @@ def _seccion_herramientas() -> None:
             "Desglose FCT — Detalle de ítems",
         ],
         index=0,
-        key="herramientas_selectbox_v18",
+        key="herramientas_selectbox_v19",
     )
     st.divider()
 
@@ -13230,7 +13044,7 @@ def _seccion_herramientas() -> None:
         _herramienta_completar_cuadro_bancario()
     elif herramienta_activa == "Matcheo inteligente PDF + Tango":
         _herramienta_matcheo_inteligente_pdf()
-    elif herramienta_activa == "Extractos de PDF ➔ Excel":
+    elif herramienta_activa == "Extractos bancarios":
         _herramienta_pdf_extractos_a_excel()
     elif herramienta_activa == "Caja USD (dif. cotización)":
         _herramienta_caja_usd()

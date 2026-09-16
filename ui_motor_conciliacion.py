@@ -87,18 +87,18 @@ def render_motor_conciliacion(
     st.markdown("---")
     st.subheader("Motor de Conciliación (extracto → Conceptos Bancos → match)")
     st.caption(
-        "La cuenta sale de **Conceptos Bancos 2.xlsx** (hoja del banco + lista CUENTAS). "
-        "Si el extracto no alcanza, queda en «a identificar». "
-        "El motor propone; vos confirmás antes de guardar. "
-        "No reemplaza el flujo Balance→Tango; lo complementa."
+        "Buzón OCR del extracto → misma grilla imputable. "
+        "Generales (IVA, IIBB, Ley 25.413, comisiones) salen con cuenta fija. "
+        "Transferencias se cruzan con deudores/proveedores. "
+        "El motor propone; vos confirmás antes de guardar."
     )
 
     periodo_key = f"motor_periodo_{sociedad_id}"
     if periodo_key not in st.session_state:
         st.session_state[periodo_key] = date.today().replace(day=1)
 
-    tab_imp, tab_res, tab_exc, tab_sum, tab_cfg = st.tabs(
-        ["1. Importar y correr", "2. Conciliación", "3. Excepciones", "4. Resumen", "5. Reglas / VEPs"]
+    tab_imp, tab_res, tab_deu, tab_tango, tab_cfg = st.tabs(
+        ["Buzón OCR", "Movimientos", "Deudores / Proveedores", "Asiento Tango", "Papeles / reglas"]
     )
 
     with tab_imp:
@@ -138,7 +138,7 @@ def render_motor_conciliacion(
             if not pdfs:
                 st.error("Subí al menos un PDF de extracto.")
             else:
-                with st.spinner("Parseando extracto y proponiendo cuentas..."):
+                with st.spinner("Leyendo extracto (OCR si es escaneo) y proponiendo cuentas..."):
                     df, meta, errores = procesar_extractos_bancarios_pdfs(pdfs)
                     if errores:
                         st.warning("Algunos PDF tuvieron problemas: " + "; ".join(
@@ -276,7 +276,7 @@ def render_motor_conciliacion(
 
     with tab_res:
         if not movs:
-            st.info("Todavía no hay movimientos para este período. Corré el motor en la pestaña 1.")
+            st.info("Todavía no hay movimientos para este período. Corré el motor en **Buzón OCR**.")
         else:
             f1, f2 = st.columns(2)
             with f1:
@@ -342,7 +342,8 @@ def render_motor_conciliacion(
                     key=f"dl_bridge_{sociedad_id}",
                 )
 
-    with tab_exc:
+    with tab_deu:
+        st.caption("Pendientes de imputar (transferencias sin padrón). Los generales ya salieron con cuenta fija.")
         pendientes = [m for m in movs if m.get("estado") == "PENDIENTE"]
         if not pendientes:
             st.success("No hay excepciones pendientes en este período.")
@@ -407,7 +408,17 @@ def render_motor_conciliacion(
                             st.success("Excepción resuelta.")
                         st.rerun()
 
-    with tab_sum:
+    with tab_tango:
+        st.caption(
+            "Preview del asiento. La plantilla vacía de importación Tango va acá cuando la pases; "
+            "hasta entonces no invento el formato."
+        )
+        if st.session_state.get("motor_grilla_bridge"):
+            st.dataframe(
+                pd.DataFrame(st.session_state["motor_grilla_bridge"]),
+                use_container_width=True,
+                hide_index=True,
+            )
         if not movs:
             st.info("Sin datos.")
         else:
@@ -419,6 +430,7 @@ def render_motor_conciliacion(
             st.metric("Total débitos extracto", f"$ {tot_d:,.2f}")
 
     with tab_cfg:
+        st.caption("Papeles / instructivo Conceptos Bancos. El cuadro de balance usa la plantilla vacía cuando la pases.")
         st.markdown("##### Instructivo Conceptos Bancos")
         try:
             info = None

@@ -6,26 +6,16 @@ import hashlib
 import json
 import re
 import sys
-from collections import defaultdict
 from pathlib import Path
-
-import fitz
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from extracto_layout import lineas_por_y, parsear_lineas, score_cadena
 from procesador import _paginas_texto_extracto_pdf
 
 CACHE = ROOT / "_cache_extractos_sunny_galicia"
 
-RE_FECHA = re.compile(r"^(\d{2}/\d{2}/\d{2,4})\s+")
-RE_FECHA_SOLA = re.compile(r"^(\d{2}/\d{2}/\d{2,4})$")
-RE_NUM = re.compile(r"(-?\d{1,3}(?:\.\d{3})*(?:,\d{2})|-?\d+,\d{2})")
-RE_SKIP = re.compile(
-    r"^(Fecha|Movimientos|Resumen|Total|Los dep|Dispon|Canales|Ingres|"
-    r"Llaman|Usted|Al comp|Banco de|Chatea|http|Pagina|Página)",
-    re.I,
-)
 RULES = [
     ("inter-cta", "FCI - Suscripcion", re.compile(r"SUSCRIPCION FIMA|SUSCRIPCION FCI", re.I)),
     ("inter-cta", "FCI - Rescate", re.compile(r"RESCATE FIMA|RESCATE FCI", re.I)),
@@ -46,46 +36,11 @@ RULES = [
 ]
 
 
-def pnum(s: str) -> float:
-    t = (s or "").strip()
-    neg = t.endswith("-") or t.startswith("-")
-    t = t.replace("-", "").replace(".", "").replace(",", ".")
-    return (float(t) or 0.0) * (-1 if neg else 1)
-
-
 def classify(desc: str) -> tuple[str, str]:
     for cat, sub, rx in RULES:
         if rx.search(desc or ""):
             return cat, sub
     return "sin-cat", "-"
-
-
-def lineas_por_y(data: bytes) -> tuple[list[str], int]:
-    doc = fitz.open(stream=data, filetype="pdf")
-    try:
-        lineas: list[str] = []
-        chars = 0
-        for i in range(doc.page_count):
-            chars += len((doc[i].get_text("text") or "").strip())
-            d = doc[i].get_text("dict")
-            by_y: dict[int, list[tuple[float, str]]] = defaultdict(list)
-            for b in d.get("blocks") or []:
-                if b.get("type") != 0:
-                    continue
-                for line in b.get("lines") or []:
-                    for sp in line.get("spans") or []:
-                        t = (sp.get("text") or "").strip()
-                        if not t:
-                            continue
-                        y = round(sp["bbox"][1])
-                        by_y[y].append((sp["bbox"][0], t))
-            for y in sorted(by_y):
-                txt = " ".join(t for _, t in sorted(by_y[y], key=lambda x: x[0])).strip()
-                if txt:
-                    lineas.append(txt)
-        return lineas, chars
-    finally:
-        doc.close()
 
 
 def cache_ocr(data: bytes) -> Path:
@@ -110,134 +65,15 @@ def lineas_ocr(data: bytes) -> list[str]:
     return lineas
 
 
-def parse_lineas(lineas: list[str]) -> list[dict]:
-    movs: list[dict] = []
-    i = 0
-    while i < len(lineas):
-        raw = re.sub(r"[ \t]+", " ", lineas[i]).strip()
-        i += 1
-        if not raw or RE_SKIP.match(raw):
-            continue
-        mf = RE_FECHA.match(raw)
-        if not mf:
-            continue
-        rest = raw[mf.end():]
-        nums = [pnum(x) for x in RE_NUM.findall(rest)]
-        if len(nums) < 1:
-            continue
-        saldo = nums[-1] if len(nums) >= 2 else 0.0
-        valor = nums[-2] if len(nums) >= 2 else nums[0]
-        credito = valor if valor >= 0 else 0.0
-        debito = abs(valor) if valor < 0 else 0.0
-        desc = RE_NUM.sub("", rest)
-        desc = re.sub(r"\b\d{6,}\b", "", desc)
-        desc = re.sub(r"\s+", " ", desc).strip()
-        extras: list[str] = []
-        while i < len(lineas):
-            nxt = re.sub(r"[ \t]+", " ", lineas[i]).strip()
-            if RE_FECHA.match(nxt) or RE_FECHA_SOLA.match(nxt) or RE_SKIP.match(nxt):
-                break
-            if nxt.lower().startswith("total") or re.search(r"p[aá]gina", nxt, re.I):
-                break
-            extras.append(nxt)
-            i += 1
-        det = " ".join(extras)
-        full = f"{desc} {det}".strip()
-        if len(desc) < 3 or (credito < 0.005 and debito < 0.005):
-            continue
-        if desc.lower() == "total":
-            continue
-        cat, sub = classify(full)
-        movs.append(
-            {
-                "fecha": mf.group(1),
-                "descripcion": desc[:120],
-                "detalle": det[:160],
-                "credito": round(credito, 2),
-                "debito": round(debito, 2),
-                "monto": round(credito - debito, 2),
-                "saldo": round(abs(saldo), 2),
-                "categoria": cat,
-                "sub": sub,
-            }
-        )
-    return movs
-
-
-def parse_bloques(lineas: list[str]) -> list[dict]:
-    movs: list[dict] = []
-    i = 0
-    while i < len(lineas):
-        raw = re.sub(r"[ \t]+", " ", lineas[i]).strip()
-        i += 1
-        mf = RE_FECHA_SOLA.match(raw)
-        if not mf:
-            continue
-        extras: list[str] = []
-        montos: list[float] = []
-        while i < len(lineas) and len(montos) < 2:
-            nxt = re.sub(r"[ \t]+", " ", lineas[i]).strip()
-            if RE_FECHA_SOLA.match(nxt) and (montos or extras):
-                break
-            if RE_SKIP.match(nxt) or nxt.lower().startswith("total"):
-                break
-            nums = RE_NUM.findall(nxt)
-            if nums and re.fullmatch(r"-?\d{1,3}(?:\.\d{3})*(?:,\d{2})|-?\d+,\d{2}", nxt.replace(" ", "").replace("$", "")):
-                montos.append(pnum(nxt))
-                i += 1
-                continue
-            extras.append(nxt)
-            i += 1
-        if len(montos) < 2:
-            continue
-        valor, saldo = montos[0], abs(montos[1])
-        desc = " ".join(extras).strip()
-        if len(desc) < 3:
-            continue
-        credito = valor if valor >= 0 else 0.0
-        debito = abs(valor) if valor < 0 else 0.0
-        cat, sub = classify(desc)
-        movs.append(
-            {
-                "fecha": mf.group(1),
-                "descripcion": desc[:120],
-                "detalle": "",
-                "credito": round(credito, 2),
-                "debito": round(debito, 2),
-                "monto": round(credito - debito, 2),
-                "saldo": round(saldo, 2),
-                "categoria": cat,
-                "sub": sub,
-            }
-        )
-    return movs
-
-
-def score_cadena(movs: list[dict]) -> int:
-    ok = 0
-    for a, b in zip(movs, movs[1:]):
-        esperado = round(float(a["saldo"]) + float(b["monto"]), 2)
-        if abs(esperado - float(b["saldo"])) <= 0.08:
-            ok += 1
-    return ok
-
-
-def elegir(cands: list[list[dict]]) -> list[dict]:
-    mejor: list[dict] = []
-    sc = (-1, -1)
-    for c in cands:
-        t = (score_cadena(c), len(c))
-        if t > sc:
-            sc = t
-            mejor = c
-    return mejor
-
-
 def parsear_pdf(data: bytes, nombre: str = "") -> dict:
     lineas_nat, chars = lineas_por_y(data)
     uso_ocr = chars < 50
     lineas = lineas_ocr(data) if uso_ocr else lineas_nat
-    movs = elegir([parse_lineas(lineas), parse_bloques(lineas)])
+    movs = parsear_lineas(lineas)
+    for m in movs:
+        cat, sub = classify(f"{m.get('descripcion') or ''} {m.get('detalle') or ''}")
+        m["categoria"] = cat
+        m["sub"] = sub
     cred = round(sum(m["credito"] for m in movs), 2)
     deb = round(sum(m["debito"] for m in movs), 2)
     cadena = score_cadena(movs)
