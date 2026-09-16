@@ -506,16 +506,29 @@ def _form_saldo_inicial(cliente: dict, periodo: str) -> None:
              "separa en Rendimiento vs. Diferencia de cambio en vez de "
              "cargarse todo a Rendimiento.",
     )
+    # Sugerencia de TC de origen: Valor total en pesos ÷ VN/Cantidad. Asume
+    # que el VN cargado equivale 1 a 1 al monto en dólares de origen (así es
+    # para bonos/ONs/Letras, donde el VN ya está denominado en dólares por
+    # convención de mercado; para acciones/CEDEARs/FCI, donde el VN es
+    # cantidad de unidades, el resultado deja de ser un TC real salvo que la
+    # unidad valga ≈ USD 1 — el usuario puede corregirlo a mano en ese caso).
+    # Si todavía no se cargaron VN o pesos, se usa el TC BNA histórico como
+    # referencia de partida.
+    tc_sugerido = (total_ars / vn) if (vn > 0 and total_ars > 0) else (tc_bna_aprox or 0.0)
+
     tc_origen = 0.0
     if usa_tc_origen:
         tc_origen = c5.number_input(
             "TC de origen (aprox.)", min_value=0.0, step=0.01,
-            value=float(tc_bna_aprox), key=f"inv_si_tcorigen_{version}",
-            help="Precargado con el TC BNA vendedor al 01/01 del período (≈ "
-                 "31/12 del año anterior) — es una aproximación, no "
-                 "necesariamente el TC real al que el cliente compró "
-                 "originalmente. Corregilo si tenés un dato más preciso.",
+            value=float(tc_sugerido), key=f"inv_si_tcorigen_{version}",
+            help="Precargado como Valor total en pesos ÷ VN/Cantidad (el TC "
+                 "implícito en lo que se pagó por esta tenencia). Si todavía "
+                 "no cargaste VN o el valor en pesos, se precarga con el TC "
+                 "BNA vendedor al 01/01 del período como referencia. Es una "
+                 "aproximación — corregilo si tenés un dato más preciso.",
         )
+        if vn > 0 and total_ars > 0 and abs(tc_origen - tc_sugerido) > 0.01:
+            c5.caption(f"↻ Sugerido con los valores actuales: {_fmt_cantidad(tc_sugerido)}")
         if tc_origen > 0 and total_ars > 0:
             c5.caption(f"≈ {_fmt_usd(total_ars / tc_origen)}")
         if tc_bna_aprox <= 0:
