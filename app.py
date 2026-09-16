@@ -11227,10 +11227,8 @@ def _seccion_conciliacion_bancaria_balance() -> None:
     with st.container():
         _mostrar_aviso_cambio_sociedad()
         st.caption(
-            "Cliente → extracto → las mismas reglas de la web (Conceptos Bancos, reglas locales, "
-            "padrón, plan de esta sociedad), mostradas como en AE-Studio: Ingresos, Egresos, "
-            "Retenciones, Deducciones e Inter-cuentas. El asiento CN desde el Balance Excel "
-            "sigue disponible abajo, plegado."
+            "Conciliación con menú AE Studio (Análisis / Impositivo / Sistema). "
+            "Las reglas siguen siendo las de la web. El asiento CN del Balance Excel queda plegado abajo."
         )
 
         clientes = db.listar_clientes()
