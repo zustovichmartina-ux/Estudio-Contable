@@ -167,6 +167,7 @@ from completar_cuadro_bancario import (
     completar_cuadro_bancario_existente,
     explorar_buzon_cuadros_bancarios,
 )
+from liquidaciones_fiserv import procesar_pdfs_fiserv
 
 BASE_DIR = Path(__file__).resolve().parent
 LOGO_ESTUDIO_PATH = BASE_DIR / "assets" / "estudio-zona-guemes-wordmark-oscuro.png"
