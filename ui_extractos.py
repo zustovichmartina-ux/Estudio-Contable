@@ -88,12 +88,12 @@ def render_herramienta_extractos() -> None:
             }
         )
     )
-    st.markdown("#### Extractos bancarios")
+    st.markdown("#### Extractos de PDF → Excel")
     st.caption(
-        "Buzón con **OCR siempre** (digital o escaneado) → misma grilla del banco, "
-        "con imputación. Los movimientos generales (IVA, IIBB, Ley 25.413, comisiones, VEP) "
-        "salen con **cuenta fija**. Las transferencias se cruzan con deudores/proveedores. "
-        f"Bancos: {bancos_txt}."
+        "Convertidor de extractos: PDF (digital o escaneado) o Excel del homebanking → Excel "
+        "descargable. OCR siempre. Los movimientos generales (IVA, IIBB, Ley 25.413, "
+        "comisiones, VEP) salen con cuenta fija. Las transferencias se cruzan con "
+        f"deudores/proveedores. Bancos: {bancos_txt}."
     )
 
     tab_buzon, tab_mov, tab_deu, tab_prov, tab_tango, tab_pap = st.tabs(
