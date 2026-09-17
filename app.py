@@ -135,15 +135,6 @@ from procesador import (
     TOL_MATCH_DIAS_SOLO_MONTO,
     TOL_MATCH_DIAS_MONTO_UNICO,
     PROVEEDORES_DEFAULT_PATH,
-
-    extraer_datos_liquidacion_pdf,
-    procesar_liquidaciones_tarjeta_pdfs,
-    exportar_liquidaciones_tarjeta_excel,
-    PLANTILLAS_TARJETAS,
-    detectar_entidad_por_texto,
-    extraer_con_plantilla,
-    extraer_texto_liquidacion_pdf,
-    PERFILES_BANCO,
 )
 
 from capa_revision import gate_asiento
@@ -167,7 +158,7 @@ from completar_cuadro_bancario import (
     completar_cuadro_bancario_existente,
     explorar_buzon_cuadros_bancarios,
 )
-from liquidaciones_fiserv import procesar_pdfs_fiserv
+from liquidaciones_tarjetas_estudio import procesar_pdfs_tarjetas_estudio
 
 BASE_DIR = Path(__file__).resolve().parent
 LOGO_ESTUDIO_PATH = BASE_DIR / "assets" / "estudio-zona-guemes-wordmark-oscuro.png"
@@ -12034,202 +12025,91 @@ def _herramienta_match_debitos_proveedores() -> None:
     )
 
 
-def _herramienta_liquidaciones_tarjetas_fiserv() -> None:
-    """Resúmenes mensuales Fiserv/First Data → Excel por marca/modalidad."""
+def _herramienta_liquidaciones_estudio() -> None:
+    """Convertidor del estudio: Naranja / Fava / Cabal / First Data → Excel plantilla."""
     st.markdown("#### Liquidaciones de tarjetas")
     st.caption(
-        "Subí los PDF de liquidación mensual Fiserv / First Data del **mismo comercio** "
-        "y **mismo período** (Visa, Mastercard, Cabal, etc. — crédito o débito). "
-        "Se valida total presentado, neto y cantidad de liquidaciones antes de armar el Excel."
+        "Subí **todos** los PDF del período (Naranja, Favacard, Cabal, First Data / Fiserv). "
+        "El Excel sale en el formato del estudio: resumen por marca, First Data "
+        "liquidación por liquidación, y **todos** los cupones (VENTA + LIQUIDACIÓN) con control."
     )
-
     archivos = st.file_uploader(
-        "PDFs de liquidaciones Fiserv / First Data",
+        "PDFs de liquidaciones",
         type=["pdf"],
         accept_multiple_files=True,
-        key="liq_fiserv_uploader_v1",
+        key="liq_estudio_uploader_v1",
     )
-    procesar_btn = st.button(
+    generar = st.button(
         "Generar Excel de liquidaciones",
         type="primary",
-        key="liq_fiserv_btn_v1",
+        key="liq_estudio_btn_v1",
         disabled=not bool(archivos),
     )
-
-    if procesar_btn and archivos:
-        tmp_dir = Path(tempfile.mkdtemp(prefix="liq_fiserv_ui_"))
-        rutas: list[Path] = []
-        try:
-            for i, archivo in enumerate(archivos):
-                nombre = str(getattr(archivo, "name", f"liq_{i + 1}.pdf"))
-                destino = tmp_dir / Path(nombre).name
-                destino.write_bytes(archivo.getvalue())
-                rutas.append(destino)
-            with st.spinner(f"Procesando {len(rutas)} PDF(s)…"):
-                res = procesar_pdfs_fiserv(rutas, recalcular=True, log=False)
-            st.session_state["liq_fiserv_resultado"] = res
-        except Exception as exc:
-            st.session_state["liq_fiserv_resultado"] = None
-            st.error(f"No se pudo procesar: {exc}")
-            return
-        finally:
+    if generar and archivos:
+        payload: list[tuple[str, bytes]] = []
+        for i, archivo in enumerate(archivos):
+            nombre = str(getattr(archivo, "name", f"liq_{i + 1}.pdf"))
+            payload.append((nombre, archivo.getvalue()))
+        with st.spinner(f"Procesando {len(payload)} PDF(s)…"):
             try:
-                shutil.rmtree(tmp_dir, ignore_errors=True)
-            except Exception:
-                pass
+                res = procesar_pdfs_tarjetas_estudio(payload)
+            except Exception as exc:
+                st.session_state["liq_estudio_resultado"] = None
+                st.error(f"No se pudo procesar: {exc}")
+                return
+        st.session_state["liq_estudio_resultado"] = res
 
-    res = st.session_state.get("liq_fiserv_resultado")
+    res = st.session_state.get("liq_estudio_resultado")
     if not res:
         return
-
-    fant = f" ({res.nombre_fantasia})" if res.nombre_fantasia else ""
-    if res.razon_social:
-        st.info(
-            f"**{res.razon_social}{fant}** · CUIT `{res.cuit}` · "
-            f"N° Comercio `{res.nro_comercio}` · Período **{res.periodo}**"
-        )
-
-    for adv in res.advertencias or []:
-        st.warning(adv)
-
-    with st.expander("Validaciones por PDF", expanded=not res.ok):
-        for m in res.mensajes or []:
-            if " OK " in m or m.endswith("OK"):
-                st.success(m)
-            else:
-                st.write(m)
-
     if not res.ok:
-        st.error(res.error or "Validación fallida. No se generó Excel.")
+        st.error(res.error or "No se generó el Excel.")
+        for adv in res.advertencias or []:
+            st.warning(adv)
         return
 
+    partes = []
+    if res.comercio:
+        partes.append(f"**{res.comercio}**")
+    if res.periodo:
+        partes.append(res.periodo)
+    partes.append(f"{res.n_pdf} PDF")
+    if res.n_fd:
+        partes.append(f"{res.n_fd} liquidaciones First Data")
+        partes.append(f"{res.n_ventas} cupones")
+        partes.append(f"control {res.n_control_ok}/{res.n_fd} OK")
+    st.info(" · ".join(partes))
+    for adv in res.advertencias or []:
+        st.warning(adv)
+    if res.n_control_diff:
+        st.warning(
+            f"{res.n_control_diff} liquidación/es de First Data no cierran al centavo. "
+            "Revisá la hoja Control."
+        )
+    with st.expander("Qué se leyó de cada PDF", expanded=False):
+        for m in res.mensajes or []:
+            st.write(m)
     if res.hojas:
         st.caption("Hojas: " + " · ".join(res.hojas))
-
-    if res.excel_bytes and res.nombre_archivo:
+    if res.excel_bytes:
         st.download_button(
             "Descargar Excel",
             data=res.excel_bytes,
-            file_name=res.nombre_archivo,
+            file_name=res.nombre_archivo or "Liquidaciones_de_Tarjetas.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             type="primary",
-            key="liq_fiserv_dl_v1",
+            key="liq_estudio_dl_v1",
             use_container_width=True,
         )
+
+
+def _herramienta_liquidaciones_tarjetas_fiserv() -> None:
+    _herramienta_liquidaciones_estudio()
 
 
 def _herramienta_liquidaciones_tarjeta() -> None:
-    """Convertidor de liquidaciones: flujo simple para evitar crashes de Streamlit."""
-    st.caption(
-        "Subí PDFs de liquidaciones (CABAL, First Data, Naranja, Prisma, Mercado Pago, etc.). "
-        "El sistema detecta la entidad; después podés corregirla en la tabla."
-    )
+    _herramienta_liquidaciones_estudio()
 
-    archivos = st.file_uploader(
-        "Liquidaciones de tarjeta (PDF)",
-        type=["pdf"],
-        accept_multiple_files=True,
-        key="liq_uploader_v3",
-    )
-    procesar = st.button(
-        "Procesar liquidaciones",
-        type="primary",
-        key="liq_btn_procesar_v3",
-        disabled=not bool(archivos),
-    )
-
-    if procesar and archivos:
-        filas = []
-        textos = {}
-        with st.spinner(f"Procesando {len(archivos)} PDF(s)…"):
-            for i, archivo in enumerate(archivos):
-                nombre = str(getattr(archivo, "name", f"archivo_{i + 1}.pdf"))
-                texto = extraer_texto_liquidacion_pdf(archivo)
-                sugerida = detectar_entidad_por_texto(f"{texto}\n{nombre}")
-                if sugerida not in PLANTILLAS_TARJETAS:
-                    sugerida = "Otra / No detectada"
-                valores = extraer_con_plantilla(texto, sugerida)
-                valores["Archivo"] = nombre
-                valores["Entidad"] = (
-                    sugerida if sugerida != "Otra / No detectada" else "Desconocida"
-                )
-                valores["Entidad_detectada"] = sugerida
-                filas.append(valores)
-                textos[nombre] = texto
-        st.session_state["liq_v3_filas"] = filas
-        st.session_state["liq_v3_textos"] = textos
-        st.session_state["liq_v3_xlsx"] = None
-
-    filas = st.session_state.get("liq_v3_filas")
-    if not filas:
-        return
-
-    opciones = list(PLANTILLAS_TARJETAS.keys()) + ["Otra / No detectada"]
-    df = pd.DataFrame(filas)
-    cols_orden = [
-        c for c in (
-            "Archivo", "Entidad_detectada", "Entidad", "Fecha", "Nro_Liquidacion",
-            "Neto_Gravado", "IVA_21", "Percepcion_IVA", "Retencion_IVA",
-            "Retencion_IIBB", "Percepcion_IIBB", "Total_Descontado",
-        ) if c in df.columns
-    ]
-    df = df[cols_orden].copy()
-
-    editado = st.data_editor(
-        df,
-        use_container_width=True,
-        hide_index=True,
-        key="liq_v3_editor",
-        disabled=[c for c in df.columns if c != "Entidad"],
-        column_config={
-            "Entidad": st.column_config.SelectboxColumn(
-                "Entidad",
-                options=opciones,
-                required=True,
-            ),
-        },
-    )
-
-    c1, c2 = st.columns(2)
-    with c1:
-        recalc = st.button("Recalcular con entidades confirmadas", key="liq_v3_recalc")
-    with c2:
-        gen = st.button("Generar Excel consolidado", type="primary", key="liq_v3_excel")
-
-    if recalc or gen:
-        textos = st.session_state.get("liq_v3_textos") or {}
-        nuevas = []
-        for _, row in editado.iterrows():
-            nombre = str(row.get("Archivo") or "")
-            entidad = str(row.get("Entidad") or "Otra / No detectada")
-            texto = textos.get(nombre, "")
-            valores = extraer_con_plantilla(texto, entidad)
-            valores["Archivo"] = nombre
-            valores["Entidad"] = (
-                entidad if entidad != "Otra / No detectada" else "Desconocida"
-            )
-            valores["Entidad_detectada"] = row.get("Entidad_detectada") or entidad
-            nuevas.append(valores)
-        st.session_state["liq_v3_filas"] = nuevas
-        if gen:
-            st.session_state["liq_v3_xlsx"] = exportar_liquidaciones_tarjeta_excel(pd.DataFrame(nuevas))
-        st.rerun()
-
-    xlsx = st.session_state.get("liq_v3_xlsx")
-    if xlsx:
-        cuit_limpio = re.sub(r"\D", "", str(st.session_state.get("cuit_activo") or ""))
-        st.download_button(
-            "Descargar Excel consolidado",
-            data=xlsx,
-            file_name=(
-                f"Liquidaciones_Tarjetas_Consolidado_{cuit_limpio or 'cliente'}_"
-                f"{date.today().strftime('%Y%m%d')}.xlsx"
-            ),
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            type="primary",
-            key="liq_v3_dl",
-            use_container_width=True,
-        )
 
 @st.fragment
 def _herramienta_caja_usd() -> None:
