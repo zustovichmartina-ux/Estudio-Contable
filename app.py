@@ -11226,9 +11226,13 @@ def _seccion_conciliacion_bancaria_banco(
 def _seccion_conciliacion_bancaria_balance() -> None:
     with st.container():
         _mostrar_aviso_cambio_sociedad()
-        st.caption(
-            "Conciliación con menú AE Studio (Análisis / Impositivo / Sistema). "
-            "Las reglas siguen siendo las de la web. El asiento CN del Balance Excel queda plegado abajo."
+        st.markdown(
+            """
+            <style>
+            iframe[title="ae_conciliacion"] { min-height: 920px; border: 0; }
+            </style>
+            """,
+            unsafe_allow_html=True,
         )
 
         clientes = db.listar_clientes()
@@ -11238,58 +11242,42 @@ def _seccion_conciliacion_bancaria_balance() -> None:
             return
 
         indice = _indice_sociedades_pj(clientes_pj)
-
-        col_sociedad, col_banco = st.columns(2)
-        with col_sociedad:
-            if not _selector_sociedad_devengamientos(clientes_pj):
-                return
-        with col_banco:
-            banco_elegido = st.selectbox(
-                "🏦 Banco a Conciliar",
-                listar_bancos_conciliacion(),
-                key=_BANCO_KEY,
-            )
+        bancos = listar_bancos_conciliacion()
+        if _BANCO_KEY not in st.session_state:
+            st.session_state[_BANCO_KEY] = bancos[0] if bancos else ""
+        banco_elegido = str(st.session_state.get(_BANCO_KEY) or (bancos[0] if bancos else ""))
 
         sociedad_id = st.session_state.get(_SOCiedad_KEY)
-        if sociedad_id is None:
-            return
-
-        _detectar_cambio_banco_y_flush()
-
-        if (
-            st.session_state.cuit_activo is None
-            or st.session_state.nombre_activo is None
-            or st.session_state.get("plan_cuentas_cliente_id") != sociedad_id
-        ):
-            actualizar_sociedad_activa()
-
-        _verificar_sincronizacion_devengamientos(indice)
-
-        plan_vinculado = _sociedad_tiene_plan_vinculado_por_session()
-        with col_sociedad:
-            if plan_vinculado:
-                st.success(
-                    "✓ Sociedad vinculada: El Plan de Cuentas está asociado correctamente en el backend."
-                )
-            else:
-                st.error(_mensaje_plan_no_vinculado())
-                _widget_subir_plan_inline(sociedad_id, st.session_state.get("cuit_activo"), key_suffix="conc")
-
-        cuit_activo = st.session_state.cuit_activo
-        nombre_activo = st.session_state.nombre_activo
+        plan_vinculado = False
+        cuit_activo = st.session_state.get("cuit_activo")
+        nombre_activo = st.session_state.get("nombre_activo")
+        if sociedad_id is not None:
+            _detectar_cambio_banco_y_flush()
+            if (
+                st.session_state.cuit_activo is None
+                or st.session_state.nombre_activo is None
+                or st.session_state.get("plan_cuentas_cliente_id") != sociedad_id
+            ):
+                actualizar_sociedad_activa()
+            _verificar_sincronizacion_devengamientos(indice)
+            plan_vinculado = _sociedad_tiene_plan_vinculado_por_session()
+            cuit_activo = st.session_state.cuit_activo
+            nombre_activo = st.session_state.nombre_activo
 
         render_conciliacion_ae(
-            sociedad_id=int(sociedad_id),
-            banco_elegido=str(banco_elegido or ""),
+            sociedad_id=int(sociedad_id) if sociedad_id is not None else None,
+            banco_elegido=banco_elegido,
             cuit_activo=cuit_activo,
             nombre_activo=nombre_activo,
             plan_vinculado=bool(plan_vinculado),
+            clientes=clientes_pj,
         )
 
-        with st.expander("Asiento CN desde el Balance Excel (flujo anterior)", expanded=False):
-            _seccion_conciliacion_bancaria_banco(
-                banco_elegido, sociedad_id, cuit_activo, nombre_activo, plan_vinculado,
-            )
+        if sociedad_id is not None:
+            with st.expander("Asiento CN desde el Balance Excel (flujo anterior)", expanded=False):
+                _seccion_conciliacion_bancaria_banco(
+                    banco_elegido, sociedad_id, cuit_activo, nombre_activo, plan_vinculado,
+                )
 
 
 def _seccion_devengamientos_iibb(
@@ -13653,7 +13641,7 @@ def main() -> None:
         st.markdown(
             f"""
             - **Devengamientos de Fin de Mes**: solo Personas Jurídicas → Excel asientos Tango.
-            - **Conciliación Bancaria**: extracto PDF → clasificación de la web (Conceptos Bancos + plan del cliente) en vistas Ingresos / Egresos / Retenciones / Deducciones / Inter-cuentas.
+            - **Conciliación Bancaria**: la pantalla de AE Studio (Dashboard, Ingresos, Egresos, Retenciones, Inter-cuentas). Clasifica con las reglas de la web y guarda en la base del estudio.
             - **Préstamos Financieros**: auditoría de cuotas desde PDFs bancarios.
             - **Inversiones**: carga de operaciones, depuración del pool USD y patrimonio (Ganancias / bienes personales).
             - **Herramientas**: recategorización monotributo; matcheo PDF + Tango; cuadro bancario; extractos; FCI FIFO; caja USD; liquidaciones; cruce facturas.
