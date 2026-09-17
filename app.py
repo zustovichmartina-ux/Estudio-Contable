@@ -11428,7 +11428,7 @@ def _formulario_saldos_iniciales_bancos() -> list[dict]:
 
 
 def _herramienta_pdf_extractos_a_excel() -> None:
-    """Buzón OCR + grilla imputable (flujo del demo de extractos)."""
+    """Convertidor PDF/Excel de extracto → Excel descargable."""
     render_herramienta_extractos()
 
 
