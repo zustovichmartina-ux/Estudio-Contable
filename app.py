@@ -11226,14 +11226,6 @@ def _seccion_conciliacion_bancaria_banco(
 def _seccion_conciliacion_bancaria_balance() -> None:
     with st.container():
         _mostrar_aviso_cambio_sociedad()
-        st.markdown(
-            """
-            <style>
-            iframe[title="ae_conciliacion"] { min-height: 920px; border: 0; }
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
 
         clientes = db.listar_clientes()
         clientes_pj = [c for c in clientes if c.get("tipo_persona") == "Persona Jurídica"]
@@ -11243,30 +11235,44 @@ def _seccion_conciliacion_bancaria_balance() -> None:
 
         indice = _indice_sociedades_pj(clientes_pj)
         bancos = listar_bancos_conciliacion()
-        if _BANCO_KEY not in st.session_state:
-            st.session_state[_BANCO_KEY] = bancos[0] if bancos else ""
-        banco_elegido = str(st.session_state.get(_BANCO_KEY) or (bancos[0] if bancos else ""))
+
+        col_sociedad, col_banco = st.columns(2)
+        with col_sociedad:
+            if not _selector_sociedad_devengamientos(clientes_pj):
+                return
+        with col_banco:
+            banco_elegido = st.selectbox(
+                "Banco a conciliar",
+                bancos,
+                key=_BANCO_KEY,
+            )
 
         sociedad_id = st.session_state.get(_SOCiedad_KEY)
-        plan_vinculado = False
-        cuit_activo = st.session_state.get("cuit_activo")
-        nombre_activo = st.session_state.get("nombre_activo")
-        if sociedad_id is not None:
-            _detectar_cambio_banco_y_flush()
-            if (
-                st.session_state.cuit_activo is None
-                or st.session_state.nombre_activo is None
-                or st.session_state.get("plan_cuentas_cliente_id") != sociedad_id
-            ):
-                actualizar_sociedad_activa()
-            _verificar_sincronizacion_devengamientos(indice)
-            plan_vinculado = _sociedad_tiene_plan_vinculado_por_session()
-            cuit_activo = st.session_state.cuit_activo
-            nombre_activo = st.session_state.nombre_activo
+        if sociedad_id is None:
+            return
+
+        _detectar_cambio_banco_y_flush()
+        if (
+            st.session_state.cuit_activo is None
+            or st.session_state.nombre_activo is None
+            or st.session_state.get("plan_cuentas_cliente_id") != sociedad_id
+        ):
+            actualizar_sociedad_activa()
+        _verificar_sincronizacion_devengamientos(indice)
+        plan_vinculado = _sociedad_tiene_plan_vinculado_por_session()
+        cuit_activo = st.session_state.cuit_activo
+        nombre_activo = st.session_state.nombre_activo
+
+        if not plan_vinculado:
+            with col_sociedad:
+                st.error(_mensaje_plan_no_vinculado())
+                _widget_subir_plan_inline(
+                    sociedad_id, st.session_state.get("cuit_activo"), key_suffix="conc"
+                )
 
         render_conciliacion_ae(
-            sociedad_id=int(sociedad_id) if sociedad_id is not None else None,
-            banco_elegido=banco_elegido,
+            sociedad_id=int(sociedad_id),
+            banco_elegido=str(banco_elegido or ""),
             cuit_activo=cuit_activo,
             nombre_activo=nombre_activo,
             plan_vinculado=bool(plan_vinculado),

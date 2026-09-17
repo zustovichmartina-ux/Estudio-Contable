@@ -209,6 +209,7 @@ function bootFromPython(args){
 }
 
 applyTheme();
+if(window.__AE_ARGS && typeof bootFromPython==='function'){bootFromPython(window.__AE_ARGS);}
 </script>
 """
 

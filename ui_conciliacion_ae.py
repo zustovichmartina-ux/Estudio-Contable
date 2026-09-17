@@ -2,7 +2,7 @@
 """Conciliación Bancaria: UI de AE_Studio.html, reglas y persistencia de la web."""
 from __future__ import annotations
 
-import base64
+import json
 import re
 from datetime import date
 from pathlib import Path
@@ -24,7 +24,6 @@ from motor_conciliacion import (
 from procesador import clasificar_movimiento_extracto, procesar_extractos_bancarios_pdfs
 
 _COMPONENT_DIR = Path(__file__).resolve().parent / "ae_conciliacion_component"
-_ae_ui = components.declare_component("ae_conciliacion", path=str(_COMPONENT_DIR))
 
 _SUB_AE = (
     ("impuestos a los débitos y créditos", "ICDB Ley 25.413"),
@@ -292,6 +291,25 @@ def _guardar(sociedad_id: int, preview: dict) -> int:
     return n
 
 
+def _render_shell(payload: dict) -> None:
+    html_path = _COMPONENT_DIR / "index.html"
+    if not html_path.is_file():
+        st.error("Falta la pantalla de AE Studio en el servidor.")
+        return
+    html = html_path.read_text(encoding="utf-8")
+    boot = json.dumps(payload, ensure_ascii=False, default=str).replace("<", "\\u003c")
+    snippet = (
+        "<script>window.__AE_ARGS="
+        + boot
+        + ";if(typeof bootFromPython==='function'){bootFromPython(window.__AE_ARGS);}</script>"
+    )
+    if "</body>" in html:
+        html = html.replace("</body>", snippet + "</body>", 1)
+    else:
+        html += snippet
+    components.html(html, height=940, scrolling=True)
+
+
 def render_conciliacion_ae(
     *,
     sociedad_id: int | None,
@@ -363,127 +381,73 @@ def render_conciliacion_ae(
     except Exception:
         usuarios = []
 
-    event = _ae_ui(
-        movs=[_fila_ae(m) for m in movs],
-        clientes=_clientes_ae(clientes_pj or clientes),
-        cliente=cliente,
-        banco=banco_elegido or "",
-        preview=[_fila_ae(m) for m in (preview.get("movimientos") or [])],
-        plan=_plan_ae(st.session_state.get("plan_cuentas_df")),
-        proveedores=provs,
-        empleados=[],
-        usuarios=usuarios,
-        usuario=str(st.session_state.get("oficina_usuario") or "Estudio"),
-        view=st.session_state.get(view_key) or "dashboard",
-        notify=st.session_state.pop("ae_notify", "") or "",
-        key=f"ae_ui_{sociedad_id or 0}",
-        default=None,
-    )
+    payload = {
+        "movs": [_fila_ae(m) for m in movs],
+        "clientes": _clientes_ae(clientes_pj or clientes),
+        "cliente": cliente,
+        "banco": banco_elegido or "",
+        "preview": [_fila_ae(m) for m in (preview.get("movimientos") or [])],
+        "plan": _plan_ae(st.session_state.get("plan_cuentas_df")),
+        "proveedores": provs,
+        "empleados": [],
+        "usuarios": usuarios,
+        "usuario": str(st.session_state.get("oficina_usuario") or "Estudio"),
+        "view": "import" if preview.get("movimientos") else (st.session_state.get(view_key) or "dashboard"),
+        "notify": st.session_state.pop("ae_notify", "") or "",
+    }
 
-    if not event or not isinstance(event, dict):
-        return
-
-    action = str(event.get("action") or "")
-    if action == "pick_client":
-        try:
-            st.session_state["sociedad_activa"] = int(event.get("id"))
-        except (TypeError, ValueError):
-            pass
-        st.rerun()
-        return
-    if action == "set_banco":
-        st.session_state["selector_banco_conciliar_v2"] = str(event.get("banco") or "")
-        st.rerun()
-        return
-    if action == "cancel_preview":
-        st.session_state.pop(preview_key, None)
-        st.rerun()
-        return
-    if action == "clear" and sociedad_id:
-        db.borrar_movimientos_periodo(int(sociedad_id), periodo=None, banco=None)
-        st.session_state.pop(preview_key, None)
-        st.session_state["ae_notify"] = "Movimientos eliminados"
-        st.rerun()
-        return
-    if action == "save" and sociedad_id and preview.get("movimientos"):
-        n = _guardar(int(sociedad_id), preview)
-        st.session_state.pop(preview_key, None)
-        st.session_state[view_key] = "dashboard"
-        st.session_state["ae_notify"] = f"{n} movimientos guardados"
-        st.rerun()
-        return
-    if action == "reclass" and event.get("id"):
-        try:
-            db.actualizar_movimiento_banco(
-                int(event["id"]),
-                categoria=str(event.get("sub_categoria") or event.get("categoria") or ""),
-                tipo=str(event.get("categoria") or ""),
+    if not sociedad_id:
+        st.info("Elegí la sociedad arriba para importar el extracto.")
+    else:
+        if not plan_vinculado:
+            st.warning("Vinculá el plan de cuentas de esta sociedad antes de clasificar.")
+        archivos = st.file_uploader(
+            "Importar extracto (PDF o Excel)",
+            type=["pdf", "xlsx", "xls", "csv"],
+            accept_multiple_files=True,
+            key=f"ae_up_{sociedad_id}",
+        )
+        c_run, c_save, c_cancel = st.columns(3)
+        with c_run:
+            leer = st.button("Leer extracto", type="primary", key=f"ae_run_{sociedad_id}")
+        with c_save:
+            guardar = st.button(
+                "Guardar movimientos",
+                key=f"ae_save_{sociedad_id}",
+                disabled=not bool(preview.get("movimientos")),
             )
-        except Exception:
-            pass
-        st.session_state["ae_notify"] = "Reclasificado"
-        st.rerun()
-        return
-    if action == "import":
-        if not sociedad_id:
-            st.session_state["ae_notify"] = "Selecciona el cliente primero"
-            st.rerun()
-            return
-        kind = str(event.get("kind") or "pdf")
-        with st.spinner("Leyendo extracto (OCR si es escaneo)…"):
-            if kind == "text":
-                df = _parse_texto(
-                    str(event.get("text") or ""),
-                    banco_elegido or "Otro",
-                    periodo,
-                )
-                if df.empty:
-                    st.session_state["ae_notify"] = "No se detectaron movimientos"
-                    st.rerun()
-                    return
-                filas = df_extracto_a_filas(df)
-                ok_saldo, _msg = validar_saldos_corridos(filas)
-                resultados = correr_motor(
-                    filas,
-                    db.listar_reglas_clasificacion(solo_activas=True),
-                    db.listar_proveedores_pendientes(int(sociedad_id), solo_libres=False),
-                    db.listar_veps_afip(int(sociedad_id)),
-                    cliente_id=int(sociedad_id),
-                    banco=banco_elegido or "",
-                    periodo=periodo,
-                    saldo_ok=ok_saldo,
-                )
-                movs_imp = _aplicar_plan(
-                    _enriquecer(resultados), st.session_state.get("plan_cuentas_df")
-                )
-                meta = {"banco": banco_elegido or ""}
+        with c_cancel:
+            cancelar = st.button("Cancelar vista previa", key=f"ae_cancel_{sociedad_id}")
+        if leer:
+            if not archivos:
+                st.warning("Subí un PDF o Excel.")
             else:
-                raw = event.get("b64") or ""
-                try:
-                    data = base64.b64decode(raw)
-                except Exception:
-                    st.session_state["ae_notify"] = "No se pudo leer el archivo"
-                    st.rerun()
-                    return
-                nombre = str(event.get("name") or ("extracto.pdf" if kind == "pdf" else "extracto.xlsx"))
-                movs_imp, meta = _correr_import(
-                    sociedad_id=int(sociedad_id),
-                    banco_elegido=banco_elegido,
-                    archivos=[_Up(nombre, data)],
-                    periodo=periodo,
-                )
+                with st.spinner("Leyendo extracto (OCR si es escaneo)…"):
+                    movs_imp, meta = _correr_import(
+                        sociedad_id=int(sociedad_id),
+                        banco_elegido=banco_elegido,
+                        archivos=archivos,
+                        periodo=periodo,
+                    )
                 if meta.get("error"):
-                    st.session_state["ae_notify"] = str(meta["error"])
+                    st.error(str(meta["error"]))
+                else:
+                    st.session_state[preview_key] = {
+                        "movimientos": movs_imp,
+                        "banco": meta.get("banco") or banco_elegido,
+                        "periodo": periodo,
+                    }
                     st.session_state[view_key] = "import"
+                    st.session_state["ae_notify"] = f"{len(movs_imp)} movimientos leídos"
                     st.rerun()
-                    return
-        st.session_state[preview_key] = {
-            "movimientos": movs_imp,
-            "banco": meta.get("banco") or banco_elegido,
-            "periodo": periodo,
-        }
-        st.session_state[view_key] = "import"
-        n_ing = sum(1 for m in movs_imp if m.get("vista") == "ingreso")
-        st.session_state["ae_notify"] = f"{len(movs_imp)} movimientos ({n_ing} ingresos)"
-        st.rerun()
-        return
+        if guardar and preview.get("movimientos"):
+            n = _guardar(int(sociedad_id), preview)
+            st.session_state.pop(preview_key, None)
+            st.session_state[view_key] = "dashboard"
+            st.session_state["ae_notify"] = f"{n} movimientos guardados"
+            st.rerun()
+        if cancelar:
+            st.session_state.pop(preview_key, None)
+            st.rerun()
+
+    _render_shell(payload)
