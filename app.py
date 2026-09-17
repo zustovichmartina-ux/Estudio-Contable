@@ -34,7 +34,12 @@ from afip_worker.ui_streamlit import render_arca_module
 from inversiones_ui import seccion_inversiones_arg
 from cruce_facturas_arca import procesar_cruce_facturas_arca
 from ui_extractos import render_herramienta_extractos
-from ui_conciliacion_ae import render_conciliacion_ae
+try:
+    from ui_conciliacion_ae import render_conciliacion_ae
+except Exception as _exc_ae:  # pragma: no cover - el resto de la web tiene que abrir
+    def render_conciliacion_ae(*_a, **_k):
+        st.error("Conciliación Bancaria no pudo cargar.")
+        st.exception(_exc_ae)
 from procesador import (
     BANCOS_ARGENTINOS,
     COMPRAS_TANGO_PATH,
@@ -876,7 +881,11 @@ def _arrancar_estudio() -> bool:
     return True
 
 
-_arrancar_estudio()
+try:
+    _arrancar_estudio()
+except Exception as _exc_boot:
+    st.error("No pudo arrancar la base del estudio.")
+    st.exception(_exc_boot)
 
 _SOCiedad_KEY = "sociedad_activa"
 _IMPUESTO_KEY = "selector_impuesto"
@@ -11276,7 +11285,6 @@ def _seccion_conciliacion_bancaria_balance() -> None:
             cuit_activo=cuit_activo,
             nombre_activo=nombre_activo,
             plan_vinculado=bool(plan_vinculado),
-            clientes=clientes_pj,
         )
 
         if sociedad_id is not None:
@@ -13601,6 +13609,14 @@ def _seccion_usuarios_oficina() -> None:
 
 
 def main() -> None:
+    try:
+        _main()
+    except Exception as _exc_main:
+        st.error("Error al abrir la aplicación.")
+        st.exception(_exc_main)
+
+
+def _main() -> None:
     _init_session_state()
 
     # Gate de login: sin usuario de oficina no se entra a la app
