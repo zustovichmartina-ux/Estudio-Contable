@@ -18,6 +18,13 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+st.set_page_config(
+    page_title="Estudio Zona Güemes",
+    page_icon="📋",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
 from generar_auditoria import (
     procesar_todos as _ga_procesar_todos,
     CARPETA as _GA_CARPETA_PRESTAMOS,
@@ -192,13 +199,6 @@ def _es_entorno_cloud() -> bool:
     if os.name != "nt" and not PLANES_RED_DIR.exists():
         return True
     return False
-
-st.set_page_config(
-    page_title="Estudio Zona Güemes",
-    page_icon="📋",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
 
 st.markdown(
     """

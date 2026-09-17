@@ -1,0 +1,4 @@
+-r requirements.txt
+easyocr>=1.7.0
+pyodbc>=5.0.0
+playwright>=1.49.0

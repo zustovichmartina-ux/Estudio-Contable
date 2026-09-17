@@ -11,7 +11,11 @@ from typing import Optional
 
 import openpyxl
 import pandas as pd
-from ddgs import DDGS
+
+try:
+    from ddgs import DDGS
+except Exception:
+    DDGS = None
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "estudio_contable.db"
@@ -66,7 +70,9 @@ def buscar_mes_cierre_web(cuit: str) -> Optional[int]:
     """Busca en internet el mes de cierre de balance para el CUIT dado."""
     if not cuit or len(cuit) < 10:
         return None
-    
+    if DDGS is None:
+        return None
+
     query = f"cuit {cuit} cierre de balance"
     try:
         resultados = DDGS().text(query, max_results=3)
