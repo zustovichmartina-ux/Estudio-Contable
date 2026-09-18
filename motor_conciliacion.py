@@ -6,6 +6,7 @@ import re
 import unicodedata
 from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
+from itertools import combinations
 from typing import Any, Iterable
 
 import pandas as pd
@@ -243,44 +244,40 @@ def bucket_ae(mov: dict, *, extracto_label: str = "") -> str:
     return "egreso"
 
 
-def clasificar(
-    descripcion: str,
-    reglas: list[dict] | None = None,
-    *,
-    banco: str = "",
-    debito: float = 0.0,
-    credito: float = 0.0,
-    instructivo: dict | None = None,
-) -> dict[str, Any]:
-    """Instructivo Conceptos Bancos primero; si no hay match, reglas seed."""
-    if instructivo and banco:
-        hit = clasificar_movimiento_instructivo(
-            descripcion,
-            banco,
-            debito=debito,
-            credito=credito,
-            instructivo=instructivo,
-        )
-        cuenta = str(hit.get("cuenta") or "Movimientos a identificar")
-        score = float(hit.get("score") or 0)
-        identificado = bool(hit.get("identificado"))
-        tipo = tipo_desde_cuenta(cuenta, debito, credito)
-        if not identificado:
-            tipo = "DEBITO_REVISAR"
-        fuente = "conceptos_bancos"
-        conf = confianza_clasificacion(
-            fuente=fuente, score=score, identificado=identificado,
-        )
-        return {
-            "categoria": cuenta,
-            "tipo": tipo,
-            "citar": str(hit.get("citar") or ""),
-            "concepto_instructivo": str(hit.get("concepto") or ""),
-            "fuente": fuente,
-            "score": score,
-            "confianza": conf,
-        }
+def _resultado_instructivo(hit: dict, debito: float, credito: float) -> dict[str, Any]:
+    cuenta = str(hit.get("cuenta") or "Movimientos a identificar")
+    score = float(hit.get("score") or 0)
+    identificado = bool(hit.get("identificado"))
+    tipo = tipo_desde_cuenta(cuenta, debito, credito)
+    if not identificado:
+        tipo = "DEBITO_REVISAR"
+    return {
+        "categoria": cuenta,
+        "tipo": tipo,
+        "citar": str(hit.get("citar") or ""),
+        "concepto_instructivo": str(hit.get("concepto") or ""),
+        "fuente": "conceptos_bancos",
+        "score": score,
+        "confianza": confianza_clasificacion(
+            fuente="conceptos_bancos", score=score, identificado=identificado,
+        ),
+    }
 
+
+def _resultado_regla_local(regla: dict) -> dict[str, Any]:
+    patron = normalizar_texto(str(regla.get("patron") or ""))
+    return {
+        "categoria": str(regla.get("categoria") or ""),
+        "tipo": str(regla.get("tipo") or "DEBITO_REVISAR"),
+        "citar": f"Regla local «{patron}» (Configuración).",
+        "concepto_instructivo": "",
+        "fuente": "regla_local",
+        "score": 75.0,
+        "confianza": "media",
+    }
+
+
+def _buscar_regla_local(descripcion: str, reglas: list[dict] | None) -> dict | None:
     texto = normalizar_texto(descripcion)
     lista = reglas
     if lista is None:
@@ -293,15 +290,39 @@ def clasificar(
             continue
         patron = normalizar_texto(str(r.get("patron") or ""))
         if patron and patron in texto:
-            return {
-                "categoria": str(r.get("categoria") or ""),
-                "tipo": str(r.get("tipo") or "DEBITO_REVISAR"),
-                "citar": f"Regla local «{patron}» (no es fila de Conceptos Bancos).",
-                "concepto_instructivo": "",
-                "fuente": "regla_local",
-                "score": 75.0,
-                "confianza": "media",
-            }
+            return r
+    return None
+
+
+def clasificar(
+    descripcion: str,
+    reglas: list[dict] | None = None,
+    *,
+    banco: str = "",
+    debito: float = 0.0,
+    credito: float = 0.0,
+    instructivo: dict | None = None,
+) -> dict[str, Any]:
+    """Instructivo si identifica; si no, reglas de Configuración; si no, a revisar."""
+    hit_inst: dict[str, Any] | None = None
+    if instructivo and banco:
+        hit_inst = clasificar_movimiento_instructivo(
+            descripcion,
+            banco,
+            debito=debito,
+            credito=credito,
+            instructivo=instructivo,
+        )
+        if hit_inst.get("identificado"):
+            return _resultado_instructivo(hit_inst, debito, credito)
+
+    regla = _buscar_regla_local(descripcion, reglas)
+    if regla is not None:
+        return _resultado_regla_local(regla)
+
+    if hit_inst is not None:
+        return _resultado_instructivo(hit_inst, debito, credito)
+
     return {
         "categoria": "Movimientos a identificar",
         "tipo": "DEBITO_REVISAR",
@@ -327,8 +348,14 @@ def extraer_numero_vep(descripcion: str) -> str:
 
 
 def validar_saldos_corridos(filas: list[dict]) -> tuple[bool, str]:
-    """Valida saldo línea a línea: saldo_prev + credito - debito ≈ saldo."""
+    """Valida saldo línea a línea: saldo_prev + credito - debito ≈ saldo.
+
+    Si el extracto no trae saldo (Excel/CSV sin columna, todo en 0) no se
+    trata como inconsistente: no hay cadena que controlar.
+    """
     if not filas:
+        return True, ""
+    if all(money(f.get("saldo")) == 0 for f in filas):
         return True, ""
     prev: Decimal | None = None
     for i, f in enumerate(filas):
@@ -348,6 +375,39 @@ def validar_saldos_corridos(filas: list[dict]) -> tuple[bool, str]:
     return True, ""
 
 
+_TOKENS_NCC = ("NCC", "NOTA DE CREDITO", "NOTA CREDITO", "NOTA DE CRÉDITO")
+_TOKENS_NDD = ("NDD", "NOTA DE DEBITO", "NOTA DEBITO", "NOTA DE DÉBITO")
+
+
+def _lado_debito_credito(
+    descripcion: str,
+    debito: Decimal,
+    credito: Decimal,
+    importe: Decimal,
+    tipo_mov: str,
+) -> tuple[Decimal, Decimal]:
+    """Débito/crédito del extracto. NCC acredita; el signo del Importe manda si no hay D/C."""
+    if debito != 0 or credito != 0:
+        return debito, credito
+    blob = normalizar_texto(descripcion)
+    tipo_u = normalizar_texto(tipo_mov)
+    es_ncc = any(t in blob for t in _TOKENS_NCC) or "NCC" in blob
+    es_ndd = any(t in blob for t in _TOKENS_NDD) or "NDD" in blob
+    if es_ncc and not es_ndd:
+        return Decimal("0.00"), abs(importe)
+    if es_ndd and not es_ncc:
+        return abs(importe), Decimal("0.00")
+    if "CRED" in tipo_u and "DEB" not in tipo_u:
+        return Decimal("0.00"), abs(importe)
+    if "DEB" in tipo_u:
+        return abs(importe), Decimal("0.00")
+    if importe < 0:
+        return abs(importe), Decimal("0.00")
+    if importe > 0:
+        return Decimal("0.00"), abs(importe)
+    return Decimal("0.00"), Decimal("0.00")
+
+
 def df_extracto_a_filas(df: pd.DataFrame) -> list[dict]:
     """Normaliza DF unificado de procesador → filas del motor."""
     if df is None or df.empty:
@@ -358,15 +418,15 @@ def df_extracto_a_filas(df: pd.DataFrame) -> list[dict]:
         detalle = str(row.get("Detalle") or "")
         if detalle and detalle not in desc:
             desc = f"{desc} {detalle}".strip()
-        debito = money(row.get("Debito"))
-        credito = money(row.get("Credito"))
+        debito, credito = _lado_debito_credito(
+            desc,
+            money(row.get("Debito")),
+            money(row.get("Credito")),
+            money(row.get("Importe")),
+            str(row.get("Tipo Movimiento") or ""),
+        )
         if debito == 0 and credito == 0:
-            imp = money(row.get("Importe"))
-            tipo_m = str(row.get("Tipo Movimiento") or "").upper()
-            if "CRED" in tipo_m or imp > 0 and "DEB" not in tipo_m:
-                credito = abs(imp)
-            else:
-                debito = abs(imp)
+            continue
         out.append(
             {
                 "fecha": _parse_fecha(row.get("Fecha")),
@@ -397,7 +457,29 @@ def _fuzzy_ratio(a: str, b: str) -> float:
         return 0.0
 
 
+def _fecha_factura(f: dict) -> date | None:
+    fecha_f = f.get("fecha")
+    if isinstance(fecha_f, str):
+        return _parse_fecha(fecha_f)
+    if isinstance(fecha_f, datetime):
+        return fecha_f.date()
+    if isinstance(fecha_f, date):
+        return fecha_f
+    return None
+
+
 def match_proveedor(
+    mov: dict,
+    pendientes: list[dict],
+) -> dict | None:
+    """1:1 (importe ±1) y, si no hay, 1:N (un pago cubre varias facturas del mismo proveedor)."""
+    hit = match_proveedor_1a1(mov, pendientes)
+    if hit:
+        return hit
+    return match_proveedor_1n(mov, pendientes)
+
+
+def match_proveedor_1a1(
     mov: dict,
     pendientes: list[dict],
 ) -> dict | None:
@@ -406,6 +488,8 @@ def match_proveedor(
     if importe <= 0:
         return None
     fecha_pago = mov.get("fecha")
+    if isinstance(fecha_pago, str):
+        fecha_pago = _parse_fecha(fecha_pago)
     nombre = extraer_nombre_proveedor(str(mov.get("descripcion") or ""))
     mejor = None
     mejor_score = -1.0
@@ -415,9 +499,7 @@ def match_proveedor(
         imp_f = money(f.get("importe"))
         if abs(imp_f - importe) > TOL_IMPORTE:
             continue
-        fecha_f = f.get("fecha")
-        if isinstance(fecha_f, str):
-            fecha_f = _parse_fecha(fecha_f)
+        fecha_f = _fecha_factura(f)
         if fecha_pago and fecha_f and fecha_f > fecha_pago + timedelta(days=2):
             continue
         score = _fuzzy_ratio(nombre, str(f.get("razon_social") or ""))
@@ -428,10 +510,73 @@ def match_proveedor(
         return None
     return {
         "factura": mejor,
+        "facturas": [mejor],
         "similitud": mejor_score,
         "detalle": (
             f"{mejor.get('razon_social')} | {mejor.get('tipo_comp') or ''} "
             f"{mejor.get('num_comp') or ''} | similitud {mejor_score:.0f}%"
+        ),
+    }
+
+
+def match_proveedor_1n(
+    mov: dict,
+    pendientes: list[dict],
+    *,
+    max_facturas: int = 4,
+    max_candidatos: int = 12,
+) -> dict | None:
+    """Un débito cubre 2–4 facturas del mismo proveedor (suma ± tolerancia)."""
+    importe = money(mov.get("debito") or mov.get("importe"))
+    if importe <= 0:
+        return None
+    fecha_pago = mov.get("fecha")
+    if isinstance(fecha_pago, str):
+        fecha_pago = _parse_fecha(fecha_pago)
+    nombre = extraer_nombre_proveedor(str(mov.get("descripcion") or ""))
+    candidatos: list[tuple[float, dict]] = []
+    for f in pendientes:
+        if f.get("usado"):
+            continue
+        score = _fuzzy_ratio(nombre, str(f.get("razon_social") or f.get("proveedor") or ""))
+        if score < SIMILITUD_MIN:
+            continue
+        fecha_f = _fecha_factura(f)
+        if fecha_pago and fecha_f and fecha_f > fecha_pago + timedelta(days=2):
+            continue
+        if money(f.get("importe")) <= 0:
+            continue
+        candidatos.append((score, f))
+    if len(candidatos) < 2:
+        return None
+    candidatos.sort(key=lambda x: -x[0])
+    candidatos = candidatos[:max_candidatos]
+    mejor = None
+    for k in range(2, min(max_facturas, len(candidatos)) + 1):
+        for combo in combinations(candidatos, k):
+            facturas = [c[1] for c in combo]
+            suma = sum((money(f.get("importe")) for f in facturas), Decimal("0.00"))
+            dif = abs(suma - importe)
+            if dif > TOL_IMPORTE:
+                continue
+            sim = min(c[0] for c in combo)
+            cand = (dif, -sim, k, facturas, sim, suma)
+            if mejor is None or cand[:3] < mejor[:3]:
+                mejor = cand
+    if mejor is None:
+        return None
+    _dif, _ns, _k, facturas, sim, suma = mejor
+    nums = " + ".join(
+        f"{money(f.get('importe'))} ({(f.get('tipo_comp') or '')} {(f.get('num_comp') or '')})".strip()
+        for f in facturas
+    )
+    return {
+        "factura": facturas[0],
+        "facturas": facturas,
+        "similitud": sim,
+        "detalle": (
+            f"1:N {facturas[0].get('razon_social') or ''} | {nums} = {suma} "
+            f"≈ {importe} | similitud {sim:.0f}%"
         ),
     }
 
@@ -528,10 +673,14 @@ def correr_motor(
                 estado = "CONCILIADO"
                 match_detalle = m["detalle"]
                 match_ref_id = m["factura"].get("id")
-                usados.add(match_ref_id)
-                for p in proveedores:
-                    if p.get("id") == match_ref_id:
-                        p["usado"] = True
+                for fac in m.get("facturas") or [m["factura"]]:
+                    fid = fac.get("id")
+                    if fid is None:
+                        continue
+                    usados.add(fid)
+                    for p in proveedores:
+                        if p.get("id") == fid:
+                            p["usado"] = True
             else:
                 estado = "PENDIENTE"
                 match_detalle = (
@@ -749,16 +898,27 @@ def renglones_asiento_banco_mes(
 def movimientos_a_filas_grilla_tango(
     movimientos: list[dict],
     plan_cuentas: pd.DataFrame | None = None,
+    *,
+    incluir_pendientes: bool = True,
 ) -> list[dict]:
-    """Puente a grilla: categoría del instructivo → código del plan del cliente."""
+    """Puente a grilla: categoría del instructivo → código del plan del cliente.
+
+    Pendientes sin cuenta clara van como 99999 (sin match, no se inventa).
+    No se omiten: el asiento tiene que mostrar lo que falta confirmar.
+    """
     filas = []
     for m in movimientos:
-        if m.get("estado") == "PENDIENTE":
+        estado = str(m.get("estado") or "")
+        if estado == "PENDIENTE" and not incluir_pendientes:
             continue
         cat = str(m.get("categoria") or "")
         codigo, desc_plan, score_plan = resolver_codigo_plan(
             cat, plan_cuentas, hints=CATEGORIA_A_CUENTA_HINT,
         )
+        if estado == "PENDIENTE" and (
+            not cat or "identificar" in cat.lower() or codigo == "99999"
+        ):
+            codigo = "99999"
         credito = money(m.get("credito"))
         debito = money(m.get("debito"))
         filas.append(
@@ -768,7 +928,7 @@ def movimientos_a_filas_grilla_tango(
                 "categoria": cat,
                 "cuenta_plan": desc_plan,
                 "tipo": m.get("tipo"),
-                "estado": m.get("estado"),
+                "estado": estado,
                 "cuenta_sugerida": codigo,
                 "debe": float(debito) if debito > 0 else 0.0,
                 "haber": float(credito) if credito > 0 else 0.0,
@@ -778,3 +938,113 @@ def movimientos_a_filas_grilla_tango(
             }
         )
     return filas
+
+
+_MESES_ES = (
+    "", "ene", "feb", "mar", "abr", "may", "jun",
+    "jul", "ago", "sep", "oct", "nov", "dic",
+)
+
+
+def armar_papel_mes(
+    movs: list[dict],
+    *,
+    saldo_inicial_arrastre: Decimal | float | None = None,
+) -> dict[str, Any]:
+    """Papel de un mes: cierre = apertura + créditos − débitos. No fuerza diferencia a 0."""
+    if not movs:
+        return {
+            "anio": None,
+            "mes": None,
+            "periodo": "",
+            "apertura": 0.0,
+            "creditos": 0.0,
+            "debitos": 0.0,
+            "cierre": 0.0,
+            "segun_resumen": None,
+            "diferencia": None,
+            "origen_apertura": "sin_datos",
+            "movimientos": 0,
+        }
+
+    def _ord(m: dict):
+        return (_parse_fecha(m.get("fecha")) or date.min, str(m.get("id") or ""))
+
+    ordenados = sorted(movs, key=_ord)
+    creditos = sum((money(m.get("credito")) for m in ordenados), Decimal("0.00"))
+    debitos = sum((money(m.get("debito")) for m in ordenados), Decimal("0.00"))
+    first = ordenados[0]
+    last = ordenados[-1]
+    if saldo_inicial_arrastre is not None:
+        apertura = money(saldo_inicial_arrastre)
+        origen = "arrastre"
+    else:
+        s0 = money(first.get("saldo"))
+        apertura = (s0 - money(first.get("credito")) + money(first.get("debito"))).quantize(
+            _MONEY, rounding=ROUND_HALF_UP
+        )
+        origen = "extracto"
+    cierre = (apertura + creditos - debitos).quantize(_MONEY, rounding=ROUND_HALF_UP)
+    hay_saldo = any(money(m.get("saldo")) != 0 for m in ordenados)
+    if hay_saldo:
+        segun = money(last.get("saldo"))
+        diferencia = (segun - cierre).quantize(_MONEY, rounding=ROUND_HALF_UP)
+    else:
+        segun = None
+        diferencia = None
+    fecha0 = _parse_fecha(first.get("fecha")) or _parse_fecha(first.get("periodo"))
+    periodo = ""
+    anio = mes = None
+    if fecha0:
+        anio, mes = fecha0.year, fecha0.month
+        periodo = f"{_MESES_ES[mes]}-{str(anio)[2:]}"
+    return {
+        "anio": anio,
+        "mes": mes,
+        "periodo": periodo,
+        "apertura": float(apertura),
+        "creditos": float(creditos),
+        "debitos": float(debitos),
+        "cierre": float(cierre),
+        "segun_resumen": float(segun) if segun is not None else None,
+        "diferencia": float(diferencia) if diferencia is not None else None,
+        "origen_apertura": origen,
+        "movimientos": len(ordenados),
+    }
+
+
+def _meses_consecutivos(a: tuple[int, int], b: tuple[int, int]) -> bool:
+    y1, m1 = a
+    y2, m2 = b
+    if m1 == 12:
+        return (y2, m2) == (y1 + 1, 1)
+    return (y2, m2) == (y1, m1 + 1)
+
+
+def papeles_por_mes(movimientos: list[dict]) -> list[dict]:
+    """Cadena mensual. Primer mes: apertura del extracto. Siguientes: arrastre del cierre.
+
+    No inventa meses sin movimientos. Si hay un hueco, el mes que retoma abre
+    con el extracto. La diferencia (según resumen − cierre) se informa y no
+    se corrige a 0.
+    """
+    grupos: dict[tuple[int, int], list[dict]] = {}
+    for m in movimientos:
+        d = _parse_fecha(m.get("fecha")) or _parse_fecha(m.get("periodo"))
+        if d is None:
+            continue
+        grupos.setdefault((d.year, d.month), []).append(m)
+    out: list[dict] = []
+    arrastre: Decimal | None = None
+    prev_clave: tuple[int, int] | None = None
+    for clave in sorted(grupos):
+        if prev_clave is not None and not _meses_consecutivos(prev_clave, clave):
+            arrastre = None
+        papel = armar_papel_mes(
+            grupos[clave],
+            saldo_inicial_arrastre=arrastre,
+        )
+        out.append(papel)
+        arrastre = money(papel["cierre"])
+        prev_clave = clave
+    return out

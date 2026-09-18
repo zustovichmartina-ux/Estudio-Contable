@@ -1814,13 +1814,25 @@ def test_conceptos_bancos_debito_no_toma_regla_credito():
   assert "deudor" in hit_cre["cuenta"].lower()
   clf = clasificar(
       "MOVIMIENTO RARO XYZ SIN PISTA",
-      [{"patron": "MOVIMIENTO RARO", "categoria": "NO DEBE USARSE", "tipo": "INGRESO", "orden": 1, "activo": 1}],
+      [{"patron": "MOVIMIENTO RARO", "categoria": "Gasto oficina", "tipo": "DEBITO_FIJO", "orden": 1, "activo": 1}],
       banco="Galicia",
       debito=10,
       credito=0,
       instructivo=data,
   )
-  assert "identificar" in clf["categoria"].lower()
+  assert clf["categoria"] == "Gasto oficina"
+  assert clf["fuente"] == "regla_local"
+
+  clf_inst = clasificar(
+      "TRANSFERENCIA",
+      [{"patron": "TRANSFERENCIA", "categoria": "NO DEBE USARSE", "tipo": "INGRESO", "orden": 1, "activo": 1}],
+      banco="Galicia",
+      debito=500,
+      credito=0,
+      instructivo=data,
+  )
+  assert "proveedor" in clf_inst["categoria"].lower()
+  assert clf_inst["fuente"] == "conceptos_bancos"
   print("OK test_conceptos_bancos_debito_no_toma_regla_credito")
 
 

@@ -1,15 +1,25 @@
 # -*- coding: utf-8 -*-
-"""Vista AE-Studio sobre las reglas que ya tiene la web."""
+"""Conciliación: reglas de la web, papeles mensuales, match 1:N, asiento 99999."""
 from __future__ import annotations
 
 import unittest
+from datetime import date
+from decimal import Decimal
+
+import pandas as pd
 
 from motor_conciliacion import (
+    armar_papel_mes,
     bucket_ae,
     clasificar,
     correr_motor,
+    df_extracto_a_filas,
+    match_proveedor,
+    movimientos_a_filas_grilla_tango,
     origen_linea_extracto,
+    papeles_por_mes,
     renglones_asiento_banco_mes,
+    validar_saldos_corridos,
 )
 
 
@@ -79,6 +89,280 @@ class TestBucketAeUsaReglasWeb(unittest.TestCase):
         )
         self.assertEqual(out[0]["estado"], "PENDIENTE")
         self.assertEqual(bucket_ae(out[0]), "retencion")
+
+
+class TestSaldosYSignos(unittest.TestCase):
+    def test_excel_sin_saldo_no_se_marca_inconsistente(self):
+        filas = [
+            {"credito": 100, "debito": 0, "saldo": 0},
+            {"credito": 0, "debito": 40, "saldo": 0},
+        ]
+        ok, msg = validar_saldos_corridos(filas)
+        self.assertTrue(ok)
+        self.assertEqual(msg, "")
+
+    def test_cadena_de_saldos_detecta_salto(self):
+        filas = [
+            {"credito": 100, "debito": 0, "saldo": 1100},
+            {"credito": 0, "debito": 40, "saldo": 2000},
+        ]
+        ok, msg = validar_saldos_corridos(filas)
+        self.assertFalse(ok)
+        self.assertIn("inconsistente", msg.lower())
+
+    def test_ncc_sin_dc_va_a_credito(self):
+        df = pd.DataFrame(
+            [
+                {
+                    "Fecha": "02/01/2026",
+                    "Descripcion": "NCC REINTEGRO COMISION",
+                    "Debito": 0,
+                    "Credito": 0,
+                    "Importe": 250.5,
+                    "Saldo": 0,
+                    "Tipo Movimiento": "",
+                    "Banco": "Galicia",
+                }
+            ]
+        )
+        filas = df_extracto_a_filas(df)
+        self.assertEqual(len(filas), 1)
+        self.assertEqual(filas[0]["credito"], Decimal("250.50"))
+        self.assertEqual(filas[0]["debito"], Decimal("0.00"))
+
+    def test_importe_negativo_va_a_debito(self):
+        df = pd.DataFrame(
+            [
+                {
+                    "Fecha": "02/01/2026",
+                    "Descripcion": "PAGO SERVICIO",
+                    "Debito": 0,
+                    "Credito": 0,
+                    "Importe": -80,
+                    "Saldo": 0,
+                    "Banco": "Galicia",
+                }
+            ]
+        )
+        filas = df_extracto_a_filas(df)
+        self.assertEqual(filas[0]["debito"], Decimal("80.00"))
+        self.assertEqual(filas[0]["credito"], Decimal("0.00"))
+
+    def test_fila_sin_importe_se_omite(self):
+        df = pd.DataFrame(
+            [
+                {
+                    "Fecha": "02/01/2026",
+                    "Descripcion": "ENCABEZADO",
+                    "Debito": 0,
+                    "Credito": 0,
+                    "Importe": 0,
+                    "Saldo": 0,
+                }
+            ]
+        )
+        self.assertEqual(df_extracto_a_filas(df), [])
+
+
+class TestPapelesMensuales(unittest.TestCase):
+    def test_primer_mes_abre_con_extracto_y_cierre_formula(self):
+        movs = [
+            {
+                "fecha": date(2026, 1, 2),
+                "credito": 100,
+                "debito": 0,
+                "saldo": 1100,
+            },
+            {
+                "fecha": date(2026, 1, 5),
+                "credito": 0,
+                "debito": 40,
+                "saldo": 1060,
+            },
+        ]
+        papel = armar_papel_mes(movs)
+        self.assertEqual(papel["origen_apertura"], "extracto")
+        self.assertEqual(papel["apertura"], 1000.0)
+        self.assertEqual(papel["creditos"], 100.0)
+        self.assertEqual(papel["debitos"], 40.0)
+        self.assertEqual(papel["cierre"], 1060.0)
+        self.assertEqual(papel["segun_resumen"], 1060.0)
+        self.assertEqual(papel["diferencia"], 0.0)
+
+    def test_mes_siguiente_arrastra_y_no_fuerza_diferencia_a_cero(self):
+        movs = [
+            {
+                "fecha": date(2026, 1, 2),
+                "credito": 100,
+                "debito": 0,
+                "saldo": 1100,
+            },
+            {
+                "fecha": date(2026, 1, 31),
+                "credito": 0,
+                "debito": 40,
+                "saldo": 1060,
+            },
+            {
+                "fecha": date(2026, 2, 3),
+                "credito": 200,
+                "debito": 0,
+                "saldo": 1260,
+            },
+            {
+                "fecha": date(2026, 2, 28),
+                "credito": 0,
+                "debito": 30,
+                "saldo": 1225,
+            },
+        ]
+        cadena = papeles_por_mes(movs)
+        self.assertEqual(len(cadena), 2)
+        ene, feb = cadena
+        self.assertEqual(ene["origen_apertura"], "extracto")
+        self.assertEqual(ene["cierre"], 1060.0)
+        self.assertEqual(feb["origen_apertura"], "arrastre")
+        self.assertEqual(feb["apertura"], 1060.0)
+        self.assertEqual(feb["cierre"], 1230.0)
+        self.assertEqual(feb["segun_resumen"], 1225.0)
+        self.assertEqual(feb["diferencia"], -5.0)
+        self.assertNotEqual(feb["diferencia"], 0.0)
+
+    def test_no_inventa_mes_sin_movimientos(self):
+        movs = [
+            {"fecha": date(2026, 1, 2), "credito": 10, "debito": 0, "saldo": 10},
+            {"fecha": date(2026, 3, 2), "credito": 5, "debito": 0, "saldo": 15},
+        ]
+        cadena = papeles_por_mes(movs)
+        self.assertEqual([p["mes"] for p in cadena], [1, 3])
+        self.assertEqual(cadena[1]["origen_apertura"], "extracto")
+
+
+class TestMatchProveedor1N(unittest.TestCase):
+    def test_un_pago_cubre_dos_facturas(self):
+        mov = {
+            "fecha": date(2026, 3, 10),
+            "descripcion": "TRF INMED PROVEED / ACME SA / 30708982497",
+            "debito": 150,
+        }
+        pendientes = [
+            {
+                "id": 1,
+                "razon_social": "ACME SA",
+                "importe": 100,
+                "fecha": date(2026, 3, 1),
+                "tipo_comp": "FC",
+                "num_comp": "A-1",
+            },
+            {
+                "id": 2,
+                "razon_social": "ACME SA",
+                "importe": 50,
+                "fecha": date(2026, 3, 2),
+                "tipo_comp": "FC",
+                "num_comp": "A-2",
+            },
+            {
+                "id": 3,
+                "razon_social": "OTRA SRL",
+                "importe": 150,
+                "fecha": date(2026, 3, 1),
+                "tipo_comp": "FC",
+                "num_comp": "B-1",
+            },
+        ]
+        hit = match_proveedor(mov, pendientes)
+        self.assertIsNotNone(hit)
+        ids = {f["id"] for f in hit["facturas"]}
+        self.assertEqual(ids, {1, 2})
+        self.assertIn("1:N", hit["detalle"])
+
+    def test_motor_marca_ambas_facturas_usadas(self):
+        filas = [
+            {
+                "fecha": date(2026, 3, 10),
+                "descripcion": "TRF INMED PROVEED / ACME SA / 30708982497",
+                "debito": 150,
+                "credito": 0,
+                "saldo": 0,
+            }
+        ]
+        prov = [
+            {
+                "id": 1,
+                "razon_social": "ACME SA",
+                "importe": 90,
+                "fecha": date(2026, 3, 1),
+                "tipo_comp": "FC",
+                "num_comp": "1",
+                "usado": False,
+            },
+            {
+                "id": 2,
+                "razon_social": "ACME SA",
+                "importe": 60,
+                "fecha": date(2026, 3, 2),
+                "tipo_comp": "FC",
+                "num_comp": "2",
+                "usado": False,
+            },
+        ]
+        reglas = [
+            {
+                "patron": "TRF INMED PROVEED",
+                "categoria": "Proveedores varios (a conciliar por importe)",
+                "tipo": "DEBITO_PROVEEDOR",
+                "orden": 0,
+                "activo": 1,
+            }
+        ]
+        out = correr_motor(
+            filas, reglas, prov, [], cliente_id=1, banco="", periodo=None, saldo_ok=True
+        )
+        self.assertEqual(out[0]["estado"], "CONCILIADO")
+        self.assertTrue(prov[0]["usado"])
+        self.assertTrue(prov[1]["usado"])
+
+
+class TestAsientoTango(unittest.TestCase):
+    def test_pendiente_sin_match_aparece_como_99999(self):
+        movs = [
+            {
+                "fecha": date(2026, 3, 10),
+                "descripcion": "MOVIMIENTO RARO XYZ",
+                "categoria": "Movimientos a identificar",
+                "tipo": "DEBITO_REVISAR",
+                "estado": "PENDIENTE",
+                "credito": 0,
+                "debito": 25,
+            }
+        ]
+        filas = movimientos_a_filas_grilla_tango(movs)
+        self.assertEqual(len(filas), 1)
+        self.assertEqual(filas[0]["cuenta_sugerida"], "99999")
+        self.assertEqual(filas[0]["debe"], 25.0)
+
+    def test_regla_local_confirmable_entra_al_asiento(self):
+        plan = pd.DataFrame(
+            [
+                {"codigo": "51201", "descripcion": "Imp. Déb/Cred. Ley 25413 (sobre débitos)"},
+            ]
+        )
+        movs = [
+            {
+                "fecha": date(2026, 3, 10),
+                "descripcion": "IMP. DEB. LEY 25413",
+                "categoria": "Imp. Déb/Cred. Ley 25413 (sobre débitos)",
+                "tipo": "DEBITO_IMPUESTO",
+                "estado": "PENDIENTE",
+                "credito": 0,
+                "debito": 10,
+            }
+        ]
+        filas = movimientos_a_filas_grilla_tango(movs, plan_cuentas=plan)
+        self.assertEqual(len(filas), 1)
+        self.assertEqual(filas[0]["cuenta_sugerida"], "51201")
+        self.assertEqual(filas[0]["estado"], "PENDIENTE")
 
 
 class TestAsientoExtractoAgrupaCuentas(unittest.TestCase):

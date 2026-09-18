@@ -12,6 +12,7 @@ import database as db
 from capa_revision import resumen_revision_motor
 from conceptos_bancos import CACHE_PATH, cargar_instructivo
 from motor_conciliacion import (
+    CATEGORIA_A_CUENTA_HINT,
     correr_motor,
     df_extracto_a_filas,
     money,
