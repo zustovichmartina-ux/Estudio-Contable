@@ -19,39 +19,68 @@ RE_SKIP = re.compile(
 
 
 def pnum(s: str) -> float:
-    t = (s or "").strip()
+    t = (s or "").strip().replace("$", "").replace(" ", "")
+    if not t:
+        return 0.0
     neg = t.endswith("-") or t.startswith("-")
     t = t.replace("-", "").replace(".", "").replace(",", ".")
-    return (float(t) or 0.0) * (-1 if neg else 1)
+    try:
+        return (float(t) or 0.0) * (-1 if neg else 1)
+    except ValueError:
+        return 0.0
+
+
+Y_BUCKET = 6
+
+
+def _lineas_spans_pagina(page, bucket: int = Y_BUCKET) -> list[str]:
+    """Junta fecha + concepto + importes de la misma fila visual."""
+    by_y: dict[int, list[tuple[float, str]]] = defaultdict(list)
+    d = page.get_text("dict") if page is not None else {}
+    for b in (d or {}).get("blocks") or []:
+        if b.get("type") != 0:
+            continue
+        for line in b.get("lines") or []:
+            for sp in line.get("spans") or []:
+                t = (sp.get("text") or "").strip()
+                if not t:
+                    continue
+                y = int(float(sp["bbox"][1]) / bucket) * bucket
+                by_y[y].append((float(sp["bbox"][0]), t))
+    if not by_y:
+        for w in page.get_text("words") or []:
+            x0, y0, _x1, _y1, t = w[:5]
+            t = str(t or "").strip()
+            if not t:
+                continue
+            y = int(float(y0) / bucket) * bucket
+            by_y[y].append((float(x0), t))
+    lineas: list[str] = []
+    for y in sorted(by_y):
+        txt = " ".join(t for _, t in sorted(by_y[y], key=lambda x: x[0])).strip()
+        if txt:
+            lineas.append(txt)
+    return lineas
+
+
+def paginas_por_y(data: bytes, bucket: int = Y_BUCKET) -> list[tuple[int, str]]:
+    """Texto por página reconstruido por Y (Santander overlay / columnas)."""
+    doc = fitz.open(stream=data, filetype="pdf")
+    try:
+        return [
+            (i + 1, "\n".join(_lineas_spans_pagina(doc[i], bucket)))
+            for i in range(doc.page_count)
+        ]
+    finally:
+        doc.close()
 
 
 def lineas_por_y(data: bytes) -> tuple[list[str], int]:
     """Reconstruye renglones agrupando spans de la misma altura Y."""
-    doc = fitz.open(stream=data, filetype="pdf")
-    try:
-        lineas: list[str] = []
-        chars = 0
-        for i in range(doc.page_count):
-            chars += len((doc[i].get_text("text") or "").strip())
-            d = doc[i].get_text("dict")
-            by_y: dict[int, list[tuple[float, str]]] = defaultdict(list)
-            for b in d.get("blocks") or []:
-                if b.get("type") != 0:
-                    continue
-                for line in b.get("lines") or []:
-                    for sp in line.get("spans") or []:
-                        t = (sp.get("text") or "").strip()
-                        if not t:
-                            continue
-                        y = round(sp["bbox"][1])
-                        by_y[y].append((sp["bbox"][0], t))
-            for y in sorted(by_y):
-                txt = " ".join(t for _, t in sorted(by_y[y], key=lambda x: x[0])).strip()
-                if txt:
-                    lineas.append(txt)
-        return lineas, chars
-    finally:
-        doc.close()
+    paginas = paginas_por_y(data)
+    lineas = lineas_desde_paginas(paginas)
+    chars = sum(len(t) for _, t in paginas)
+    return lineas, chars
 
 
 def lineas_desde_paginas(paginas: list[tuple[int, str]]) -> list[str]:
@@ -185,4 +214,10 @@ def elegir_mejor(cands: list[list[dict[str, Any]]]) -> list[dict[str, Any]]:
 
 def parsear_lineas(lineas: list[str]) -> list[dict[str, Any]]:
     """Elige el parseo (línea completa vs bloques OCR) con mejor cadena de saldos."""
-    return elegir_mejor([parse_lineas(lineas), parse_bloques(lineas)])
+    cands: list[list[dict[str, Any]]] = []
+    for fn in (parse_lineas, parse_bloques):
+        try:
+            cands.append(fn(lineas))
+        except Exception:
+            continue
+    return elegir_mejor(cands) if cands else []

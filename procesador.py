@@ -30,7 +30,7 @@ from openpyxl.utils import get_column_letter
 from PIL import Image
 from rapidfuzz import fuzz, process
 
-from extracto_layout import elegir_mejor, lineas_desde_paginas, lineas_por_y, parsear_lineas
+from extracto_layout import elegir_mejor, lineas_desde_paginas, lineas_por_y, paginas_por_y, parsear_lineas
 
 BASE_DIR = Path(__file__).resolve().parent
 RUTA_RAIZ_CLIENTES = BASE_DIR / "clientes"
@@ -2773,7 +2773,25 @@ class _RapidOcrAdapter:
         self._engine = engine
 
     def readtext(self, img, *args, **kwargs):
-        bruto = self._engine(img)
+        candidatos = [img]
+        try:
+            if isinstance(img, np.ndarray):
+                candidatos.append(Image.fromarray(img))
+            elif hasattr(img, "size") and hasattr(img, "convert"):
+                candidatos.append(np.array(img.convert("RGB")))
+        except Exception:
+            pass
+        for cand in candidatos:
+            try:
+                bruto = self._engine(cand)
+            except Exception:
+                continue
+            out = self._normalizar_resultado(bruto)
+            if out:
+                return out
+        return []
+
+    def _normalizar_resultado(self, bruto):
         if bruto is None:
             return []
         if isinstance(bruto, tuple):
@@ -5115,6 +5133,7 @@ def _es_ruido_extracto_santander(linea: str) -> bool:
         "total depositos del dia", "total depósitos del dia", "total depositos del día",
         "salvo error u omisi", "fecha comprobante",
         "resumen de caja de ahorro", "dispones de 30 dias", "el monto de iva discriminado",
+        "ponemos en tu conocimiento", "ningun accionista", "ningún accionista",
     )
     if any(n.startswith(r) for r in ruido_prefijo):
         return True
@@ -5915,7 +5934,14 @@ def _parsear_movimientos_santander_paginas(
             i = j if j > i else i + 1
             continue
         dlow = descripcion_full.lower()
-        if "detalle impositivo" in dlow or "saldo total detalle" in dlow:
+        if (
+            "detalle impositivo" in dlow
+            or "saldo total detalle" in dlow
+            or "ponemos en tu conocimiento" in dlow
+            or "encuentres alcanzado" in dlow
+            or "estandar de intercambi" in dlow
+            or "estándar de intercambi" in dlow
+        ):
             i = j if j > i else i + 1
             continue
 
@@ -6350,20 +6376,44 @@ def _bbox_xy(bbox) -> tuple[float, float]:
     return 0.0, 0.0
 
 
+def _pil_pagina_ocr(pagina_fitz, dpi: int = 160) -> Image.Image:
+    """Usa la imagen embebida del escaneo si cubre la hoja; si no, rasteriza."""
+    doc = pagina_fitz.parent
+    mejor = None
+    mejor_area = 0
+    try:
+        for im in pagina_fitz.get_images(full=True) or []:
+            xref = int(im[0])
+            info = doc.extract_image(xref)
+            w = int(info.get("width") or 0)
+            h = int(info.get("height") or 0)
+            area = w * h
+            if area > mejor_area:
+                mejor_area = area
+                mejor = info
+    except Exception:
+        mejor = None
+    if mejor is not None and mejor_area >= 400_000:
+        img = Image.open(io.BytesIO(mejor["image"]))
+        return img.convert("RGB")
+    pix = pagina_fitz.get_pixmap(dpi=dpi)
+    img = Image.open(io.BytesIO(pix.tobytes("png")))
+    rot_metadata = getattr(pagina_fitz, "rotation", 0) or 0
+    if rot_metadata != 0:
+        img = img.rotate(-rot_metadata, expand=True)
+    w, h = img.size
+    if rot_metadata == 0 and w > h:
+        img = img.rotate(90, expand=True)
+    return img.convert("RGB")
+
+
 def _ocr_pagina_rapida(pagina_fitz, dpi: int = 160) -> list[str]:
     """OCR liviano para extractos escaneados (sin reintentos de rotación costosos)."""
     lector = _obtener_lector_ocr()
-    pix = pagina_fitz.get_pixmap(dpi=dpi)
-    img_pil = Image.open(io.BytesIO(pix.tobytes("png")))
-    rot_metadata = getattr(pagina_fitz, "rotation", 0) or 0
-    if rot_metadata != 0:
-        img_pil = img_pil.rotate(-rot_metadata, expand=True)
-    w, h = img_pil.size
-    if rot_metadata == 0 and w > h:
-        img_pil = img_pil.rotate(90, expand=True)
+    img_pil = _pil_pagina_ocr(pagina_fitz, dpi=dpi)
     with _lector_ocr_run_lock:
         try:
-            resultados = lector.readtext(np.array(img_pil))
+            resultados = lector.readtext(img_pil)
         except Exception as exc:
             print(f"[WARN] OCR pagina: {exc}", flush=True)
             return []
@@ -6386,6 +6436,52 @@ def _ocr_pagina_rapida(pagina_fitz, dpi: int = 160) -> list[str]:
         for y in sorted(filas)
         if any(t.strip() for _, t in filas[y])
     ]
+
+
+def _n_montos_paginas(paginas: list[tuple[int, str]]) -> int:
+    return sum(len(_RE_PESOS_EXT.findall(t or "")) for _n, t in paginas or [])
+
+
+def _score_filas_extracto(movs: list[dict]) -> tuple[int, int, int]:
+    """(cadena de saldos, filas con importe, cantidad)."""
+    if not movs:
+        return (0, 0, 0)
+    chain = 0
+    with_monto = 0
+    prev: float | None = None
+    for m in movs:
+        deb = float(m.get("Debito") or 0)
+        cred = float(m.get("Credito") or 0)
+        if abs(deb) + abs(cred) > 0.009:
+            with_monto += 1
+        saldo = m.get("Saldo")
+        if saldo is None or saldo == "":
+            continue
+        try:
+            s = float(saldo)
+        except (TypeError, ValueError):
+            continue
+        if prev is not None:
+            esperado = round(prev - deb + cred, 2)
+            if abs(esperado - s) <= 0.05:
+                chain += 1
+        prev = s
+    return (chain, with_monto, len(movs))
+
+
+def _elegir_mejor_parseo_extracto(
+    *cands: tuple[list[dict], dict, str],
+) -> tuple[list[dict], dict, str]:
+    mejor: tuple[list[dict], dict, str] | None = None
+    mejor_sc = (-1, -1, -1)
+    for movs, meta, tag in cands:
+        sc = _score_filas_extracto(movs)
+        if sc > mejor_sc:
+            mejor_sc = sc
+            mejor = (movs, meta, tag)
+    if mejor is None:
+        return [], {}, ""
+    return mejor
 
 
 COLUMNAS_EXTRACTO_UNIFICADO = [
@@ -7217,6 +7313,9 @@ def _procesar_un_pdf_extracto(
 
     try:
         paginas = _paginas_texto_extracto_pdf(data, dpi_ocr=160)
+        paginas_y = paginas_por_y(data)
+        if _n_montos_paginas(paginas_y) > _n_montos_paginas(paginas):
+            paginas = paginas_y
         texto_all = "\n".join(t for _, t in paginas)
         chars = sum(len(t) for _, t in paginas)
         fechas_txt = len(re.findall(r"\b\d{2}/\d{2}/\d{2,4}\b", texto_all))
@@ -7285,7 +7384,7 @@ def _procesar_un_pdf_extracto(
         meta_base["formato"] = info_fmt.get("formato") or ""
         meta_base["parser"] = estrategia
 
-        if chars_nativos < 50 or chars < 40:
+        if (chars_nativos < 50 or chars < 40) and _n_montos_paginas(paginas) < 5:
             paginas = _paginas_texto_extracto_pdf(data, dpi_ocr=170, forzar_ocr=True)
             chars = sum(len(t) for _, t in paginas)
             texto_all = "\n".join(t for _, t in paginas)
@@ -7328,6 +7427,21 @@ def _procesar_un_pdf_extracto(
             meta_base["parser"] = estrategia
 
         movs, meta_arch = _parsear(paginas, estrategia)
+        if paginas_y and _n_montos_paginas(paginas_y) >= 3:
+            movs_y, meta_y = _parsear(
+                paginas_y, "santander" if estrategia == "santander" else estrategia
+            )
+            if not movs_y and estrategia != "santander":
+                movs_y, meta_y = _parsear(paginas_y, "santander")
+            movs, meta_arch, tag_y = _elegir_mejor_parseo_extracto(
+                (movs, meta_arch, "texto"),
+                (movs_y, meta_y, "layout_y"),
+            )
+            if tag_y == "layout_y":
+                paginas = paginas_y
+                texto_all = "\n".join(t for _, t in paginas)
+                chars = sum(len(t) for _, t in paginas)
+                meta_base["parser"] = f"{estrategia}_y"
 
         # Reintento OCR completo si el parser no encontró movimientos
         if not movs:

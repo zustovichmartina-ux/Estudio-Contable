@@ -165,6 +165,24 @@ class TestHintBancoExtracto(unittest.TestCase):
         self.assertEqual(x2, 0.0)
         self.assertEqual(y2, 20.0)
 
+    def test_santander_une_fecha_e_importe_en_la_misma_linea(self):
+        from procesador import _parsear_movimientos_santander_paginas, _score_filas_extracto
+
+        texto = (
+            "Fecha Comprobante Movimiento Débito Crédito Saldo en cuenta\n"
+            "30/08/25 Saldo Inicial $ 17.288.556,31\n"
+            "02/09/25 23886 Pago de haberes por cci $ 750.000,00 $ 16.538.556,31\n"
+            "23886 Pago de haberes por cci $ 277.150,00 $ 16.261.406,31\n"
+            "02/09/25 29143416 Pago haberes $ 500.000,00 $ 15.761.406,31\n"
+        )
+        movs, _meta = _parsear_movimientos_santander_paginas([(1, texto)], "09-2025.pdf")
+        chain, con_monto, n = _score_filas_extracto(movs)
+        self.assertGreaterEqual(n, 3)
+        self.assertGreaterEqual(con_monto, 2)
+        self.assertGreaterEqual(chain, 2)
+        self.assertEqual(movs[0].get("Descripcion"), "Saldo Inicial")
+        self.assertAlmostEqual(float(movs[1].get("Debito") or 0), 750000.0)
+
 
 if __name__ == "__main__":
     unittest.main()
