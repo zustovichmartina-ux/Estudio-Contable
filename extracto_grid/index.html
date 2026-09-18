@@ -106,7 +106,9 @@ function sendValue(value) {
 
 let FILAS = [];
 let CUENTAS = [];
+let CLASIFS = [];
 let PINTADO = false;
+const OTRO = "__otro__";
 
 function esc(s) {
   return String(s ?? "")
@@ -120,7 +122,7 @@ function money(n) {
   if (!x) return "";
   return x.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
-function parseCuentas(raw) {
+function parseLista(raw) {
   if (!raw) return [];
   if (Array.isArray(raw)) return raw;
   if (typeof raw === "string") {
@@ -128,10 +130,32 @@ function parseCuentas(raw) {
   }
   return [];
 }
+function parseCuentas(raw) { return parseLista(raw); }
+function normClasif(s) {
+  return String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
+}
 function claveRepetida(m) {
-  let t = String(m.clasif || m.desc || "").toLowerCase().trim();
+  let t = String(m.desc || "").toLowerCase().trim();
   t = t.replace(/\s+/g, " ").replace(/\b\d{5,}\b/g, "").trim();
   return t;
+}
+function cuentaDeClasif(nombre) {
+  const n = normClasif(nombre);
+  if (!n || n === "sin clasificar" || n.indexOf("identificar") >= 0) return "";
+  const hit = CLASIFS.find((c) => normClasif(c.nombre) === n);
+  const cod = hit ? String(hit.codigo || "") : "";
+  return (cod && cod !== "99999") ? cod : "";
+}
+function upsertClasif(nombre, codigo) {
+  const nom = String(nombre || "").trim();
+  if (!nom) return;
+  const i = CLASIFS.findIndex((c) => normClasif(c.nombre) === normClasif(nom));
+  const cod = String(codigo || "");
+  if (i >= 0) {
+    if (cod && cod !== "99999") CLASIFS[i].codigo = cod;
+    return;
+  }
+  CLASIFS.push({ nombre: nom, codigo: (cod && cod !== "99999") ? cod : "" });
 }
 function optsHtml(sel) {
   return CUENTAS.map((c) => {
@@ -140,18 +164,67 @@ function optsHtml(sel) {
     return `<option value="${esc(cod)}" ${cod === String(sel) ? "selected" : ""}>${esc(lab)}</option>`;
   }).join("");
 }
+function optsClasif(sel) {
+  const seen = {};
+  let html = "";
+  CLASIFS.forEach((c) => {
+    const n = String(c.nombre || "").trim();
+    const k = normClasif(n);
+    if (!n || seen[k]) return;
+    seen[k] = true;
+    html += `<option value="${esc(n)}" ${normClasif(n) === normClasif(sel) ? "selected" : ""}>${esc(n)}</option>`;
+  });
+  if (sel && !seen[normClasif(sel)]) {
+    html = `<option value="${esc(sel)}" selected>${esc(sel)}</option>` + html;
+  }
+  html += `<option value="${OTRO}">Otro…</option>`;
+  return html;
+}
 function labelOrigen(o) {
   if (o === "regla") return "Regla";
   if (o === "sugerido") return "Sugerido";
   return "A clasificar";
 }
 function snapshot() {
-  return FILAS.map((m) => ({
-    i: m.i,
-    clasif: m.clasif,
-    codigo: m.codigo,
-    origen: m.origen,
-  }));
+  return {
+    filas: FILAS.map((m) => ({
+      i: m.i,
+      clasif: m.clasif,
+      codigo: m.codigo,
+      origen: m.origen,
+    })),
+    clasifs: CLASIFS.map((c) => ({ nombre: c.nombre, codigo: c.codigo || "" })),
+  };
+}
+function aplicarClasifAFila(i, nombre) {
+  const nom = String(nombre || "").trim();
+  FILAS[i].clasif = nom;
+  FILAS[i]._editOtro = false;
+  const cod = cuentaDeClasif(nom);
+  if (cod) {
+    FILAS[i].codigo = cod;
+    FILAS[i].origen = "sugerido";
+  }
+  const clave = claveRepetida(FILAS[i]);
+  FILAS.forEach((m, j) => {
+    if (j === i) return;
+    if (clave && claveRepetida(m) === clave) {
+      m.clasif = nom;
+      if (cod) {
+        m.codigo = cod;
+        if (m.origen === "a_clasificar") m.origen = "sugerido";
+      }
+    } else if (cod && normClasif(m.clasif) === normClasif(nom)) {
+      m.codigo = cod;
+      if (m.origen === "a_clasificar") m.origen = "sugerido";
+    }
+  });
+}
+function celdaClasif(m, i) {
+  if (m._editOtro) {
+    return `<input type="text" placeholder="Nueva clasificación" value="" data-i="${i}" data-k="clasif_nuevo"/>`;
+  }
+  return `<select data-i="${i}" data-k="clasif">${optsClasif(m.clasif)}</select>`;
 }
 function pintar() {
   const tb = document.getElementById("grid");
@@ -162,28 +235,66 @@ function pintar() {
       <td class="num deb">${money(m.deb)}</td>
       <td class="num cred">${money(m.cred)}</td>
       <td class="num">${money(m.saldo)}</td>
-      <td><input type="text" value="${esc(m.clasif)}" data-i="${i}" data-k="clasif"/></td>
+      <td>${celdaClasif(m, i)}</td>
       <td><select data-i="${i}" data-k="codigo">${optsHtml(m.codigo)}</select></td>
       <td><span class="tag ${esc(m.origen)}">${labelOrigen(m.origen)}</span></td>
     </tr>`).join("");
   tb.querySelectorAll("input, select").forEach((el) => {
-    el.addEventListener("change", () => {
+    const aplicar = () => {
       const i = Number(el.getAttribute("data-i"));
       const k = el.getAttribute("data-k");
-      FILAS[i][k] = el.value;
+      if (k === "clasif") {
+        if (el.value === OTRO) {
+          FILAS[i]._editOtro = true;
+          pintar();
+          const inp = tb.querySelector(`input[data-k="clasif_nuevo"][data-i="${i}"]`);
+          if (inp) inp.focus();
+          return;
+        }
+        upsertClasif(el.value, cuentaDeClasif(el.value) || FILAS[i].codigo);
+        aplicarClasifAFila(i, el.value);
+        pintar();
+        return;
+      }
+      if (k === "clasif_nuevo") {
+        const nom = String(el.value || "").trim();
+        FILAS[i]._editOtro = false;
+        if (nom) {
+          upsertClasif(nom, FILAS[i].codigo);
+          aplicarClasifAFila(i, nom);
+        }
+        pintar();
+        return;
+      }
       if (k === "codigo") {
+        FILAS[i].codigo = el.value;
+        FILAS[i].origen = el.value === "99999" ? "a_clasificar" : (FILAS[i].origen === "regla" ? "regla" : "sugerido");
+        if (FILAS[i].clasif) upsertClasif(FILAS[i].clasif, el.value);
         const clave = claveRepetida(FILAS[i]);
-        const nuevo = el.value;
+        const clas = normClasif(FILAS[i].clasif);
         FILAS.forEach((m) => {
-          if (clave && claveRepetida(m) === clave) {
-            m.codigo = nuevo;
-            m.origen = nuevo === "99999" ? "a_clasificar" : (m.origen === "regla" ? "regla" : "sugerido");
+          const mismaClas = clas && normClasif(m.clasif) === clas;
+          const mismaDesc = clave && claveRepetida(m) === clave;
+          if (mismaClas || mismaDesc) {
+            m.codigo = el.value;
+            m.origen = el.value === "99999" ? "a_clasificar" : (m.origen === "regla" ? "regla" : "sugerido");
           }
         });
         pintar();
+        return;
       }
+      FILAS[i][k] = el.value;
       chips();
-    });
+    };
+    el.addEventListener("change", aplicar);
+    if (el.getAttribute("data-k") === "clasif_nuevo") {
+      el.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter") {
+          ev.preventDefault();
+          aplicar();
+        }
+      });
+    }
   });
   chips();
   setHeight();
@@ -205,6 +316,10 @@ function onRender(event) {
   const nuevas = parseCuentas(args.cuentas_json || args.cuentas);
   const hayCuentasNuevas = nuevas.length !== CUENTAS.length;
   CUENTAS = nuevas;
+  const nuevasClas = parseLista(args.clasifs_json || args.clasifs);
+  if (nuevasClas.length) {
+    nuevasClas.forEach((c) => upsertClasif(c.nombre, c.codigo));
+  }
   if (!PINTADO) {
     FILAS = (args.filas || []).map((m) => Object.assign({}, m));
     PINTADO = true;
@@ -217,10 +332,10 @@ function onRender(event) {
 }
 
 document.getElementById("btn-sig").addEventListener("click", () => {
-  sendValue({ action: "siguiente", filas: snapshot() });
+  sendValue(Object.assign({ action: "siguiente" }, snapshot()));
 });
 document.getElementById("btn-vol").addEventListener("click", () => {
-  sendValue({ action: "volver", filas: snapshot() });
+  sendValue(Object.assign({ action: "volver" }, snapshot()));
 });
 window.addEventListener("message", onRender);
 send("streamlit:componentReady", { apiVersion: 1 });

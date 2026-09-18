@@ -455,6 +455,49 @@ class TestExtractoComponente(unittest.TestCase):
         self.assertEqual(out[1]["cuenta_codigo"], "52120")
         self.assertEqual(out[2]["cuenta_codigo"], "52120")
 
+    def test_clasificacion_trae_la_cuenta_asociada(self):
+        from ui_conciliacion_ae import _aplicar_filas_componente
+
+        movs = [
+            {
+                "_idx": 0,
+                "cuenta_codigo": "99999",
+                "categoria": "Movimientos a identificar",
+                "origen": "a_clasificar",
+                "descripcion": "RET IIBB 1",
+            },
+            {
+                "_idx": 1,
+                "cuenta_codigo": "99999",
+                "categoria": "Movimientos a identificar",
+                "origen": "a_clasificar",
+                "descripcion": "RET IIBB 2",
+            },
+        ]
+        out = _aplicar_filas_componente(
+            movs,
+            [
+                {"i": 0, "codigo": "11402", "clasif": "IIBB", "origen": "sugerido"},
+                {"i": 1, "codigo": "99999", "clasif": "IIBB", "origen": "a_clasificar"},
+            ],
+            None,
+        )
+        self.assertEqual(out[0]["categoria"], "IIBB")
+        self.assertEqual(out[0]["cuenta_codigo"], "11402")
+        self.assertEqual(out[1]["cuenta_codigo"], "11402")
+
+    def test_mapa_clasif_completa_99999(self):
+        from ui_conciliacion_ae import _aplicar_mapa_clasif
+
+        movs = [
+            {"categoria": "IIBB", "cuenta_codigo": "99999", "origen": "a_clasificar"},
+            {"categoria": "Gastos Bancarios", "cuenta_codigo": "42501", "origen": "regla"},
+        ]
+        out = _aplicar_mapa_clasif(movs, {"IIBB": "11402"})
+        self.assertEqual(out[0]["cuenta_codigo"], "11402")
+        self.assertEqual(out[0]["origen"], "sugerido")
+        self.assertEqual(out[1]["cuenta_codigo"], "42501")
+
 
 if __name__ == "__main__":
     unittest.main()

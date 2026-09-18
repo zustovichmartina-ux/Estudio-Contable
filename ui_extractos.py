@@ -10,6 +10,7 @@ import streamlit as st
 
 from procesador import (
     PERFILES_BANCO,
+    df_extracto_convertidor_sin_saldos,
     exportar_extracto_bancario_excel,
     exportar_zip_extractos_por_banco,
     procesar_extractos_bancarios_pdfs,
@@ -30,6 +31,7 @@ def render_herramienta_extractos() -> None:
     st.caption(
         "Convertidor: subís el extracto y bajás el Excel. OCR si el PDF es escaneo. "
         f"Bancos: {bancos_txt}. "
+        "Excel: Fecha, Concepto, Débitos y Créditos — sin saldo inicial, saldo final ni columna de saldo. "
         "La conciliación (clasificar, retenciones, asiento) está en **Conciliación Bancaria**."
     )
 
@@ -140,11 +142,7 @@ def render_herramienta_extractos() -> None:
             use_container_width=True,
         )
 
-    cols = [
-        c
-        for c in ("Fecha", "Descripcion", "Detalle", "Importe", "Credito", "Debito", "Saldo", "Banco")
-        if c in df_ext.columns
-    ]
-    if cols:
-        st.dataframe(df_ext[cols].head(80), use_container_width=True, hide_index=True)
-        st.caption(f"Vista previa ({min(80, len(df_ext))} de {len(df_ext)} filas).")
+    vista = df_extracto_convertidor_sin_saldos(df_ext)
+    if not vista.empty:
+        st.dataframe(vista.head(80), use_container_width=True, hide_index=True)
+        st.caption(f"Vista previa ({min(80, len(vista))} de {len(vista)} filas).")

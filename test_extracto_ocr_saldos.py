@@ -184,5 +184,74 @@ class TestHintBancoExtracto(unittest.TestCase):
         self.assertAlmostEqual(float(movs[1].get("Debito") or 0), 750000.0)
 
 
+class TestConvertidorSinSaldos(unittest.TestCase):
+    def test_excel_solo_fecha_concepto_debitos_creditos(self):
+        from io import BytesIO
+
+        import pandas as pd
+        from openpyxl import load_workbook
+
+        from procesador import df_extracto_convertidor_sin_saldos, exportar_extracto_bancario_excel
+
+        df = pd.DataFrame(
+            [
+                {
+                    "Tipo fila": "Saldo inicial",
+                    "Fecha": "01/09/25",
+                    "Descripcion": "Saldo Inicial",
+                    "Debito": None,
+                    "Credito": None,
+                    "Saldo": 1000,
+                },
+                {
+                    "Tipo fila": "Movimiento",
+                    "Fecha": "02/09/25",
+                    "Descripcion": "Pago haberes",
+                    "Debito": 750000,
+                    "Credito": None,
+                    "Saldo": 250000,
+                },
+                {
+                    "Tipo fila": "Movimiento",
+                    "Fecha": "03/09/25",
+                    "Descripcion": "Transferencia recibida",
+                    "Debito": None,
+                    "Credito": 100,
+                    "Saldo": 250100,
+                },
+                {
+                    "Tipo fila": "Saldo final",
+                    "Fecha": "30/09/25",
+                    "Descripcion": "Saldo Final",
+                    "Debito": None,
+                    "Credito": None,
+                    "Saldo": 250100,
+                },
+            ]
+        )
+        out = df_extracto_convertidor_sin_saldos(df)
+        self.assertEqual(list(out.columns), ["Fecha", "Concepto", "Débitos", "Créditos"])
+        self.assertEqual(len(out), 2)
+        self.assertNotIn("Saldo", out.columns)
+        self.assertFalse(out["Concepto"].str.contains("Saldo", case=False).any())
+
+        xlsx = exportar_extracto_bancario_excel(df, {"banco": "Santander"})
+        wb = load_workbook(BytesIO(xlsx))
+        self.assertIn("Movimientos", wb.sheetnames)
+        ws_m = wb["Movimientos"]
+        hdr = None
+        for row in ws_m.iter_rows(min_row=1, max_row=12, max_col=6, values_only=True):
+            vals = [str(v) for v in row if v]
+            if "Fecha" in vals and "Concepto" in vals:
+                hdr = list(row)
+                break
+        self.assertIsNotNone(hdr)
+        self.assertIn("Fecha", hdr)
+        self.assertIn("Concepto", hdr)
+        self.assertIn("Débitos", hdr)
+        self.assertIn("Créditos", hdr)
+        self.assertNotIn("Saldo", hdr)
+
+
 if __name__ == "__main__":
     unittest.main()

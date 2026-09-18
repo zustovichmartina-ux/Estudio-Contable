@@ -75,6 +75,150 @@ _EXTRACTO_GRID = components.declare_component(
     path=str(Path(__file__).resolve().parent / "extracto_grid"),
 )
 
+_CLASIFS_BASE = (
+    "Pago ARBA",
+    "SIRCREB",
+    "IIBB",
+    "Ingresos brutos Tucuman",
+    "Impuestos a los débitos y créditos",
+    "Impuesto a los sellos",
+    "Percepción IVA",
+    "IVA",
+    "Rescate FIMA",
+    "Suscripción FCI",
+    "Gastos Bancarios",
+    "Inversiones",
+    "Intereses",
+    "Depositos en efvo",
+    "Cheques recibidos",
+    "Cheques emitidos",
+    "Pago de haberes",
+    "Pagos AFIP",
+    "Pagos tarjeta corporativa",
+    "Compras",
+    "Pago de Servicios",
+    "Transferencias recibidas",
+    "Transferencias emitidas",
+    "Pagos recibidos",
+    "Acreditaciones comercios",
+)
+_CLASIF_SIN_CUENTA = {
+    "",
+    "sin clasificar",
+    "movimientos a identificar",
+    "identificar",
+    "otro",
+    "otro…",
+    "otro...",
+}
+_MAPA_CLASIF_PATH = Path(__file__).resolve().parent / "data" / "clasif_extracto.json"
+
+
+def _norm_clasif(texto: str) -> str:
+    t = str(texto or "").strip().lower()
+    t = re.sub(r"\s+", " ", t)
+    return t
+
+
+def _clasif_tiene_cuenta(nombre: str) -> bool:
+    return _norm_clasif(nombre) not in _CLASIF_SIN_CUENTA
+
+
+def _cargar_mapa_clasif(sociedad_id: int) -> dict[str, str]:
+    sid = str(int(sociedad_id))
+    cache = st.session_state.get(f"clasif_map_{sid}")
+    if isinstance(cache, dict):
+        return dict(cache)
+    try:
+        raw = json.loads(_MAPA_CLASIF_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, TypeError):
+        raw = {}
+    mapa = raw.get(sid) if isinstance(raw, dict) else {}
+    if not isinstance(mapa, dict):
+        mapa = {}
+    clean = {
+        str(k).strip(): str(v).strip()
+        for k, v in mapa.items()
+        if _clasif_tiene_cuenta(str(k)) and str(v).strip() not in {"", "99999"}
+    }
+    st.session_state[f"clasif_map_{sid}"] = clean
+    return clean
+
+
+def _guardar_mapa_clasif(sociedad_id: int, mapa: dict[str, str]) -> None:
+    sid = str(int(sociedad_id))
+    clean = {
+        str(k).strip(): str(v).strip()
+        for k, v in (mapa or {}).items()
+        if _clasif_tiene_cuenta(str(k)) and str(v).strip() not in {"", "99999"}
+    }
+    st.session_state[f"clasif_map_{sid}"] = clean
+    try:
+        raw = json.loads(_MAPA_CLASIF_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, TypeError):
+        raw = {}
+    if not isinstance(raw, dict):
+        raw = {}
+    raw[sid] = clean
+    _MAPA_CLASIF_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _MAPA_CLASIF_PATH.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _codigo_de_clasif(nombre: str, mapa: dict[str, str]) -> str:
+    if not _clasif_tiene_cuenta(nombre):
+        return ""
+    n = _norm_clasif(nombre)
+    for k, v in (mapa or {}).items():
+        if _norm_clasif(k) == n and str(v).strip() not in {"", "99999"}:
+            return str(v).strip()
+    return ""
+
+
+def _aplicar_mapa_clasif(movs: list[dict], mapa: dict[str, str]) -> list[dict]:
+    if not mapa:
+        return movs
+    out = list(movs)
+    for m in out:
+        nombre = str(m.get("categoria") or m.get("extracto_label") or "")
+        cod = _codigo_de_clasif(nombre, mapa)
+        actual = str(m.get("cuenta_codigo") or "").strip()
+        if not cod or actual not in {"", "99999"}:
+            continue
+        m["cuenta_codigo"] = cod
+        if str(m.get("origen") or "") == "a_clasificar":
+            m["origen"] = "sugerido"
+    return out
+
+
+def _mapa_desde_movimientos(movs: list[dict], base: dict[str, str] | None = None) -> dict[str, str]:
+    mapa = dict(base or {})
+    for m in movs:
+        nombre = str(m.get("categoria") or "").strip()
+        codigo = str(m.get("cuenta_codigo") or "").strip()
+        if _clasif_tiene_cuenta(nombre) and codigo not in {"", "99999"}:
+            mapa[nombre] = codigo
+    return mapa
+
+
+def _clasifs_componente(sociedad_id: int, movs: list[dict]) -> list[dict]:
+    mapa = _mapa_desde_movimientos(movs, _cargar_mapa_clasif(sociedad_id))
+    nombres: list[str] = []
+    vistos: set[str] = set()
+    for n in list(_CLASIFS_BASE) + [str(m.get("categoria") or "") for m in movs] + list(mapa.keys()):
+        nom = str(n or "").strip()
+        key = _norm_clasif(nom)
+        if not nom or key in vistos or key in {"otro", "otro…", "otro..."}:
+            continue
+        vistos.add(key)
+        nombres.append(nom)
+    cola = [n for n in nombres if not _clasif_tiene_cuenta(n)]
+    cuerpo = [n for n in nombres if _clasif_tiene_cuenta(n)]
+    cuerpo.sort(key=lambda x: x.lower())
+    return [{"nombre": n, "codigo": mapa.get(n) or ""} for n in cuerpo + cola]
+    if not d:
+        d = date.today()
+    return d.strftime("%m/%Y")
+
 
 def _periodo_mm_yyyy(d: date | None) -> str:
     if not d:
@@ -254,7 +398,7 @@ def _opcion_desde_codigo(codigo: str, opciones: list[str]) -> str:
     return opciones[0] if opciones else "99999 — A clasificar"
 
 
-def _enriquecer(movs: list[dict], plan_df) -> list[dict]:
+def _enriquecer(movs: list[dict], plan_df, mapa_clasif: dict[str, str] | None = None) -> list[dict]:
     out = []
     for i, m in enumerate(movs):
         fila = dict(m)
@@ -290,7 +434,8 @@ def _enriquecer(movs: list[dict], plan_df) -> list[dict]:
         fila["monto"] = round(cred - deb, 2)
         fila["_idx"] = i
         out.append(fila)
-    return _propagar_cuentas_repetidas(out)
+    out = _propagar_cuentas_repetidas(out)
+    return _aplicar_mapa_clasif(out, mapa_clasif or {})
 
 
 def _df_extracto(movs: list[dict], opciones: list[str]) -> pd.DataFrame:
@@ -343,7 +488,12 @@ def _cuentas_componente(opciones: list[str]) -> list[dict]:
     return out
 
 
-def _aplicar_filas_componente(movs: list[dict], filas: list[dict], plan_df) -> list[dict]:
+def _aplicar_filas_componente(
+    movs: list[dict],
+    filas: list[dict],
+    plan_df,
+    mapa_clasif: dict[str, str] | None = None,
+) -> list[dict]:
     col_cod = "codigo" if plan_df is not None and "codigo" in plan_df.columns else None
     col_desc = "descripcion" if plan_df is not None and "descripcion" in plan_df.columns else None
     desc_por_cod: dict[str, str] = {}
@@ -381,6 +531,8 @@ def _aplicar_filas_componente(movs: list[dict], filas: list[dict], plan_df) -> l
                 out[pos]["origen"] = "sugerido"
         else:
             out[pos]["origen"] = "a_clasificar"
+    mapa = _mapa_desde_movimientos(out, mapa_clasif or {})
+    out = _aplicar_mapa_clasif(out, mapa)
     return _propagar_cuentas_repetidas(out)
 
 
@@ -595,7 +747,11 @@ def _paso_subir(
             periodo=st.session_state[periodo_key],
             saldo_ok=True,
         )
-        movs = _enriquecer(resultados, st.session_state.get("plan_cuentas_df"))
+        movs = _enriquecer(
+            resultados,
+            _plan_df_sociedad(sociedad_id),
+            mapa_clasif=_cargar_mapa_clasif(sociedad_id),
+        )
         st.session_state[preview_key] = {
             "movimientos": movs,
             "banco": banco,
@@ -648,7 +804,8 @@ def _paso_extracto(
     subtitulo = (
         f"{nombre_activo or ''} — {len(movs)} movimientos · {n_plan} cuentas del plan. "
         "Las que tienen regla quedan tomadas; el resto, sugeridas o a clasificar. "
-        "Cambiá la cuenta en la misma línea (se copia a las iguales)."
+        "Cambiá la clasificación o la cuenta en la misma línea "
+        "(la clasificación trae la cuenta; se copia a las iguales)."
     )
     if n_plan <= 0:
         st.warning("No está el plan de cuentas de esta sociedad. Vinculalo y volvé a leer el extracto.")
@@ -658,12 +815,23 @@ def _paso_extracto(
         subtitulo=subtitulo,
         filas=_filas_componente(movs),
         cuentas_json=json.dumps(_cuentas_componente(opciones), ensure_ascii=False),
+        clasifs_json=json.dumps(_clasifs_componente(sociedad_id, movs), ensure_ascii=False),
         key=f"ce_grid_{sociedad_id}_{token}",
         default={"action": "idle", "filas": []},
     )
     accion = str((out or {}).get("action") or "idle")
     if accion in {"siguiente", "volver"}:
-        actualizados = _aplicar_filas_componente(movs, (out or {}).get("filas") or [], plan_df)
+        mapa = _cargar_mapa_clasif(sociedad_id)
+        for item in (out or {}).get("clasifs") or []:
+            nom = str((item or {}).get("nombre") or "").strip()
+            cod = str((item or {}).get("codigo") or "").strip()
+            if _clasif_tiene_cuenta(nom) and cod not in {"", "99999"}:
+                mapa[nom] = cod
+        actualizados = _aplicar_filas_componente(
+            movs, (out or {}).get("filas") or [], plan_df, mapa_clasif=mapa
+        )
+        mapa = _mapa_desde_movimientos(actualizados, mapa)
+        _guardar_mapa_clasif(sociedad_id, mapa)
         preview["movimientos"] = actualizados
         st.session_state[preview_key] = preview
         st.session_state[token_key] = token + 1

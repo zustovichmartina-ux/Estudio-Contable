@@ -31,6 +31,7 @@ from PIL import Image
 from rapidfuzz import fuzz, process
 
 from extracto_layout import elegir_mejor, lineas_desde_paginas, lineas_por_y, paginas_por_y, parsear_lineas
+from excel_formato_estudio import exportar_informe_excel
 
 BASE_DIR = Path(__file__).resolve().parent
 RUTA_RAIZ_CLIENTES = BASE_DIR / "clientes"
@@ -6498,6 +6499,11 @@ COLUMNAS_EXCEL_EXTRACTO_BANCO = [
     "Clasificacion", "Nueva_Clasificacion", "Tipo Movimiento",
 ]
 HOJAS_EXCEL_EXTRACTO_BANCO = ("Sheet1", "Resumen_Clasificacion")
+COLUMNAS_EXCEL_CONVERTIDOR = ("Fecha", "Concepto", "Débitos", "Créditos")
+_RE_FILA_SALDO_EXTRACTO = re.compile(
+    r"saldo\s*(inicial|final|total|de\s*cuenta|en\s*cuenta)|saldo\s+al\s+\d",
+    re.I,
+)
 
 # Estrategia de parseo por banco (investigación formatos AR 2026):
 # - santander: columnas Débito/Crédito separadas → parser dedicado
@@ -8229,126 +8235,97 @@ def armar_tabla_dinamica_conceptos(df: pd.DataFrame) -> pd.DataFrame:
     return armar_resumen_clasificacion_extracto(df)
 
 
-def exportar_extracto_santander_excel(df: pd.DataFrame, meta: dict | None = None) -> bytes:
-    """
-    Formato universal PDF extractos → Excel (Galicia, Santander, Provincia, etc.):
-    - Sheet1: Fecha | Descripcion | Detalle | Importe | Saldo | Clasificacion | Nueva_Clasificacion | Tipo Movimiento
-    - Resumen_Clasificacion: Clasificacion | Debe | Haber | Importe_Neto | Moneda
-    Importe con signo: (−) resta / (+) suma.
-    """
-    from openpyxl import Workbook
-    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-    from openpyxl.utils import get_column_letter
-    from openpyxl.utils.dataframe import dataframe_to_rows
-
-    meta = meta or {}
-    df_in = df.copy() if df is not None else pd.DataFrame()
-    work = enriquecer_df_extracto_formato_banco(df_in)
-    cols = list(COLUMNAS_EXCEL_EXTRACTO_BANCO)
-    for c in cols:
-        if c not in work.columns:
-            work[c] = None
-    df_out = work[cols].copy()
-    df_out["Importe"] = pd.to_numeric(df_out["Importe"], errors="coerce")
-    df_out["Saldo"] = pd.to_numeric(df_out["Saldo"], errors="coerce")
-
-    resumen = armar_resumen_clasificacion_extracto(df_in)
-
-    # Identidad visual Estudio (mismo header que informes Claude-style)
-    from excel_formato_estudio import COLOR_PRIMARIO, COLOR_ZEBRA, HDR_FONT, MONEY_FMT_SIGNED
-
-    header_font = HDR_FONT
-    body_font = Font(name="Calibri", size=11, color="000000")
-    thin = Border(
-        left=Side(style="thin", color="B0B0B0"),
-        right=Side(style="thin", color="B0B0B0"),
-        top=Side(style="thin", color="B0B0B0"),
-        bottom=Side(style="thin", color="B0B0B0"),
+def _es_fila_saldo_extracto(row: dict) -> bool:
+    """Saldo inicial / final / total de cuenta: no va al convertidor."""
+    tipo = str(row.get("Tipo fila") or "").strip().lower()
+    if tipo in {"saldo inicial", "saldo final"}:
+        return True
+    blob = " ".join(
+        str(row.get(k) or "")
+        for k in ("Descripcion", "Detalle", "Clasificacion", "Concepto unificado")
     )
-    fill_h = PatternFill("solid", fgColor=COLOR_PRIMARIO)
-    zebra = PatternFill("solid", fgColor=COLOR_ZEBRA)
+    n = _normalizar_texto(blob)
+    if not n:
+        return False
+    if n in {"saldo", "saldo total", "saldo de cuenta"}:
+        return True
+    return bool(_RE_FILA_SALDO_EXTRACTO.search(n))
 
-    wb = Workbook()
-    ws = wb.active
-    ws.title = HOJAS_EXCEL_EXTRACTO_BANCO[0]
-    for r in dataframe_to_rows(df_out, index=False, header=True):
-        ws.append(r)
-    for cell in ws[1]:
-        cell.font = header_font
-        cell.fill = fill_h
-        cell.border = thin
-        cell.alignment = Alignment(horizontal="center", vertical="center")
-    for row in ws.iter_rows(min_row=2, max_row=max(2, ws.max_row), max_col=8):
-        for cell in row:
-            cell.font = body_font
-            cell.border = thin
-            if cell.column in (4, 5) and isinstance(cell.value, (int, float)):
-                cell.number_format = MONEY_FMT_SIGNED
-                cell.alignment = Alignment(horizontal="right")
-            if cell.column in (2, 3):
-                cell.alignment = Alignment(wrap_text=True, vertical="top")
-            if cell.row % 2 == 0:
-                cell.fill = zebra
-    ws.row_dimensions[1].height = 18
-    for r in range(2, ws.max_row + 1):
-        det = ws.cell(r, 3).value
-        if isinstance(det, str) and "\n" in det:
-            ws.row_dimensions[r].height = min(15 * (1 + det.count("\n")), 75)
-    anchos = {
-        "A": 12, "B": 36, "C": 42, "D": 14, "E": 14, "F": 32, "G": 22, "H": 16,
-    }
-    for col, w in anchos.items():
-        ws.column_dimensions[col].width = w
-    ws.freeze_panes = "A2"
-    if ws.max_row > 1:
-        ws.auto_filter.ref = f"A1:H{ws.max_row}"
 
-    ws2 = wb.create_sheet(HOJAS_EXCEL_EXTRACTO_BANCO[1])
-    headers_r = ["Clasificacion", "Debe", "Haber", "Importe_Neto", "Moneda"]
-    ws2.append(headers_r)
-    for cell in ws2[1]:
-        cell.font = header_font
-        cell.fill = fill_h
-        cell.border = thin
-        cell.alignment = Alignment(horizontal="center", vertical="center")
-    for _, row in resumen.iterrows():
-        ws2.append([
-            row.get("Clasificacion"),
-            float(row.get("Debe") or 0),
-            float(row.get("Haber") or 0),
-            float(row.get("Importe_Neto") or 0),
-            row.get("Moneda"),
-        ])
-    last_data = ws2.max_row
-    if last_data >= 2:
-        total_row = last_data + 1
-        ws2.cell(total_row, 1, "TOTAL")
-        ws2.cell(total_row, 2, f"=SUM(B2:B{last_data})")
-        ws2.cell(total_row, 3, f"=SUM(C2:C{last_data})")
-        ws2.cell(total_row, 4, f"=SUM(D2:D{last_data})")
-        for col in range(1, 6):
-            ws2.cell(total_row, col).font = Font(name="Calibri", bold=True, size=11)
-            ws2.cell(total_row, col).border = thin
-        for r in range(2, total_row + 1):
-            for c in (2, 3, 4):
-                cell = ws2.cell(r, c)
-                if isinstance(cell.value, (int, float)) or (
-                    isinstance(cell.value, str) and cell.value.startswith("=")
-                ):
-                    cell.number_format = MONEY_FMT_SIGNED
-                    cell.alignment = Alignment(horizontal="right")
-                ws2.cell(r, 1).border = thin
-                ws2.cell(r, 5).border = thin
-                for c in (2, 3, 4):
-                    ws2.cell(r, c).border = thin
-    for i, w in enumerate([36, 14, 14, 14, 10], start=1):
-        ws2.column_dimensions[get_column_letter(i)].width = w
-    ws2.freeze_panes = "A2"
+def _monto_extracto_celda(val) -> float:
+    try:
+        n = float(_limpiar_monto(val))
+    except (TypeError, ValueError):
+        return 0.0
+    if n != n:
+        return 0.0
+    return round(abs(n), 2) if n else 0.0
 
-    _ = meta
-    buf = io.BytesIO()
-    wb.save(buf)
-    return buf.getvalue()
+
+def df_extracto_convertidor_sin_saldos(df: pd.DataFrame) -> pd.DataFrame:
+    """Solo Fecha, Concepto, Débitos y Créditos. Sin SI, SF ni columna Saldo."""
+    cols = list(COLUMNAS_EXCEL_CONVERTIDOR)
+    if df is None or getattr(df, "empty", True):
+        return pd.DataFrame(columns=cols)
+    filas: list[dict] = []
+    for _, row in df.iterrows():
+        r = row.to_dict()
+        if _es_fila_saldo_extracto(r):
+            continue
+        desc = str(r.get("Descripcion") or "").strip()
+        det = str(r.get("Detalle") or "").strip()
+        if det.lower() in {"nan", "none", "null"}:
+            det = ""
+        concepto = desc or det
+        if not concepto or _es_basura_extracto_concepto(concepto):
+            continue
+        deb = _monto_extracto_celda(r.get("Debito"))
+        cred = _monto_extracto_celda(r.get("Credito"))
+        if not deb and not cred:
+            try:
+                imp = float(_limpiar_monto(r.get("Importe")))
+            except (TypeError, ValueError):
+                imp = 0.0
+            if imp < 0:
+                deb = round(abs(imp), 2)
+            elif imp > 0:
+                cred = round(imp, 2)
+        filas.append(
+            {
+                "Fecha": r.get("Fecha"),
+                "Concepto": concepto,
+                "Débitos": deb or None,
+                "Créditos": cred or None,
+            }
+        )
+    if not filas:
+        return pd.DataFrame(columns=cols)
+    return pd.DataFrame(filas, columns=cols)
+
+
+def exportar_extracto_santander_excel(df: pd.DataFrame, meta: dict | None = None) -> bytes:
+    """Convertidor: Fecha | Concepto | Débitos | Créditos. Sin saldos, todos los bancos."""
+    meta = meta or {}
+    detalle = df_extracto_convertidor_sin_saldos(df)
+    banco = str(meta.get("banco") or meta.get("banco_display") or "Banco").strip() or "Banco"
+    periodo = str(meta.get("periodo") or "").strip()
+    total_deb = float(pd.to_numeric(detalle["Débitos"], errors="coerce").fillna(0).sum()) if not detalle.empty else 0.0
+    total_cred = float(pd.to_numeric(detalle["Créditos"], errors="coerce").fillna(0).sum()) if not detalle.empty else 0.0
+    return exportar_informe_excel(
+        titulo=f"Extracto {banco}",
+        subtitulo="Movimientos sin saldo inicial, saldo final ni columna de saldo",
+        periodo=periodo,
+        kpis=[
+            ("Movimientos", len(detalle), "int"),
+            ("Débitos", round(total_deb, 2), "money"),
+            ("Créditos", round(total_cred, 2), "money"),
+        ],
+        detalle=detalle,
+        hoja_detalle="Movimientos",
+        col_moneda=["Débitos", "Créditos"],
+        col_fecha=["Fecha"],
+        col_texto=["Concepto"],
+    )
 
 
 def exportar_extracto_bancario_excel(df: pd.DataFrame, meta: dict | None = None) -> bytes:
