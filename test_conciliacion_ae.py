@@ -410,5 +410,27 @@ class TestAsientoExtractoAgrupaCuentas(unittest.TestCase):
         )
 
 
+class TestExtractoComponente(unittest.TestCase):
+    def test_aplica_cuenta_manual_antes_del_asiento(self):
+        from ui_conciliacion_ae import _aplicar_filas_componente
+
+        movs = [
+            {
+                "_idx": 0,
+                "cuenta_codigo": "99999",
+                "categoria": "Identificar",
+                "origen": "a_clasificar",
+            }
+        ]
+        out = _aplicar_filas_componente(
+            movs,
+            [{"i": 0, "codigo": "54101", "clasif": "Honorarios", "origen": "sugerido"}],
+            None,
+        )
+        self.assertEqual(out[0]["cuenta_codigo"], "54101")
+        self.assertEqual(out[0]["origen"], "sugerido")
+        self.assertEqual(out[0]["categoria"], "Honorarios")
+
+
 if __name__ == "__main__":
     unittest.main()

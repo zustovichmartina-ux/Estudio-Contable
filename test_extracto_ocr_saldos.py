@@ -155,6 +155,16 @@ class TestHintBancoExtracto(unittest.TestCase):
         filas = _RapidOcrAdapter(_Fake()).readtext(None)
         self.assertEqual(filas[0][1], "SANTANDER")
 
+    def test_bbox_poligono_y_rectangulo(self):
+        from procesador import _bbox_xy
+
+        x, y = _bbox_xy([[0, 10], [20, 10], [20, 30], [0, 30]])
+        self.assertEqual(x, 0.0)
+        self.assertEqual(y, 20.0)
+        x2, y2 = _bbox_xy([0, 10, 20, 30])
+        self.assertEqual(x2, 0.0)
+        self.assertEqual(y2, 20.0)
+
 
 if __name__ == "__main__":
     unittest.main()

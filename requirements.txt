@@ -8,7 +8,9 @@ pymupdf>=1.23.0
 rapidfuzz>=3.0.0
 Pillow>=10.0.0
 numpy>=1.24.0
-rapidocr-onnxruntime>=1.4.0
+opencv-python-headless>=4.8.0
+onnxruntime>=1.17.0,<1.21.0
+rapidocr-onnxruntime==1.4.4
 ddgs>=9.0.0
 plyer>=2.1.0
 cryptography>=42.0.0

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<style>
+  :root {
+    --navy: #1F4E79;
+    --navy-2: #163a5c;
+    --ink: #1a2332;
+    --muted: #5c6379;
+    --line: #e6eaf0;
+    --green: #137333;
+    --green-bg: #e6f4ea;
+    --amber: #b06000;
+    --amber-bg: #fff4e5;
+    --red: #c5221f;
+    --red-bg: #fce8e6;
+    --zebra: #f7f9fc;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: "Segoe UI", Calibri, system-ui, sans-serif;
+    color: var(--ink); background: transparent;
+  }
+  .ce-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin: 0 0 14px; }
+  .ce-title { font-size: 1.35rem; font-weight: 700; color: var(--navy); margin: 0; }
+  .ce-sub { color: var(--muted); font-size: .9rem; margin: 4px 0 0; }
+  .chip { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; margin: 10px 6px 0 0; }
+  .chip.regla { background: var(--green-bg); color: var(--green); }
+  .chip.sugerido { background: var(--amber-bg); color: var(--amber); }
+  .chip.a_clasificar { background: var(--red-bg); color: var(--red); }
+  .btn { border: 0; border-radius: 8px; padding: 10px 16px; font-weight: 650; cursor: pointer; font-size: 14px; }
+  .btn.primary { background: var(--navy); color: #fff; min-width: 128px; }
+  .btn.primary:hover { background: var(--navy-2); }
+  .btn.ghost { background: #fff; color: var(--navy); border: 1px solid var(--line); }
+  .wrap { max-height: 640px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    position: sticky; top: 0; z-index: 1;
+    background: var(--navy); color: #fff; font-size: 12px; font-weight: 600;
+    text-align: left; padding: 10px; white-space: nowrap;
+  }
+  thead th.num { text-align: right; }
+  tbody td { padding: 8px 10px; font-size: 13px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  tbody tr:nth-child(even) { background: var(--zebra); }
+  tbody tr.pend { background: #fff6f5; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .deb { color: #9b1c1c; }
+  .cred { color: #137333; }
+  select, input[type="text"] {
+    width: 100%; min-width: 140px; border: 1px solid #d3dae4; border-radius: 6px;
+    padding: 5px 7px; font-size: 12.5px; background: #fff; font-family: inherit;
+  }
+  .tag { font-size: 11px; font-weight: 650; padding: 2px 7px; border-radius: 999px; }
+  .tag.regla { background: var(--green-bg); color: var(--green); }
+  .tag.sugerido { background: var(--amber-bg); color: var(--amber); }
+  .tag.a_clasificar { background: var(--red-bg); color: var(--red); }
+  .foot { margin-top: 12px; }
+</style>
+</head>
+<body>
+  <div class="ce-top">
+    <div>
+      <p class="ce-title" id="titulo">Extracto</p>
+      <p class="ce-sub" id="sub"></p>
+      <span class="chip regla" id="n-regla">0 con regla</span>
+      <span class="chip sugerido" id="n-sug">0 sugeridas</span>
+      <span class="chip a_clasificar" id="n-pend">0 a clasificar</span>
+    </div>
+    <button class="btn primary" type="button" id="btn-sig">Siguiente</button>
+  </div>
+  <div class="wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Fecha</th>
+          <th>Descripción</th>
+          <th class="num">Débito</th>
+          <th class="num">Crédito</th>
+          <th class="num">Saldo</th>
+          <th>Clasificación</th>
+          <th>Cuenta Tango</th>
+          <th>Origen</th>
+        </tr>
+      </thead>
+      <tbody id="grid"></tbody>
+    </table>
+  </div>
+  <div class="foot">
+    <button class="btn ghost" type="button" id="btn-vol">Volver a subir</button>
+  </div>
+<script>
+function send(type, data) {
+  const msg = Object.assign({ isStreamlitMessage: true, type: type }, data || {});
+  window.parent.postMessage(msg, "*");
+}
+function setHeight() {
+  const h = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight, 420);
+  send("streamlit:setFrameHeight", { height: h + 8 });
+}
+function sendValue(value) {
+  send("streamlit:setComponentValue", { value: value, dataType: "json" });
+}
+
+let FILAS = [];
+let CUENTAS = [];
+let PINTADO = false;
+
+function esc(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+function money(n) {
+  const x = Number(n || 0);
+  if (!x) return "";
+  return x.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function optsHtml(sel) {
+  return CUENTAS.map((c) => {
+    const cod = String(c.codigo || "");
+    const lab = c.label || (cod + " — ");
+    return `<option value="${esc(cod)}" ${cod === String(sel) ? "selected" : ""}>${esc(lab)}</option>`;
+  }).join("");
+}
+function labelOrigen(o) {
+  if (o === "regla") return "Regla";
+  if (o === "sugerido") return "Sugerido";
+  return "A clasificar";
+}
+function snapshot() {
+  return FILAS.map((m) => ({
+    i: m.i,
+    clasif: m.clasif,
+    codigo: m.codigo,
+    origen: m.origen,
+  }));
+}
+function pintar() {
+  const tb = document.getElementById("grid");
+  tb.innerHTML = FILAS.map((m, i) => `
+    <tr class="${m.origen === "a_clasificar" ? "pend" : ""}">
+      <td>${esc(m.fecha)}</td>
+      <td>${esc(m.desc)}</td>
+      <td class="num deb">${money(m.deb)}</td>
+      <td class="num cred">${money(m.cred)}</td>
+      <td class="num">${money(m.saldo)}</td>
+      <td><input type="text" value="${esc(m.clasif)}" data-i="${i}" data-k="clasif"/></td>
+      <td><select data-i="${i}" data-k="codigo">${optsHtml(m.codigo)}</select></td>
+      <td><span class="tag ${esc(m.origen)}">${labelOrigen(m.origen)}</span></td>
+    </tr>`).join("");
+  tb.querySelectorAll("input, select").forEach((el) => {
+    el.addEventListener("change", () => {
+      const i = Number(el.getAttribute("data-i"));
+      const k = el.getAttribute("data-k");
+      FILAS[i][k] = el.value;
+      if (k === "codigo") {
+        FILAS[i].origen = el.value === "99999" ? "a_clasificar" : (FILAS[i].origen === "regla" ? "regla" : "sugerido");
+        pintar();
+      }
+      chips();
+    });
+  });
+  chips();
+  setHeight();
+}
+function chips() {
+  const nR = FILAS.filter((m) => m.origen === "regla").length;
+  const nS = FILAS.filter((m) => m.origen === "sugerido").length;
+  const nP = FILAS.filter((m) => m.origen === "a_clasificar").length;
+  document.getElementById("n-regla").textContent = nR + " con regla";
+  document.getElementById("n-sug").textContent = nS + " sugeridas";
+  document.getElementById("n-pend").textContent = nP + " a clasificar";
+}
+
+function onRender(event) {
+  if (!event.data || event.data.type !== "streamlit:render") return;
+  const args = event.data.args || {};
+  document.getElementById("titulo").textContent = args.titulo || "Extracto";
+  document.getElementById("sub").textContent = args.subtitulo || "";
+  CUENTAS = args.cuentas || [];
+  if (!PINTADO) {
+    FILAS = (args.filas || []).map((m) => Object.assign({}, m));
+    PINTADO = true;
+    pintar();
+  } else {
+    setHeight();
+  }
+}
+
+document.getElementById("btn-sig").addEventListener("click", () => {
+  sendValue({ action: "siguiente", filas: snapshot() });
+});
+document.getElementById("btn-vol").addEventListener("click", () => {
+  sendValue({ action: "volver", filas: snapshot() });
+});
+window.addEventListener("message", onRender);
+send("streamlit:componentReady", { apiVersion: 1 });
+setHeight();
+</script>
+</body>
+</html>

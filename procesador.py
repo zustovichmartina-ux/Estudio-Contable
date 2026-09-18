@@ -2756,6 +2756,7 @@ class ResultadoConciliacion:
 
 
 _lector_ocr_unavailable = False
+_ocr_ultimo_error = ""
 
 
 class _NoOpOcrReader:
@@ -2820,8 +2821,8 @@ def _es_entorno_cloud_ocr() -> bool:
 
 
 def _obtener_lector_ocr():
-    """Lazy singleton: EasyOCR en local si está; RapidOCR en Cloud (sin torch)."""
-    global _lector_ocr, _lector_ocr_unavailable
+    """Lazy singleton: RapidOCR en Cloud (sin torch); EasyOCR en local si está."""
+    global _lector_ocr, _lector_ocr_unavailable, _ocr_ultimo_error
     if _lector_ocr is not None:
         return _lector_ocr
     with _lector_ocr_init_lock:
@@ -2830,25 +2831,32 @@ def _obtener_lector_ocr():
         if _lector_ocr_unavailable:
             _lector_ocr = _NoOpOcrReader()
             return _lector_ocr
+        errores: list[str] = []
+        if not _es_entorno_cloud_ocr():
+            try:
+                import easyocr
+                _lector_ocr = easyocr.Reader(["es"], gpu=False, verbose=False)
+                return _lector_ocr
+            except Exception as exc:
+                errores.append(f"EasyOCR: {exc}")
         try:
-            import easyocr
-            _lector_ocr = easyocr.Reader(["es"], gpu=False, verbose=False)
-            return _lector_ocr
-        except Exception as exc:
-            print(f"[WARN] EasyOCR no disponible: {exc}", flush=True)
-        try:
+            os.environ.setdefault("OMP_NUM_THREADS", "1")
             engine = None
             try:
                 from rapidocr_onnxruntime import RapidOCR
                 engine = RapidOCR()
-            except Exception:
+            except Exception as exc_r1:
+                errores.append(f"rapidocr_onnxruntime: {exc_r1}")
                 from rapidocr import RapidOCR
                 engine = RapidOCR()
             if engine is not None:
                 _lector_ocr = _RapidOcrAdapter(engine)
+                _ocr_ultimo_error = ""
                 return _lector_ocr
         except Exception as exc:
-            print(f"[WARN] RapidOCR no disponible, OCR desactivado: {exc}", flush=True)
+            errores.append(f"RapidOCR: {exc}")
+        _ocr_ultimo_error = " | ".join(errores)[:400]
+        print(f"[WARN] OCR desactivado: {_ocr_ultimo_error}", flush=True)
         _lector_ocr_unavailable = True
         _lector_ocr = _NoOpOcrReader()
     return _lector_ocr
@@ -6321,6 +6329,27 @@ def unir_pdfs_desde_pares(pares: list[tuple[str, bytes]]) -> bytes:
         doc_out.close()
 
 
+def _bbox_xy(bbox) -> tuple[float, float]:
+    """Esquina izq. y centro vertical de una caja EasyOCR/RapidOCR."""
+    try:
+        if hasattr(bbox, "tolist"):
+            bbox = bbox.tolist()
+        if not bbox:
+            return 0.0, 0.0
+        if isinstance(bbox[0], (list, tuple)):
+            xs = [float(p[0]) for p in bbox if p is not None and len(p) >= 2]
+            ys = [float(p[1]) for p in bbox if p is not None and len(p) >= 2]
+            if not xs or not ys:
+                return 0.0, 0.0
+            return min(xs), (min(ys) + max(ys)) / 2.0
+        if len(bbox) >= 4:
+            x1, y1, x2, y2 = (float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3]))
+            return min(x1, x2), (y1 + y2) / 2.0
+    except (TypeError, ValueError, IndexError):
+        return 0.0, 0.0
+    return 0.0, 0.0
+
+
 def _ocr_pagina_rapida(pagina_fitz, dpi: int = 160) -> list[str]:
     """OCR liviano para extractos escaneados (sin reintentos de rotación costosos)."""
     lector = _obtener_lector_ocr()
@@ -6332,15 +6361,26 @@ def _ocr_pagina_rapida(pagina_fitz, dpi: int = 160) -> list[str]:
     w, h = img_pil.size
     if rot_metadata == 0 and w > h:
         img_pil = img_pil.rotate(90, expand=True)
-    # EasyOCR/torch comparte un modelo pesado entre sesiones Streamlit.
-    # Serializar inferencias evita picos de RAM y carreras entre usuarios.
     with _lector_ocr_run_lock:
-        resultados = lector.readtext(np.array(img_pil))
+        try:
+            resultados = lector.readtext(np.array(img_pil))
+        except Exception as exc:
+            print(f"[WARN] OCR pagina: {exc}", flush=True)
+            return []
     filas: dict[int, list[tuple[float, str]]] = {}
-    for bbox, texto, _ in resultados:
-        y_centro = (bbox[0][1] + bbox[2][1]) / 2
+    for item in resultados or []:
+        if not item:
+            continue
+        if isinstance(item, (list, tuple)) and len(item) >= 2:
+            bbox, texto = item[0], item[1]
+        else:
+            continue
+        txt = str(texto or "").strip()
+        if not txt:
+            continue
+        x0, y_centro = _bbox_xy(bbox)
         clave = int(y_centro / 18) * 18
-        filas.setdefault(clave, []).append((bbox[0][0], texto))
+        filas.setdefault(clave, []).append((x0, txt))
     return [
         " ".join(t for _, t in sorted(filas[y], key=lambda x: x[0])).strip()
         for y in sorted(filas)
@@ -7372,13 +7412,22 @@ def _procesar_un_pdf_extracto(
             muestra = " ".join(
                 ln.strip() for ln in (texto_all or "").splitlines() if ln.strip()
             )[:180]
-            escaneo = chars_nativos < 50 and not _ocr_extracto_disponible()
+            escaneo = chars_nativos < 50
             if escaneo and not muestra:
-                motivo = (
-                    f"No se detectaron movimientos ({display}). "
-                    "Este PDF no tiene texto (parece escaneo o imagen) y en la web no hay OCR. "
-                    "Descargá el extracto digital del homebanking (Archivo / Imprimir a PDF)."
-                )
+                ocr_ok = _ocr_extracto_disponible()
+                if not ocr_ok:
+                    detalle = _ocr_ultimo_error or "el motor no está instalado en el servidor"
+                    motivo = (
+                        f"No se detectaron movimientos ({display}). "
+                        f"Este PDF es imagen y el OCR no arrancó ({detalle}). "
+                        "En un minuto recargá; si sigue, avisame."
+                    )
+                else:
+                    motivo = (
+                        f"No se detectaron movimientos ({display}). "
+                        "El OCR corrió pero no reconoció líneas de extracto. "
+                        "Probá un PDF más nítido o el extracto digital del homebanking."
+                    )
             else:
                 motivo = (
                     f"No se detectaron movimientos ({display} · "

@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import calendar
 import copy
+import html
 from datetime import date
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 import database as db
 from capa_revision import gate_asiento, resolver_codigo_plan
@@ -52,8 +55,21 @@ _CSS = """
 .ce-chip.regla{background:#e6f4ea;color:#137333;}
 .ce-chip.sugerido{background:#fff4e5;color:#b06000;}
 .ce-chip.a_clasificar{background:#fce8e6;color:#c5221f;}
+.ce-wrap{border:1px solid #e6eaf0;border-radius:10px;overflow:auto;max-height:420px;background:#fff;}
+.ce-table{width:100%;border-collapse:collapse;font-family:"Segoe UI",Calibri,sans-serif;}
+.ce-table th{background:#1F4E79;color:#fff;font-size:12px;font-weight:600;text-align:left;padding:10px;white-space:nowrap;}
+.ce-table td{padding:8px 10px;font-size:13px;border-bottom:1px solid #e6eaf0;}
+.ce-table tr:nth-child(even) td{background:#f7f9fc;}
+.ce-table tr.pend td{background:#fff6f5;}
+.ce-table .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+div[data-testid="stCustomComponentV1"] iframe{border:0 !important;}
 </style>
 """
+
+_EXTRACTO_GRID = components.declare_component(
+    "extracto_grid",
+    path=str(Path(__file__).resolve().parent / "extracto_grid"),
+)
 
 
 def _periodo_mm_yyyy(d: date | None) -> str:
@@ -181,6 +197,109 @@ def _df_extracto(movs: list[dict], opciones: list[str]) -> pd.DataFrame:
             }
         )
     return pd.DataFrame(filas)
+
+
+def _filas_componente(movs: list[dict]) -> list[dict]:
+    filas = []
+    for i, m in enumerate(movs):
+        filas.append(
+            {
+                "i": int(m.get("_idx", i)),
+                "fecha": _fmt_fecha(m.get("fecha")),
+                "desc": str(m.get("descripcion") or ""),
+                "deb": float(money(m.get("debito"))),
+                "cred": float(money(m.get("credito"))),
+                "saldo": float(money(m.get("saldo"))),
+                "clasif": str(m.get("categoria") or m.get("extracto_label") or ""),
+                "codigo": str(m.get("cuenta_codigo") or "99999"),
+                "origen": str(m.get("origen") or "a_clasificar"),
+            }
+        )
+    return filas
+
+
+def _cuentas_componente(opciones: list[str]) -> list[dict]:
+    out = []
+    vistos: set[str] = set()
+    for op in opciones:
+        cod = _codigo_desde_opcion(op)
+        if not cod or cod in vistos:
+            continue
+        vistos.add(cod)
+        out.append({"codigo": cod, "label": op})
+    return out
+
+
+def _aplicar_filas_componente(movs: list[dict], filas: list[dict], plan_df) -> list[dict]:
+    col_cod = "codigo" if plan_df is not None and "codigo" in plan_df.columns else None
+    col_desc = "descripcion" if plan_df is not None and "descripcion" in plan_df.columns else None
+    desc_por_cod: dict[str, str] = {}
+    if plan_df is not None and col_cod and col_desc:
+        for _, row in plan_df.iterrows():
+            desc_por_cod[str(row.get(col_cod) or "").strip()] = str(row.get(col_desc) or "").strip()
+    by_i: dict[int, dict] = {}
+    for f in filas or []:
+        try:
+            by_i[int(f.get("i"))] = f
+        except (TypeError, ValueError):
+            continue
+    out = list(movs)
+    for pos, m in enumerate(out):
+        try:
+            idx = int(m.get("_idx", pos))
+        except (TypeError, ValueError):
+            idx = pos
+        f = by_i.get(idx) or by_i.get(pos)
+        if not f:
+            continue
+        codigo = str(f.get("codigo") or "99999").strip() or "99999"
+        clasif = str(f.get("clasif") or "").strip()
+        origen = str(f.get("origen") or "")
+        out[pos]["cuenta_codigo"] = codigo
+        out[pos]["categoria"] = clasif or out[pos].get("categoria")
+        if codigo != "99999" and codigo in desc_por_cod:
+            out[pos]["cuenta_plan"] = desc_por_cod[codigo]
+        elif clasif:
+            out[pos]["cuenta_plan"] = clasif
+        if origen in {"regla", "sugerido", "a_clasificar"}:
+            out[pos]["origen"] = origen
+        elif codigo != "99999":
+            if str(out[pos].get("origen") or "") == "a_clasificar":
+                out[pos]["origen"] = "sugerido"
+        else:
+            out[pos]["origen"] = "a_clasificar"
+    return out
+
+
+def _html_tabla_asiento(rows: list[dict]) -> str:
+    if not rows:
+        return "<p class='ce-sub'>Sin renglones.</p>"
+    body = []
+    for r in rows:
+        cod = str(r.get("Código") or "")
+        cls = "pend" if cod == "99999" else ""
+        debe = float(r.get("Debe") or 0)
+        haber = float(r.get("Haber") or 0)
+        body.append(
+            "<tr class='"
+            + cls
+            + "'><td>"
+            + html.escape(cod)
+            + "</td><td>"
+            + html.escape(str(r.get("Descripción") or ""))
+            + "</td><td class='num'>"
+            + html.escape(_fmt_money(debe) if abs(debe) > 0.005 else "")
+            + "</td><td class='num'>"
+            + html.escape(_fmt_money(haber) if abs(haber) > 0.005 else "")
+            + "</td></tr>"
+        )
+    return (
+        "<div class='ce-wrap'><table class='ce-table'><thead>"
+        "<tr><th>Código</th><th>Descripción</th><th class='num'>Debe</th>"
+        "<th class='num'>Haber</th></tr></thead><tbody>"
+        + "".join(body)
+        + "</tbody></table></div>"
+    )
 
 
 def _aplicar_edicion(movs: list[dict], edited: pd.DataFrame, plan_df) -> list[dict]:
@@ -410,56 +529,32 @@ def _paso_extracto(
     periodo = str(preview.get("periodo") or "")
     plan_df = st.session_state.get("plan_cuentas_df")
     opciones = _opciones_plan(plan_df)
+    token_key = f"ce_grid_token_{sociedad_id}"
+    token = int(st.session_state.get(token_key) or 0)
 
-    n_regla = sum(1 for m in movs if m.get("origen") == "regla")
-    n_sug = sum(1 for m in movs if m.get("origen") == "sugerido")
-    n_pend = sum(1 for m in movs if m.get("origen") == "a_clasificar")
-
-    top_l, top_r = st.columns([4, 1])
-    with top_l:
-        st.markdown(f'<p class="ce-title">Extracto {banco} · {periodo}</p>', unsafe_allow_html=True)
-        st.caption(
+    out = _EXTRACTO_GRID(
+        titulo=f"Extracto {banco} · {periodo}",
+        subtitulo=(
             f"{nombre_activo or ''} — {len(movs)} movimientos. "
             "Las que tienen regla quedan tomadas; el resto, sugeridas o a clasificar. "
             "Cambiá la cuenta en la misma línea."
-        )
-        st.markdown(
-            f'<span class="ce-chip regla">{n_regla} con regla</span>'
-            f'<span class="ce-chip sugerido">{n_sug} sugeridas</span>'
-            f'<span class="ce-chip a_clasificar">{n_pend} a clasificar</span>',
-            unsafe_allow_html=True,
-        )
-    with top_r:
-        if st.button("Siguiente", type="primary", use_container_width=True, key=f"ce_next_{sociedad_id}"):
-            st.session_state[paso_key] = "asiento"
-            st.rerun()
-
-    df = _df_extracto(movs, opciones)
-    edited = st.data_editor(
-        df,
-        hide_index=True,
-        use_container_width=True,
-        height=640,
-        key=f"ce_grid_{sociedad_id}",
-        column_config={
-            "_i": None,
-            "Fecha": st.column_config.TextColumn("Fecha", disabled=True, width="small"),
-            "Descripción": st.column_config.TextColumn("Descripción", disabled=True, width="large"),
-            "Débito": st.column_config.NumberColumn("Débito", format="$ %.2f", disabled=True),
-            "Crédito": st.column_config.NumberColumn("Crédito", format="$ %.2f", disabled=True),
-            "Saldo": st.column_config.NumberColumn("Saldo", format="$ %.2f", disabled=True),
-            "Clasificación": st.column_config.TextColumn("Clasificación", width="medium"),
-            "Cuenta": st.column_config.SelectboxColumn("Cuenta Tango", options=opciones, width="medium"),
-            "Origen": st.column_config.TextColumn("Origen", disabled=True, width="small"),
-        },
+        ),
+        filas=_filas_componente(movs),
+        cuentas=_cuentas_componente(opciones),
+        key=f"ce_grid_{sociedad_id}_{token}",
+        default={"action": "idle", "filas": []},
     )
-    actualizados = _aplicar_edicion(movs, edited, plan_df)
-    preview["movimientos"] = actualizados
-    st.session_state[preview_key] = preview
-
-    if st.button("Volver a subir", key=f"ce_back_up_{sociedad_id}"):
-        st.session_state.pop(preview_key, None)
-        st.session_state[paso_key] = "subir"
+    accion = str((out or {}).get("action") or "idle")
+    if accion in {"siguiente", "volver"}:
+        actualizados = _aplicar_filas_componente(movs, (out or {}).get("filas") or [], plan_df)
+        preview["movimientos"] = actualizados
+        st.session_state[preview_key] = preview
+        st.session_state[token_key] = token + 1
+        if accion == "siguiente":
+            st.session_state[paso_key] = "asiento"
+        else:
+            st.session_state.pop(preview_key, None)
+            st.session_state[paso_key] = "subir"
         st.rerun()
 
 
@@ -524,12 +619,7 @@ def _paso_asiento(
     k2.metric("Haber", _fmt_money(haber))
     k3.metric("Diferencia", _fmt_money(debe - haber))
 
-    st.dataframe(
-        pd.DataFrame(rows)[["Código", "Descripción", "Debe", "Haber"]] if rows else pd.DataFrame(),
-        use_container_width=True,
-        hide_index=True,
-        height=420,
-    )
+    st.markdown(_html_tabla_asiento(rows), unsafe_allow_html=True)
 
     if g.get("bloqueantes"):
         st.error("Todavía no se puede guardar ni exportar:")
