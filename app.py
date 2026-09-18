@@ -11137,10 +11137,6 @@ def _seccion_conciliacion_bancaria_banco(
 
     st.markdown("---")
     _render_conexion_servidor_banco(sociedad_id, banco)
-    st.caption(
-        "El matcheo inteligente PDF + Tango está en **Herramientas → Matcheo inteligente PDF + Tango**, "
-        "para dejar más espacio a la grilla del asiento."
-    )
 
     solapa_activa = banco
     archivo_a_procesar, origen_planilla, etiqueta_planilla = _resolver_fuente_balance(
@@ -12893,29 +12889,34 @@ def _seccion_herramientas() -> None:
     _alias_extractos = {
         "Extractos bancarios": "Extractos de PDF → Excel",
         "Extractos de PDF ➔ Excel": "Extractos de PDF → Excel",
+        "Liquidaciones de tarjetas": "Convertidor de Liquidaciones de Tarjeta",
+        "Matcheo inteligente PDF + Tango": "Extractos de PDF → Excel",
+        "FCI — Motor FIFO (ejercicio)": "Extractos de PDF → Excel",
+        "Extracto FCI → Excel": "Extractos de PDF → Excel",
     }
-    previo = st.session_state.get("herramientas_selectbox_v19")
-    if previo in _alias_extractos and "herramientas_selectbox_v20" not in st.session_state:
-        st.session_state["herramientas_selectbox_v20"] = _alias_extractos[previo]
+    previo = (
+        st.session_state.get("herramientas_selectbox_v22")
+        or st.session_state.get("herramientas_selectbox_v21")
+        or st.session_state.get("herramientas_selectbox_v20")
+        or st.session_state.get("herramientas_selectbox_v19")
+    )
+    if previo in _alias_extractos and "herramientas_selectbox_v23" not in st.session_state:
+        st.session_state["herramientas_selectbox_v23"] = _alias_extractos[previo]
 
     herramienta_activa = st.selectbox(
         "Seleccioná la herramienta que vas a usar:",
         options=[
             "Recategorización Monotributo",
             "Extractos de PDF → Excel",
-            "FCI — Motor FIFO (ejercicio)",
-            "Extracto FCI → Excel",
             "Completar cuadro bancario existente",
-            "Matcheo inteligente PDF + Tango",
             "Caja USD (dif. cotización)",
             "Convertidor de Liquidaciones de Tarjeta",
-            "Liquidaciones de tarjetas",
             "Match débitos - proveedores",
             "Cruce Facturas vs ARCA",
             "Desglose FCT — Detalle de ítems",
         ],
         index=1,
-        key="herramientas_selectbox_v20",
+        key="herramientas_selectbox_v23",
     )
     st.divider()
 
@@ -12923,8 +12924,6 @@ def _seccion_herramientas() -> None:
         _seccion_recategorizacion_monotributo()
     elif herramienta_activa == "Completar cuadro bancario existente":
         _herramienta_completar_cuadro_bancario()
-    elif herramienta_activa == "Matcheo inteligente PDF + Tango":
-        _herramienta_matcheo_inteligente_pdf()
     elif herramienta_activa in (
         "Extractos de PDF → Excel",
         "Extractos bancarios",
@@ -12933,20 +12932,17 @@ def _seccion_herramientas() -> None:
         _herramienta_pdf_extractos_a_excel()
     elif herramienta_activa == "Caja USD (dif. cotización)":
         _herramienta_caja_usd()
-    elif herramienta_activa == "Convertidor de Liquidaciones de Tarjeta":
+    elif herramienta_activa in (
+        "Convertidor de Liquidaciones de Tarjeta",
+        "Liquidaciones de tarjetas",
+    ):
         _herramienta_liquidaciones_tarjeta()
-    elif herramienta_activa == "Liquidaciones de tarjetas":
-        _herramienta_liquidaciones_tarjetas_fiserv()
     elif herramienta_activa == "Match débitos - proveedores":
         _herramienta_match_debitos_proveedores()
     elif herramienta_activa == "Cruce Facturas vs ARCA":
         _herramienta_cruce_facturas_arca()
     elif herramienta_activa == "Desglose FCT — Detalle de ítems":
         _herramienta_desglose_fct_mercaderia_servicios()
-    elif herramienta_activa == "Extracto FCI → Excel":
-        _herramienta_extracto_fci()
-    elif herramienta_activa == "FCI — Motor FIFO (ejercicio)":
-        _herramienta_fci_fifo_ejercicio()
 
 
 def _seccion_recategorizacion_monotributo() -> None:
@@ -13555,7 +13551,7 @@ def _main() -> None:
             - **Conciliación Bancaria**: importar extracto (PDF/Excel), revisar imputación en cada línea, papeles del mes (arrastre, diferencia real) y Asiento Tango (99999 = sin match; biblioteca + Excel).
             - **Préstamos Financieros**: auditoría de cuotas desde PDFs bancarios.
             - **Inversiones**: carga de operaciones, depuración del pool USD y patrimonio (Ganancias / bienes personales).
-            - **Herramientas**: recategorización monotributo; extractos PDF → Excel; matcheo PDF + Tango; cuadro bancario; FCI FIFO; caja USD; liquidaciones; cruce facturas.
+            - **Herramientas**: recategorización monotributo; extractos PDF → Excel; cuadro bancario; caja USD; convertidor de liquidaciones; cruce facturas.
             - **Tango**: agente del estudio (responde, formula y lee capturas) con las ayudas Axoft y el export de sueldos.
             - **ARCA**: encola jobs AFIP (Comprobantes en Línea, Portal IVA, FCC/VEPs); el worker local ejecuta en Chrome. Sin claves en la web.
             - **Usuarios de oficina**: cada persona entra con su usuario; sesiones independientes.

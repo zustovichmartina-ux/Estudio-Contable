@@ -120,6 +120,19 @@ function money(n) {
   if (!x) return "";
   return x.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+function parseCuentas(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === "string") {
+    try { return JSON.parse(raw); } catch (e) { return []; }
+  }
+  return [];
+}
+function claveRepetida(m) {
+  let t = String(m.clasif || m.desc || "").toLowerCase().trim();
+  t = t.replace(/\s+/g, " ").replace(/\b\d{5,}\b/g, "").trim();
+  return t;
+}
 function optsHtml(sel) {
   return CUENTAS.map((c) => {
     const cod = String(c.codigo || "");
@@ -159,7 +172,14 @@ function pintar() {
       const k = el.getAttribute("data-k");
       FILAS[i][k] = el.value;
       if (k === "codigo") {
-        FILAS[i].origen = el.value === "99999" ? "a_clasificar" : (FILAS[i].origen === "regla" ? "regla" : "sugerido");
+        const clave = claveRepetida(FILAS[i]);
+        const nuevo = el.value;
+        FILAS.forEach((m) => {
+          if (clave && claveRepetida(m) === clave) {
+            m.codigo = nuevo;
+            m.origen = nuevo === "99999" ? "a_clasificar" : (m.origen === "regla" ? "regla" : "sugerido");
+          }
+        });
         pintar();
       }
       chips();
@@ -182,10 +202,14 @@ function onRender(event) {
   const args = event.data.args || {};
   document.getElementById("titulo").textContent = args.titulo || "Extracto";
   document.getElementById("sub").textContent = args.subtitulo || "";
-  CUENTAS = args.cuentas || [];
+  const nuevas = parseCuentas(args.cuentas_json || args.cuentas);
+  const hayCuentasNuevas = nuevas.length !== CUENTAS.length;
+  CUENTAS = nuevas;
   if (!PINTADO) {
     FILAS = (args.filas || []).map((m) => Object.assign({}, m));
     PINTADO = true;
+    pintar();
+  } else if (hayCuentasNuevas && nuevas.length) {
     pintar();
   } else {
     setHeight();

@@ -431,6 +431,30 @@ class TestExtractoComponente(unittest.TestCase):
         self.assertEqual(out[0]["origen"], "sugerido")
         self.assertEqual(out[0]["categoria"], "Honorarios")
 
+    def test_plan_lista_todas_las_cuentas(self):
+        import pandas as pd
+        from ui_conciliacion_ae import _opciones_plan
+
+        plan = pd.DataFrame(
+            {"codigo": ["11104", "52101", "53305"], "descripcion": ["Banco", "Gastos", "IDC"]}
+        )
+        opts = _opciones_plan(plan)
+        self.assertTrue(any(o.startswith("11104") for o in opts))
+        self.assertTrue(any(o.startswith("52101") for o in opts))
+        self.assertGreaterEqual(len(opts), 4)
+
+    def test_movimientos_iguales_quedan_en_la_misma_cuenta(self):
+        from ui_conciliacion_ae import _propagar_cuentas_repetidas
+
+        movs = [
+            {"descripcion": "Pago haberes", "categoria": "Pago haberes", "cuenta_codigo": "52120", "origen": "regla"},
+            {"descripcion": "Pago haberes", "categoria": "Pago haberes", "cuenta_codigo": "99999", "origen": "a_clasificar"},
+            {"descripcion": "Pago haberes 2509025072", "categoria": "Pago haberes", "cuenta_codigo": "99999", "origen": "a_clasificar"},
+        ]
+        out = _propagar_cuentas_repetidas(movs)
+        self.assertEqual(out[1]["cuenta_codigo"], "52120")
+        self.assertEqual(out[2]["cuenta_codigo"], "52120")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -5,6 +5,8 @@ from __future__ import annotations
 import calendar
 import copy
 import html
+import json
+import re
 from datetime import date
 from pathlib import Path
 
@@ -29,9 +31,11 @@ from procesador import (
     AsientoDevengamiento,
     ExportacionTangoError,
     RenglonAsiento,
+    cargar_plan_cuentas,
     clasificar_movimiento_extracto,
     generar_excel_tango_nativo,
     guardar_biblioteca_persistida,
+    normalizar_codigo_cuenta_tango,
     procesar_extractos_bancarios_pdfs,
 )
 
@@ -107,21 +111,130 @@ def _label_origen(origen: str) -> str:
     }.get(origen, origen or "A clasificar")
 
 
+def _col_en_plan(plan_df: pd.DataFrame | None, nombres: tuple[str, ...]) -> str | None:
+    if plan_df is None or getattr(plan_df, "empty", True):
+        return None
+    mapa = {str(c).strip().lower(): c for c in plan_df.columns}
+    for n in nombres:
+        if n in mapa:
+            return mapa[n]
+    return None
+
+
+def _plan_df_sociedad(sociedad_id: int) -> pd.DataFrame | None:
+    """Plan de cuentas de la sociedad activa (session o disco)."""
+    df = st.session_state.get("plan_cuentas_df")
+    cid = st.session_state.get("plan_cuentas_cliente_id")
+    if (
+        df is not None
+        and not getattr(df, "empty", True)
+        and (cid in (None, sociedad_id) or int(cid) == int(sociedad_id))
+    ):
+        return df
+    df2 = st.session_state.get(f"plan_cuentas_df_{int(sociedad_id)}")
+    if df2 is not None and not getattr(df2, "empty", True):
+        return df2
+    try:
+        cliente = db.obtener_cliente(int(sociedad_id))
+    except Exception:
+        return df
+    if not cliente:
+        return df
+    candidatos: list[Path] = []
+    raw = str(cliente.get("plan_cuentas_path") or "").strip()
+    if raw:
+        candidatos.append(Path(raw))
+    cuit = re.sub(r"\D", "", str(cliente.get("cuit") or ""))
+    base = Path(__file__).resolve().parent / "data" / "planes_cuentas"
+    if cuit:
+        candidatos.append(base / f"plan_{cuit}.xlsx")
+        candidatos.append(base / f"plan_{cuit}.csv")
+    candidatos.append(base / f"plan_id_{int(sociedad_id)}.xlsx")
+    for p in candidatos:
+        if not p.is_file():
+            continue
+        try:
+            loaded = cargar_plan_cuentas(p)
+        except Exception:
+            continue
+        if loaded is None or getattr(loaded, "empty", True):
+            continue
+        st.session_state["plan_cuentas_df"] = loaded
+        st.session_state[f"plan_cuentas_df_{int(sociedad_id)}"] = loaded
+        st.session_state["plan_cuentas_cliente_id"] = int(sociedad_id)
+        return loaded
+    return df
+
+
 def _opciones_plan(plan_df: pd.DataFrame | None) -> list[str]:
     opts = ["99999 — A clasificar"]
     if plan_df is None or getattr(plan_df, "empty", True):
         return opts
-    col_cod = "codigo" if "codigo" in plan_df.columns else plan_df.columns[0]
-    col_desc = "descripcion" if "descripcion" in plan_df.columns else plan_df.columns[1]
+    col_cod = _col_en_plan(plan_df, ("codigo", "código", "cuenta", "cod")) or plan_df.columns[0]
+    col_desc = _col_en_plan(
+        plan_df, ("descripcion", "descripción", "nombre", "desc")
+    )
+    if col_desc is None and len(plan_df.columns) > 1:
+        col_desc = plan_df.columns[1]
     vistos: set[str] = set()
+    filas: list[tuple[str, str]] = []
     for _, row in plan_df.iterrows():
-        cod = str(row.get(col_cod) or "").strip()
-        if not cod or cod in vistos or cod.lower() in {"nan", "codigo", "código"}:
+        cod = normalizar_codigo_cuenta_tango(row.get(col_cod))
+        if not cod or cod in vistos or cod.lower() in {"nan", "codigo", "código", "cuenta"}:
             continue
         vistos.add(cod)
-        desc = str(row.get(col_desc) or "").strip()
+        desc = str(row.get(col_desc) or "").strip() if col_desc is not None else ""
+        filas.append((cod, desc))
+    filas.sort(key=lambda x: x[0])
+    for cod, desc in filas:
         opts.append(f"{cod} — {desc}" if desc else cod)
     return opts
+
+
+def _clave_mov_repetido(m: dict) -> str:
+    t = str(
+        m.get("categoria")
+        or m.get("extracto_label")
+        or m.get("clasif")
+        or m.get("descripcion")
+        or m.get("desc")
+        or ""
+    )
+    t = t.lower().strip()
+    t = re.sub(r"\s+", " ", t)
+    t = re.sub(r"\b\d{5,}\b", "", t)
+    return t.strip()
+
+
+def _propagar_cuentas_repetidas(movs: list[dict]) -> list[dict]:
+    """La misma descripción/clasificación queda en la misma cuenta Tango."""
+    grupos: dict[str, list[int]] = {}
+    for i, m in enumerate(movs):
+        clave = _clave_mov_repetido(m)
+        if not clave:
+            continue
+        grupos.setdefault(clave, []).append(i)
+    out = list(movs)
+    for idxs in grupos.values():
+        if len(idxs) < 2:
+            continue
+        codigos = [
+            str(out[i].get("cuenta_codigo") or "").strip()
+            for i in idxs
+            if str(out[i].get("cuenta_codigo") or "").strip() not in {"", "99999"}
+        ]
+        if not codigos:
+            continue
+        elegido = max(set(codigos), key=codigos.count)
+        modelo = next(out[i] for i in idxs if str(out[i].get("cuenta_codigo") or "").strip() == elegido)
+        for i in idxs:
+            actual = str(out[i].get("cuenta_codigo") or "").strip()
+            if actual not in {"", "99999"}:
+                continue
+            out[i]["cuenta_codigo"] = elegido
+            out[i]["cuenta_plan"] = modelo.get("cuenta_plan") or out[i].get("cuenta_plan")
+            out[i]["origen"] = modelo.get("origen") or "sugerido"
+    return out
 
 
 def _codigo_desde_opcion(texto: str) -> str:
@@ -177,7 +290,7 @@ def _enriquecer(movs: list[dict], plan_df) -> list[dict]:
         fila["monto"] = round(cred - deb, 2)
         fila["_idx"] = i
         out.append(fila)
-    return out
+    return _propagar_cuentas_repetidas(out)
 
 
 def _df_extracto(movs: list[dict], opciones: list[str]) -> pd.DataFrame:
@@ -268,7 +381,7 @@ def _aplicar_filas_componente(movs: list[dict], filas: list[dict], plan_df) -> l
                 out[pos]["origen"] = "sugerido"
         else:
             out[pos]["origen"] = "a_clasificar"
-    return out
+    return _propagar_cuentas_repetidas(out)
 
 
 def _html_tabla_asiento(rows: list[dict]) -> str:
@@ -527,20 +640,24 @@ def _paso_extracto(
     movs = list(preview.get("movimientos") or [])
     banco = str(preview.get("banco") or "")
     periodo = str(preview.get("periodo") or "")
-    plan_df = st.session_state.get("plan_cuentas_df")
+    plan_df = _plan_df_sociedad(sociedad_id)
     opciones = _opciones_plan(plan_df)
     token_key = f"ce_grid_token_{sociedad_id}"
     token = int(st.session_state.get(token_key) or 0)
+    n_plan = max(0, len(opciones) - 1)
+    subtitulo = (
+        f"{nombre_activo or ''} — {len(movs)} movimientos · {n_plan} cuentas del plan. "
+        "Las que tienen regla quedan tomadas; el resto, sugeridas o a clasificar. "
+        "Cambiá la cuenta en la misma línea (se copia a las iguales)."
+    )
+    if n_plan <= 0:
+        st.warning("No está el plan de cuentas de esta sociedad. Vinculalo y volvé a leer el extracto.")
 
     out = _EXTRACTO_GRID(
         titulo=f"Extracto {banco} · {periodo}",
-        subtitulo=(
-            f"{nombre_activo or ''} — {len(movs)} movimientos. "
-            "Las que tienen regla quedan tomadas; el resto, sugeridas o a clasificar. "
-            "Cambiá la cuenta en la misma línea."
-        ),
+        subtitulo=subtitulo,
         filas=_filas_componente(movs),
-        cuentas=_cuentas_componente(opciones),
+        cuentas_json=json.dumps(_cuentas_componente(opciones), ensure_ascii=False),
         key=f"ce_grid_{sociedad_id}_{token}",
         default={"action": "idle", "filas": []},
     )
@@ -571,7 +688,7 @@ def _paso_asiento(
     movs = list(preview.get("movimientos") or [])
     banco = str(preview.get("banco") or banco_elegido or "Banco")
     periodo = str(preview.get("periodo") or _periodo_mm_yyyy(date.today()))
-    plan_df = st.session_state.get("plan_cuentas_df")
+    plan_df = _plan_df_sociedad(sociedad_id)
     opciones = _opciones_plan(plan_df)
     sug_cod, sug_desc = cuenta_banco_del_plan(plan_df, banco)
 
