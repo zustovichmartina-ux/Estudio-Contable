@@ -3,10 +3,14 @@ from __future__ import annotations
 
 import unittest
 
+import fitz
+
 from procesador import (
     _corregir_filas_extracto_por_saldos,
     _elegir_monto_y_saldo_extracto,
+    _procesar_un_pdf_extracto,
     _resolver_saldo_ocr,
+    _slug_hint_extracto,
 )
 
 
@@ -111,6 +115,30 @@ class TestOcrSaldo71Vs11(unittest.TestCase):
         ]
         out = _corregir_filas_extracto_por_saldos(movs)
         self.assertAlmostEqual(float(out[1]["Debito"]), 2853.47, places=2)
+
+
+class TestHintBancoExtracto(unittest.TestCase):
+    def test_slug_desde_selector_web(self):
+        self.assertEqual(_slug_hint_extracto("Banco Galicia"), "galicia")
+        self.assertEqual(_slug_hint_extracto("Banco Provincia"), "provincia")
+        self.assertEqual(_slug_hint_extracto("BBVA"), "frances")
+        self.assertEqual(_slug_hint_extracto(""), "")
+
+    def test_pdf_sin_banco_en_el_nombre_usa_el_hint(self):
+        doc = fitz.open()
+        page = doc.new_page()
+        page.insert_text(
+            (72, 72),
+            "01/01/2026 TRANSFERENCIA DE TERCEROS ACME S.A. 1.000,00 5.000,00",
+        )
+        data = doc.tobytes()
+        doc.close()
+        filas, meta, err = _procesar_un_pdf_extracto(
+            "01-2026.pdf", data, banco_hint="Banco Galicia"
+        )
+        self.assertIsNone(err, msg=str(err))
+        self.assertTrue(filas)
+        self.assertEqual(meta.get("banco_slug"), "galicia")
 
 
 if __name__ == "__main__":

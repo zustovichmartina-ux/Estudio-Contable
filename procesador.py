@@ -951,15 +951,70 @@ def listar_periodos_disponibles_balance(
     return _periodos_default_anio()
 
 
-_RE_CODIGO_CUENTA_CONCEPTO = re.compile(r"^(\d{5})\b")
+_RE_CODIGO_CUENTA_CONCEPTO = re.compile(r"^(\d{5})(?:\.0+)?\b")
+
+
+def normalizar_codigo_cuenta_tango(val) -> str:
+    """Código Tango canónico: 11101.0 / 11101.00 → 11101. No inventa cuentas."""
+    if val is None or isinstance(val, bool):
+        return ""
+    if isinstance(val, pd.Timestamp) or isinstance(val, datetime) or isinstance(val, date):
+        return ""
+    try:
+        if pd.isna(val):
+            return ""
+    except (ValueError, TypeError):
+        pass
+    if isinstance(val, (int, float, np.integer, np.floating)):
+        num = float(val)
+        if not num.is_integer():
+            s = str(val).strip()
+        else:
+            s = str(int(num))
+    else:
+        s = str(val).strip()
+    if not s or s.lower() in {"nan", "none", "nat", "codigo", "código"}:
+        return ""
+    if re.fullmatch(r"\d+\.0+", s):
+        s = s.split(".", 1)[0]
+    return s
+
+
+def _celda_es_fecha_o_timestamp(val) -> bool:
+    if isinstance(val, bool):
+        return False
+    return isinstance(val, (pd.Timestamp, datetime, date))
+
+
+def _celda_tiene_letras(val) -> bool:
+    if val is None or _celda_es_fecha_o_timestamp(val):
+        return False
+    try:
+        if pd.isna(val):
+            return False
+    except (ValueError, TypeError):
+        pass
+    return bool(re.search(r"[A-Za-zÁÉÍÓÚÜáéíóúüÑñ]", str(val)))
+
+
+def _es_codigo_cuenta_tango(codigo: str) -> bool:
+    return bool(re.fullmatch(r"\d{5,8}", str(codigo or "").strip()))
 
 
 def _codigo_cinco_digitos_desde_celda(val) -> str | None:
-    """Extrae código Tango de 5 dígitos desde celda numérica o textual."""
-    if pd.isna(val):
+    """Extrae código Tango (5 a 8 dígitos) desde celda numérica o textual."""
+    if _celda_es_fecha_o_timestamp(val):
         return None
-    if isinstance(val, (int, float)) and not isinstance(val, bool):
-        n = int(float(val))
+    try:
+        if pd.isna(val):
+            return None
+    except (ValueError, TypeError):
+        pass
+    if isinstance(val, (int, float, np.integer, np.floating)) and not isinstance(val, bool):
+        num = float(val)
+        if not num.is_integer():
+            return None
+        n = int(num)
         if 10000 <= n <= 99999:
             return f"{n:05d}"
         return None
@@ -1313,12 +1368,17 @@ def _texto_columna_a_fila(df: pd.DataFrame, fila: int) -> str:
 
 
 def _codigo_tango_desde_columna_a(df: pd.DataFrame, fila: int) -> str | None:
-    """Último código Tango de 5 dígitos en columnas A–E (prioridad a la derecha)."""
+    """Código Tango de la fila: columnas de código a la izquierda, no fechas ni descripción."""
     encontrado: str | None = None
     for j in range(min(5, df.shape[1])):
-        cod = _codigo_cinco_digitos_desde_celda(df.iat[fila, j])
+        val = df.iat[fila, j]
+        if _celda_es_fecha_o_timestamp(val):
+            continue
+        cod = _codigo_cinco_digitos_desde_celda(val)
         if cod:
             encontrado = cod
+        if _celda_tiene_letras(val):
+            break
     return encontrado
 
 
@@ -1530,14 +1590,11 @@ def _es_celda_cuenta_banco_vacia(texto: str) -> bool:
 
 
 def _codigo_cinco_digitos_desde_texto_banco(concepto: str) -> str:
-    """Extrae código Tango de 5 dígitos desde texto de columna 0."""
+    """Extrae código Tango al inicio del texto (no busca dígitos sueltos en la leyenda)."""
     s = str(concepto or "").strip()
     if not s:
         return ""
     m = _RE_CODIGO_CUENTA_CONCEPTO.match(s)
-    if m:
-        return m.group(1)
-    m = re.search(r"\b(\d{5})\b", s)
     if m:
         return m.group(1)
     codigo_pre, _ = extraer_codigo_cuenta_tango_desde_concepto(s)
@@ -1550,12 +1607,12 @@ def _buscar_codigo_en_plan_banco(
     codigo: str,
     plan_cuentas: list[tuple[str, str]],
 ) -> tuple[str, str] | None:
-    cod = str(codigo or "").strip()
+    cod = normalizar_codigo_cuenta_tango(codigo)
     if not cod:
         return None
     for c, d in plan_cuentas:
-        if str(c).strip() == cod:
-            return c, d
+        if normalizar_codigo_cuenta_tango(c) == cod:
+            return normalizar_codigo_cuenta_tango(c) or str(c).strip(), d
     return None
 
 
@@ -1791,11 +1848,13 @@ def resolver_cuenta_banco_hibrida(
         return "", ""
 
     codigo = _codigo_cinco_digitos_desde_texto_banco(texto)
-    if codigo and plan:
-        hit = _buscar_codigo_en_plan_banco(codigo, plan)
-        if hit:
-            return hit
-    elif codigo and not plan:
+    if codigo:
+        if plan:
+            hit = _buscar_codigo_en_plan_banco(codigo, plan)
+            if hit:
+                return hit
+            _, resto = extraer_codigo_cuenta_tango_desde_concepto(texto)
+            return "99999", resto or texto
         _, resto = extraer_codigo_cuenta_tango_desde_concepto(texto)
         return codigo, resto or texto
 
@@ -1990,11 +2049,12 @@ def extraer_filas_universales_balance_por_periodo_con_errores(
                 fila_idx=i,
             )
             # Solo líneas de asiento (cuenta Tango o etiqueta «a …»); no razón social.
-            if not _es_linea_proyectable_balance(concepto, codigo):
+            if not _es_linea_proyectable_balance(
+                concepto, codigo, tiene_monto=debe_grilla > 0.01 or haber_grilla > 0.01,
+            ):
                 continue
-            if debe_grilla <= 0.01 and haber_grilla <= 0.01:
-                if not codigo or not re.fullmatch(r"\d{5}", str(codigo)):
-                    codigo = "99999"
+            if not codigo or not _es_codigo_cuenta_tango(str(codigo)):
+                codigo = "99999"
 
             # Heredar cuenta de «Ajuste por redondeo» del Debe si el Haber no trae código.
             if (not codigo or codigo == "99999") and "ajuste por redondeo" in _normalizar_texto(concepto):
@@ -2052,7 +2112,7 @@ def extraer_filas_universales_balance_por_periodo(
 
 def extraer_codigo_cuenta_tango_desde_concepto(texto: str) -> tuple[str, str]:
     """
-    Extrae código Tango de 5 dígitos al inicio del concepto (columna A).
+    Extrae código Tango al inicio del concepto (columna A).
     Ej: '42405 Impuesto...' → ('42405', 'Impuesto...'); '11418 a Retenciones...' → ('11418', 'a Retenciones...').
     """
     s = str(texto or "").strip()
@@ -2271,7 +2331,7 @@ def _es_fila_ruido_balance(concepto: str) -> bool:
             return True
     if re.fullmatch(r"[\d./\-]+", norm):
         # Código Tango solo (11419 / 11419.0) no es ruido.
-        if re.fullmatch(r"\d{5}", norm) or re.fullmatch(r"\d{5}\.0+", norm):
+        if re.fullmatch(r"\d{5,8}", norm) or re.fullmatch(r"\d{5,8}\.0+", norm):
             return False
         return True
     if not _RE_CODIGO_CUENTA_CONCEPTO.match(str(concepto).strip()):
@@ -2291,14 +2351,19 @@ def _descripcion_concepto_balance_limpia(concepto: str, codigo: str | None = Non
         return ""
     _, resto = extraer_codigo_cuenta_tango_desde_concepto(raw)
     texto = (resto or raw).strip()
-    texto = re.sub(r"^(?:\d{5}(?:\.0+)?\s+)+", "", texto).strip()
+    texto = re.sub(r"^(?:\d{5,8}(?:\.0+)?\s+)+", "", texto).strip()
     texto = re.sub(r"\.0+\b", "", texto).strip()
     if codigo and texto.startswith(str(codigo)):
         texto = texto[len(str(codigo)):].strip(" -–—")
     return texto or raw
 
 
-def _es_linea_proyectable_balance(concepto: str, codigo: str | None) -> bool:
+def _es_linea_proyectable_balance(
+    concepto: str,
+    codigo: str | None,
+    *,
+    tiene_monto: bool = False,
+) -> bool:
     """Líneas de asiento con cuenta Tango (aunque el mes esté en $0)."""
     if _es_fila_ruido_balance(concepto):
         return False
@@ -2315,22 +2380,24 @@ def _es_linea_proyectable_balance(concepto: str, codigo: str | None) -> bool:
         )
     ):
         return False
-    # Razón social suelta (sin cuenta ni «a …»).
     cod = str(codigo or "").strip()
-    if cod in ("99999",) or not re.fullmatch(r"\d{5}", cod):
-        if not any(
-            k in t
-            for k in (
-                "ajuste por redondeo", "a saldo a favor", "saldo a favor imp",
-                "impuesto determinado", "impuesto sobre los ingresos brutos",
-                "ingresos brutos a pagar", "iva a pagar",
-                "a retencion", "a percepcion", "retenciones bancarias", "sircreb",
-                "a impuesto",
-            )
-        ) and not t.startswith("a "):
-            return False
+    if _es_codigo_cuenta_tango(cod) and cod != "99999":
         return True
-    return True
+    if tiene_monto:
+        return True
+    # Sin monto: sólo etiquetas típicas de asiento («a …», impuesto determinado, etc.).
+    if any(
+        k in t
+        for k in (
+            "ajuste por redondeo", "a saldo a favor", "saldo a favor imp",
+            "impuesto determinado", "impuesto sobre los ingresos brutos",
+            "ingresos brutos a pagar", "iva a pagar",
+            "a retencion", "a percepcion", "retenciones bancarias", "sircreb",
+            "a impuesto",
+        )
+    ) or t.startswith("a "):
+        return True
+    return False
 
 
 def escanear_carpeta_cliente(cuit: str, ruta_raiz: str | Path | None = None) -> tuple[list[Path], Optional[Path], Optional[Path]]:
@@ -6471,6 +6538,41 @@ def _nombre_display_banco(slug: str) -> str:
     return str((PERFILES_BANCO.get(slug) or {}).get("nombre_display") or slug or "Banco Desconocido")
 
 
+_SLUG_PARSER_EXTRACTO = {
+    "bbva": "frances",
+}
+
+
+def _slug_parser_extracto(slug: str) -> str:
+    s = str(slug or "").strip().lower()
+    return _SLUG_PARSER_EXTRACTO.get(s, s)
+
+
+def _slug_hint_extracto(banco_hint: str) -> str:
+    """Convierte el banco elegido en la UI al slug de los parsers de extracto."""
+    raw = str(banco_hint or "").strip()
+    if not raw:
+        return ""
+    slug = ""
+    try:
+        slug = str(obtener_ficha_banco(raw).get("slug") or "").strip().lower()
+    except ValueError:
+        slug = ""
+    slug = _slug_parser_extracto(slug)
+    if slug and slug != "desconocido":
+        return slug
+    nombre = raw if raw.lower().endswith(".pdf") else f"{raw}.pdf"
+    detected = detectar_banco_desde_bytes(b"", nombre)
+    if detected and detected != "desconocido":
+        return _slug_parser_extracto(detected)
+    return ""
+
+
+def _ocr_extracto_disponible() -> bool:
+    lector = _obtener_lector_ocr()
+    return not isinstance(lector, _NoOpOcrReader)
+
+
 def _movimiento_banco_a_fila_extracto(mov: MovimientoBanco, periodo: str = "") -> dict:
     """Normaliza MovimientoBanco al schema unificado PDF→Excel (todos los bancos)."""
     fecha = mov.fecha
@@ -6899,12 +7001,18 @@ def _procesar_un_excel_extracto(nombre: str, data: bytes) -> tuple[list[dict], d
     return out, meta_base, None
 
 
-def _procesar_un_pdf_extracto(nombre: str, data: bytes) -> tuple[list[dict], dict, dict | None]:
+def _procesar_un_pdf_extracto(
+    nombre: str, data: bytes, banco_hint: str = ""
+) -> tuple[list[dict], dict, dict | None]:
     """
     Procesa un PDF. Devuelve (filas, meta_archivo, error_dict|None).
     meta_archivo incluye banco_slug, banco (display), formato detectado, periodos, archivo.
+    Si el archivo no trae el nombre del banco (p.ej. 01-2026.pdf), usa banco_hint de la UI.
     """
     banco_slug = detectar_banco_desde_bytes(data, nombre)
+    hint_slug = _slug_hint_extracto(banco_hint)
+    if (not banco_slug or banco_slug == "desconocido") and hint_slug:
+        banco_slug = hint_slug
     display = _nombre_display_banco(banco_slug)
     meta_base = {
         "banco_slug": banco_slug,
@@ -7023,18 +7131,27 @@ def _procesar_un_pdf_extracto(nombre: str, data: bytes) -> tuple[list[dict], dic
         # Sondeo liviano de tablas (solo para fingerprint de formato)
         tiene_tab_gal = False
         tiene_tab_prov = False
-        if banco_slug == "galicia":
+        if banco_slug in {"galicia", "desconocido"}:
             try:
                 cache_galicia = _filas_desde_galicia_bytes(data, nombre)
                 tiene_tab_gal = bool(cache_galicia)
             except Exception:
                 cache_galicia = None
                 tiene_tab_gal = False
-        if banco_slug == "provincia":
+        if banco_slug in {"provincia", "desconocido"}:
             try:
                 tiene_tab_prov = bool(extraer_movimientos_provincia_tabla(data, nombre))
             except Exception:
                 tiene_tab_prov = False
+        if banco_slug == "desconocido":
+            if tiene_tab_gal:
+                banco_slug = "galicia"
+            elif tiene_tab_prov:
+                banco_slug = "provincia"
+            if banco_slug != "desconocido":
+                display = _nombre_display_banco(banco_slug)
+                meta_base["banco_slug"] = banco_slug
+                meta_base["banco"] = display
 
         info_fmt = detectar_formato_extracto(
             texto_all,
@@ -7042,12 +7159,15 @@ def _procesar_un_pdf_extracto(nombre: str, data: bytes) -> tuple[list[dict], dic
             tiene_tablas_galicia=tiene_tab_gal if banco_slug == "galicia" else None,
             tiene_tablas_provincia=tiene_tab_prov if banco_slug == "provincia" else None,
         )
-        estrategia = str(info_fmt.get("parser") or PARSER_EXTRACTO_POR_BANCO.get(banco_slug, "generico"))
+        slug_parser = _slug_parser_extracto(banco_slug)
+        estrategia = str(
+            info_fmt.get("parser") or PARSER_EXTRACTO_POR_BANCO.get(slug_parser, "generico")
+        )
         meta_base["formato_id"] = info_fmt.get("formato_id") or ""
         meta_base["formato"] = info_fmt.get("formato") or ""
         meta_base["parser"] = estrategia
 
-        if chars_nativos < 50 or chars < 40 or fechas_txt < 2:
+        if chars_nativos < 50 or chars < 40:
             paginas = _paginas_texto_extracto_pdf(data, dpi_ocr=170, forzar_ocr=True)
             chars = sum(len(t) for _, t in paginas)
             texto_all = "\n".join(t for _, t in paginas)
@@ -7075,7 +7195,9 @@ def _procesar_un_pdf_extracto(nombre: str, data: bytes) -> tuple[list[dict], dic
                     display = _nombre_display_banco(banco_slug)
                     meta_base["banco_slug"] = banco_slug
                     meta_base["banco"] = display
-                    estrategia = PARSER_EXTRACTO_POR_BANCO.get(banco_slug, estrategia)
+                    estrategia = PARSER_EXTRACTO_POR_BANCO.get(
+                        _slug_parser_extracto(banco_slug), estrategia
+                    )
             info_fmt = detectar_formato_extracto(
                 texto_all,
                 banco_slug,
@@ -7118,14 +7240,60 @@ def _procesar_un_pdf_extracto(nombre: str, data: bytes) -> tuple[list[dict], dic
                 meta_base["formato_id"] = "columnas_dc_saldo"
                 meta_base["formato"] = FORMATOS_EXTRACTO_LABEL["columnas_dc_saldo"]
 
+        if not movs and estrategia != "galicia":
+            if not cache_galicia:
+                try:
+                    cache_galicia = _filas_desde_galicia_bytes(data, nombre)
+                except Exception:
+                    cache_galicia = None
+            if cache_galicia:
+                movs = list(cache_galicia)
+                texto_head = "\n".join(t for _, t in paginas[:2])
+                meta_arch = _meta_basica_desde_texto(texto_head)
+                banco_slug = "galicia"
+                display = _nombre_display_banco(banco_slug)
+                meta_base["banco_slug"] = banco_slug
+                meta_base["banco"] = display
+                meta_base["parser"] = "galicia"
+                meta_base["formato_id"] = "galicia_office_tabla"
+                meta_base["formato"] = FORMATOS_EXTRACTO_LABEL.get("galicia_office_tabla") or ""
+
+        if not movs and estrategia != "provincia":
+            try:
+                movs_tab = extraer_movimientos_provincia_tabla(data, nombre)
+            except Exception:
+                movs_tab = []
+            if movs_tab:
+                movs = [_movimiento_banco_a_fila_extracto(m) for m in movs_tab]
+                texto_head = "\n".join(t for _, t in paginas[:2])
+                meta_arch = _meta_basica_desde_texto(texto_head)
+                banco_slug = "provincia"
+                display = _nombre_display_banco(banco_slug)
+                meta_base["banco_slug"] = banco_slug
+                meta_base["banco"] = display
+                meta_base["parser"] = "provincia"
+                meta_base["formato_id"] = "provincia_bip_tabla"
+                meta_base["formato"] = FORMATOS_EXTRACTO_LABEL.get("provincia_bip_tabla") or ""
+                for row in movs:
+                    row["Banco"] = display
+
         if not movs:
-            return [], meta_base, {
-                "archivo": nombre,
-                "motivo": (
+            escaneo = chars_nativos < 50 and not _ocr_extracto_disponible()
+            if escaneo:
+                motivo = (
+                    f"No se detectaron movimientos ({display}). "
+                    "Este PDF parece un escaneo y en la web no hay OCR. "
+                    "Subí el extracto digital del homebanking (no una foto ni un PDF escaneado)."
+                )
+            else:
+                motivo = (
                     f"No se detectaron movimientos ({display} · "
                     f"{meta_base.get('formato') or estrategia}). "
-                    "El OCR corrió; si el escaneo está borroso, subí un PDF más nítido."
-                ),
+                    "Confirmá el banco arriba e intentá de nuevo con el PDF del homebanking."
+                )
+            return [], meta_base, {
+                "archivo": nombre,
+                "motivo": motivo,
                 "banco": display,
                 "formato": meta_base.get("formato") or "",
             }
@@ -7171,12 +7339,15 @@ def exportar_zip_extractos_por_banco(paquetes: list[dict], cuit: str = "") -> by
     return buf.getvalue()
 
 
-def procesar_extractos_bancarios_pdfs(archivos) -> tuple[pd.DataFrame, dict, list[dict]]:
+def procesar_extractos_bancarios_pdfs(
+    archivos, banco_hint: str = ""
+) -> tuple[pd.DataFrame, dict, list[dict]]:
     """
     Convertidor multi-banco: detecta el banco de cada PDF y aplica el parser adecuado.
     **Un paquete por banco** (no mezcla bancos distintos como 'meses' del mismo extracto).
     meta['por_banco'] tiene un ítem por banco con df/meta propios.
     El DataFrame retornado concatena todos (compatibilidad match/proveedores).
+    banco_hint: banco elegido en Conciliación cuando el PDF no trae el nombre (01-2026.pdf).
     """
     errores: list[dict] = []
     grupos: dict[str, dict] = {}
@@ -7193,7 +7364,9 @@ def procesar_extractos_bancarios_pdfs(archivos) -> tuple[pd.DataFrame, dict, lis
                 continue
         elif low.endswith(".pdf"):
             bytes_por_nombre[nombre] = data
-            filas, meta_arch, err = _procesar_un_pdf_extracto(nombre, data)
+            filas, meta_arch, err = _procesar_un_pdf_extracto(
+                nombre, data, banco_hint=banco_hint
+            )
             if err:
                 errores.append(err)
                 continue
@@ -7350,7 +7523,7 @@ def _paginas_texto_extracto_pdf(
             else:
                 paginas.append((i + 1, ""))
         necesita_ocr = forzar_ocr or nativas_con_texto < max(1, doc.page_count // 3)
-        if necesita_ocr:
+        if necesita_ocr and _ocr_extracto_disponible():
             cached = _leer_cache()
             if cached:
                 return cached
@@ -9542,7 +9715,7 @@ def _normalizar_plan_cuentas_df(df: pd.DataFrame) -> pd.DataFrame:
     if isinstance(df["descripcion"], pd.DataFrame):
         df["descripcion"] = df["descripcion"].iloc[:, 0]
 
-    df["codigo"] = df["codigo"].fillna("").astype(str).str.strip()
+    df["codigo"] = df["codigo"].fillna("").map(normalizar_codigo_cuenta_tango)
     df["descripcion"] = df["descripcion"].fillna("").astype(str).str.strip()
     df["descripcion_norm"] = df["descripcion"].map(_normalizar_texto)
     col_imp = next((c for c in df.columns if "imputable" in str(c).lower()), None)
@@ -13046,6 +13219,30 @@ def _agregar_renglon(
     )
 
 
+def _codigo_esta_en_plan(plan_cuentas: pd.DataFrame, codigo: str) -> bool:
+    objetivo = normalizar_codigo_cuenta_tango(codigo)
+    if not objetivo or plan_cuentas is None or plan_cuentas.empty:
+        return False
+    if "codigo" not in plan_cuentas.columns:
+        return False
+    for c in plan_cuentas["codigo"].tolist():
+        if normalizar_codigo_cuenta_tango(c) == objetivo:
+            return True
+    return False
+
+
+def _descripcion_codigo_en_plan(plan_cuentas: pd.DataFrame, codigo: str) -> str:
+    objetivo = normalizar_codigo_cuenta_tango(codigo)
+    if not objetivo or plan_cuentas is None or plan_cuentas.empty:
+        return ""
+    if "codigo" not in plan_cuentas.columns:
+        return ""
+    for _, fila in plan_cuentas.iterrows():
+        if normalizar_codigo_cuenta_tango(fila.get("codigo")) == objetivo:
+            return str(fila.get("descripcion") or "").strip()
+    return ""
+
+
 def buscar_cuenta_devengamiento(
     clave_concepto: str,
     plan_cuentas: pd.DataFrame,
@@ -13057,11 +13254,11 @@ def buscar_cuenta_devengamiento(
 
     terminos = BUSQUEDAS_CUENTA_DEVENGAMIENTO.get(clave_concepto, [clave_concepto])
     codigo_fallback = CODIGOS_CUENTA_DEVENGAMIENTO_FALLBACK.get(clave_concepto, "")
-    mejor_codigo = codigo_fallback
+    mejor_codigo = ""
     mejor_desc = clave_concepto
     mejor_score = 0
 
-    if not plan_cuentas.empty:
+    if plan_cuentas is not None and not plan_cuentas.empty:
         opciones = plan_cuentas["descripcion_norm"].tolist()
         codigos = plan_cuentas["codigo"].tolist()
         descripciones = plan_cuentas["descripcion"].tolist()
@@ -13071,18 +13268,21 @@ def buscar_cuenta_devengamiento(
             if match and match[1] > mejor_score:
                 idx = opciones.index(match[0])
                 mejor_score = match[1]
-                mejor_codigo = codigos[idx]
+                mejor_codigo = normalizar_codigo_cuenta_tango(codigos[idx])
                 mejor_desc = descripciones[idx]
 
-    if mejor_score < 65 and codigo_fallback:
-        mejor_codigo = codigo_fallback
-        if not plan_cuentas.empty:
-            fila = plan_cuentas[plan_cuentas["codigo"] == codigo_fallback]
-            if not fila.empty:
-                mejor_desc = str(fila.iloc[0]["descripcion"])
+    if mejor_score >= 65 and mejor_codigo and _codigo_esta_en_plan(plan_cuentas, mejor_codigo):
+        resoluciones[clave_concepto] = (mejor_codigo, mejor_desc)
+        return mejor_codigo, mejor_desc
 
-    resoluciones[clave_concepto] = (mejor_codigo, mejor_desc)
-    return mejor_codigo, mejor_desc
+    if codigo_fallback and _codigo_esta_en_plan(plan_cuentas, codigo_fallback):
+        mejor_codigo = normalizar_codigo_cuenta_tango(codigo_fallback)
+        desc_plan = _descripcion_codigo_en_plan(plan_cuentas, mejor_codigo)
+        resoluciones[clave_concepto] = (mejor_codigo, desc_plan or clave_concepto)
+        return resoluciones[clave_concepto]
+
+    resoluciones[clave_concepto] = ("99999", clave_concepto)
+    return "99999", clave_concepto
 
 
 def _cuenta_tiene_alicuota_especifica(descripcion: str) -> bool:
@@ -13293,10 +13493,7 @@ class ExportacionTangoError(ValueError):
 
 
 def _normalizar_codigo_cuenta_export(codigo) -> str:
-    s = str(codigo or "").strip()
-    if re.fullmatch(r"\d+\.0", s):
-        s = s[:-2]
-    return s
+    return normalizar_codigo_cuenta_tango(codigo) or str(codigo or "").strip()
 
 
 def parsear_fecha_export_tango(val) -> date:
@@ -13864,14 +14061,23 @@ class AsientoIABuilder:
             if clave in self._resoluciones and not usar_fallback:
                 return self._resoluciones[clave]
             resultado = buscar_cuenta_devengamiento(clave, self.plan_imputable, {})
-            # resultado es (codigo, descripcion)
-            codigo_encontrado = resultado[0] if resultado else ""
-            codigo_fallback = CODIGOS_CUENTA_DEVENGAMIENTO_FALLBACK.get(clave, "")
-            if codigo_encontrado and codigo_encontrado != codigo_fallback:
+            codigo_encontrado = normalizar_codigo_cuenta_tango(
+                resultado[0] if resultado else ""
+            )
+            if (
+                codigo_encontrado
+                and codigo_encontrado != "99999"
+                and _codigo_esta_en_plan(self.plan_imputable, codigo_encontrado)
+            ):
                 self._resoluciones[clave] = codigo_encontrado
                 return codigo_encontrado
-            self._resoluciones[clave] = codigo_fallback
-            return codigo_fallback
+            codigo_fallback = CODIGOS_CUENTA_DEVENGAMIENTO_FALLBACK.get(clave, "")
+            if codigo_fallback and _codigo_esta_en_plan(self.plan_imputable, codigo_fallback):
+                cod = normalizar_codigo_cuenta_tango(codigo_fallback)
+                self._resoluciones[clave] = cod
+                return cod
+            self._resoluciones[clave] = "99999"
+            return "99999"
 
         cuentas: dict = {}
         if tipo == "IVA":

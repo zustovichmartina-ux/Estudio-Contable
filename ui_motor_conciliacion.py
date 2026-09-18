@@ -139,7 +139,9 @@ def render_motor_conciliacion(
                 st.error("Subí al menos un PDF de extracto.")
             else:
                 with st.spinner("Leyendo extracto (OCR si es escaneo) y proponiendo cuentas..."):
-                    df, meta, errores = procesar_extractos_bancarios_pdfs(pdfs)
+                    df, meta, errores = procesar_extractos_bancarios_pdfs(
+                        pdfs, banco_hint=banco_elegido
+                    )
                     if errores:
                         st.warning("Algunos PDF tuvieron problemas: " + "; ".join(
                             f"{e.get('archivo')}: {e.get('motivo')}" for e in errores[:5]

@@ -319,7 +319,9 @@ def _paso_subir(
             st.error("Falta el plan de cuentas.")
             return
         with st.spinner("Leyendo extracto…"):
-            df, meta, errores = procesar_extractos_bancarios_pdfs(archivos)
+            df, meta, errores = procesar_extractos_bancarios_pdfs(
+                archivos, banco_hint=banco_elegido
+            )
         if errores:
             st.warning(
                 "Algunos archivos tuvieron problemas: "
