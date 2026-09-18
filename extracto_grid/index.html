@@ -107,6 +107,7 @@ let FILAS = [];
 let CUENTAS = [];
 let CLASIFS = [];
 let PINTADO = false;
+let GRID_ID = "";
 const OTRO = "__otro__";
 
 function esc(s) {
@@ -195,29 +196,103 @@ function snapshot() {
     clasifs: CLASIFS.map((c) => ({ nombre: c.nombre, codigo: c.codigo || "" })),
   };
 }
-function aplicarClasifAFila(i, nombre) {
-  const nom = String(nombre || "").trim();
-  FILAS[i].clasif = nom;
-  FILAS[i]._editOtro = false;
-  const cod = cuentaDeClasif(nom);
-  if (cod) {
-    FILAS[i].codigo = cod;
-    FILAS[i].origen = "sugerido";
-  }
-  const clave = claveRepetida(FILAS[i]);
-  FILAS.forEach((m, j) => {
-    if (j === i) return;
-    if (clave && claveRepetida(m) === clave) {
-      m.clasif = nom;
-      if (cod) {
-        m.codigo = cod;
-        if (m.origen === "a_clasificar") m.origen = "sugerido";
-      }
-    } else if (cod && normClasif(m.clasif) === normClasif(nom)) {
-      m.codigo = cod;
-      if (m.origen === "a_clasificar") m.origen = "sugerido";
-    }
+function persistLocal() {
+  if (!GRID_ID) return;
+  try { sessionStorage.setItem("ce_extracto_" + GRID_ID, JSON.stringify(snapshot().filas)); } catch (e) {}
+}
+function restoreLocal(base) {
+  if (!GRID_ID) return base;
+  try {
+    const raw = sessionStorage.getItem("ce_extracto_" + GRID_ID);
+    if (!raw) return base;
+    const saved = JSON.parse(raw);
+    if (!Array.isArray(saved) || saved.length !== base.length) return base;
+    const byI = {};
+    saved.forEach((f) => { byI[String(f.i)] = f; });
+    return base.map((m) => {
+      const s = byI[String(m.i)];
+      if (!s) return m;
+      return Object.assign({}, m, {
+        clasif: s.clasif != null ? s.clasif : m.clasif,
+        codigo: s.codigo != null ? s.codigo : m.codigo,
+        origen: s.origen || m.origen,
+      });
+    });
+  } catch (e) { return base; }
+}
+function agregarOpcionClasif(nombre) {
+  upsertClasif(nombre, "");
+  document.querySelectorAll("select[data-k='clasif']").forEach((sel) => {
+    if ([...sel.options].some((o) => o.value === nombre)) return;
+    const opt = document.createElement("option");
+    opt.value = nombre;
+    opt.textContent = nombre;
+    const otro = sel.querySelector('option[value="' + OTRO + '"]');
+    if (otro) sel.insertBefore(opt, otro);
+    else sel.appendChild(opt);
   });
+}
+function bindUno(el) {
+  const aplicar = () => {
+    const i = Number(el.getAttribute("data-i"));
+    const k = el.getAttribute("data-k");
+    if (!FILAS[i]) return;
+    if (k === "clasif") {
+      if (el.value === OTRO) {
+        FILAS[i]._editOtro = true;
+        const td = el.closest("td");
+        td.innerHTML = `<input type="text" placeholder="Nueva clasificación" data-i="${i}" data-k="clasif_nuevo"/>`;
+        const inp = td.querySelector("input");
+        bindUno(inp);
+        inp.focus();
+        return;
+      }
+      FILAS[i].clasif = el.value;
+      FILAS[i]._editOtro = false;
+      persistLocal();
+      return;
+    }
+    if (k === "clasif_nuevo") {
+      const nom = String(el.value || "").trim();
+      FILAS[i]._editOtro = false;
+      const td = el.closest("td");
+      if (nom) {
+        agregarOpcionClasif(nom);
+        FILAS[i].clasif = nom;
+      }
+      td.innerHTML = `<select data-i="${i}" data-k="clasif">${optsClasif(FILAS[i].clasif)}</select>`;
+      bindUno(td.querySelector("select"));
+      persistLocal();
+      return;
+    }
+    if (k === "codigo") {
+      FILAS[i].codigo = el.value;
+      FILAS[i].origen = el.value === "99999" ? "a_clasificar" : (FILAS[i].origen === "regla" ? "regla" : "sugerido");
+      const tr = el.closest("tr");
+      if (tr) {
+        tr.classList.toggle("pend", FILAS[i].origen === "a_clasificar");
+        const tag = tr.querySelector(".tag");
+        if (tag) {
+          tag.className = "tag " + FILAS[i].origen;
+          tag.textContent = labelOrigen(FILAS[i].origen);
+        }
+      }
+      chips();
+      persistLocal();
+      return;
+    }
+    FILAS[i][k] = el.value;
+    persistLocal();
+  };
+  el.addEventListener("change", aplicar);
+  if (el.getAttribute("data-k") === "clasif_nuevo") {
+    el.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        aplicar();
+      }
+    });
+  }
 }
 function celdaClasif(m, i) {
   if (m._editOtro) {
@@ -227,6 +302,8 @@ function celdaClasif(m, i) {
 }
 function pintar() {
   const tb = document.getElementById("grid");
+  const wrap = document.querySelector(".wrap");
+  const y = wrap ? wrap.scrollTop : 0;
   tb.innerHTML = FILAS.map((m, i) => `
     <tr class="${m.origen === "a_clasificar" ? "pend" : ""}">
       <td>${esc(m.fecha)}</td>
@@ -237,65 +314,10 @@ function pintar() {
       <td><select data-i="${i}" data-k="codigo">${optsHtml(m.codigo)}</select></td>
       <td><span class="tag ${esc(m.origen)}">${labelOrigen(m.origen)}</span></td>
     </tr>`).join("");
-  tb.querySelectorAll("input, select").forEach((el) => {
-    const aplicar = () => {
-      const i = Number(el.getAttribute("data-i"));
-      const k = el.getAttribute("data-k");
-      if (k === "clasif") {
-        if (el.value === OTRO) {
-          FILAS[i]._editOtro = true;
-          pintar();
-          const inp = tb.querySelector(`input[data-k="clasif_nuevo"][data-i="${i}"]`);
-          if (inp) inp.focus();
-          return;
-        }
-        upsertClasif(el.value, cuentaDeClasif(el.value) || FILAS[i].codigo);
-        aplicarClasifAFila(i, el.value);
-        pintar();
-        return;
-      }
-      if (k === "clasif_nuevo") {
-        const nom = String(el.value || "").trim();
-        FILAS[i]._editOtro = false;
-        if (nom) {
-          upsertClasif(nom, FILAS[i].codigo);
-          aplicarClasifAFila(i, nom);
-        }
-        pintar();
-        return;
-      }
-      if (k === "codigo") {
-        FILAS[i].codigo = el.value;
-        FILAS[i].origen = el.value === "99999" ? "a_clasificar" : (FILAS[i].origen === "regla" ? "regla" : "sugerido");
-        if (FILAS[i].clasif) upsertClasif(FILAS[i].clasif, el.value);
-        const clave = claveRepetida(FILAS[i]);
-        const clas = normClasif(FILAS[i].clasif);
-        FILAS.forEach((m) => {
-          const mismaClas = clas && normClasif(m.clasif) === clas;
-          const mismaDesc = clave && claveRepetida(m) === clave;
-          if (mismaClas || mismaDesc) {
-            m.codigo = el.value;
-            m.origen = el.value === "99999" ? "a_clasificar" : (m.origen === "regla" ? "regla" : "sugerido");
-          }
-        });
-        pintar();
-        return;
-      }
-      FILAS[i][k] = el.value;
-      chips();
-    };
-    el.addEventListener("change", aplicar);
-    if (el.getAttribute("data-k") === "clasif_nuevo") {
-      el.addEventListener("keydown", (ev) => {
-        if (ev.key === "Enter") {
-          ev.preventDefault();
-          aplicar();
-        }
-      });
-    }
-  });
+  tb.querySelectorAll("input, select").forEach(bindUno);
   chips();
   setHeight();
+  if (wrap) wrap.scrollTop = y;
 }
 function chips() {
   const nR = FILAS.filter((m) => m.origen === "regla").length;
@@ -311,18 +333,17 @@ function onRender(event) {
   const args = event.data.args || {};
   document.getElementById("titulo").textContent = args.titulo || "Extracto";
   document.getElementById("sub").textContent = args.subtitulo || "";
+  GRID_ID = String(args.grid_id || args.titulo || "extracto");
   const nuevas = parseCuentas(args.cuentas_json || args.cuentas);
-  const hayCuentasNuevas = nuevas.length !== CUENTAS.length;
   CUENTAS = nuevas;
   const nuevasClas = parseLista(args.clasifs_json || args.clasifs);
   if (nuevasClas.length) {
     nuevasClas.forEach((c) => upsertClasif(c.nombre, c.codigo));
   }
   if (!PINTADO) {
-    FILAS = (args.filas || []).map((m) => Object.assign({}, m));
+    const base = (args.filas || []).map((m) => Object.assign({}, m));
+    FILAS = restoreLocal(base);
     PINTADO = true;
-    pintar();
-  } else if (hayCuentasNuevas && nuevas.length) {
     pintar();
   } else {
     setHeight();

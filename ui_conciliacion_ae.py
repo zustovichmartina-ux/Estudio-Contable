@@ -545,9 +545,7 @@ def _aplicar_filas_componente(
                 out[pos]["origen"] = "sugerido"
         else:
             out[pos]["origen"] = "a_clasificar"
-    mapa = _mapa_desde_movimientos(out, mapa_clasif or {})
-    out = _aplicar_mapa_clasif(out, mapa)
-    return _propagar_cuentas_repetidas(out)
+    return out
 
 
 def _html_tabla_asiento(rows: list[dict]) -> str:
@@ -821,8 +819,8 @@ def _paso_extracto(
     subtitulo = (
         f"{nombre_activo or ''} — {len(movs)} movimientos · {n_plan} cuentas del plan. "
         "Las que tienen regla quedan tomadas; el resto, sugeridas o a clasificar. "
-        "Cambiá la clasificación o la cuenta en la misma línea "
-        "(la clasificación trae la cuenta; se copia a las iguales)."
+        "Cambiá la clasificación en la línea: la cuenta no se mueve. "
+        "El asiento engloba después por clasificación."
     )
     if n_plan <= 0:
         st.warning("No está el plan de cuentas de esta sociedad. Vinculalo y volvé a leer el extracto.")
@@ -830,10 +828,11 @@ def _paso_extracto(
     out = _EXTRACTO_GRID(
         titulo=f"Extracto {banco} · {periodo}",
         subtitulo=subtitulo,
+        grid_id=f"ce_grid_{sociedad_id}_{token}_v3",
         filas=_filas_componente(movs),
         cuentas_json=json.dumps(_cuentas_componente(opciones), ensure_ascii=False),
         clasifs_json=json.dumps(_clasifs_componente(sociedad_id, movs), ensure_ascii=False),
-        key=f"ce_grid_{sociedad_id}_{token}_v2",
+        key=f"ce_grid_{sociedad_id}_{token}_v3",
         default={"action": "idle", "filas": []},
     )
     accion = str((out or {}).get("action") or "idle")

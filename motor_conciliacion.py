@@ -867,6 +867,20 @@ def cuenta_banco_del_plan(
     return "99999", str(nombre_banco or "Banco")
 
 
+def _clave_englobar_asiento(m: dict) -> str:
+    cat = str(m.get("categoria") or m.get("extracto_label") or "").strip()
+    if cat:
+        return cat
+    return str(m.get("cuenta_plan") or m.get("cuenta_codigo") or "99999").strip() or "99999"
+
+
+def _cuenta_mayoritaria(codigos: list[str]) -> str:
+    validos = [c for c in codigos if c and c != "99999"]
+    if not validos:
+        return "99999"
+    return max(set(validos), key=validos.count)
+
+
 def renglones_asiento_banco_mes(
     movimientos: list[dict],
     *,
@@ -875,17 +889,21 @@ def renglones_asiento_banco_mes(
     periodo: str = "",
     fecha_str: str = "",
 ) -> list[dict]:
-    """Agrupa el extracto por cuenta de contrapartida y cierra contra el banco."""
-    por_cuenta: dict[str, dict] = {}
+    """Agrupa el extracto por clasificación y cierra contra el banco."""
+    por_clasif: dict[str, dict] = {}
     banco_debe = 0.0
     banco_haber = 0.0
     for m in movimientos:
         debito = float(money(m.get("debito")))
         credito = float(money(m.get("credito")))
+        clasif = _clave_englobar_asiento(m)
         cod = str(m.get("cuenta_codigo") or m.get("cuenta_sugerida") or "99999").strip() or "99999"
-        desc = str(m.get("cuenta_plan") or m.get("categoria") or "").strip() or cod
-        slot = por_cuenta.setdefault(cod, {"debe": 0.0, "haber": 0.0, "desc": desc})
+        desc = clasif or str(m.get("cuenta_plan") or "").strip() or cod
+        slot = por_clasif.setdefault(
+            clasif, {"debe": 0.0, "haber": 0.0, "desc": desc, "codigos": []}
+        )
         slot["desc"] = desc or slot["desc"]
+        slot["codigos"].append(cod)
         if debito > 0.005:
             slot["debe"] = round(slot["debe"] + debito, 2)
             banco_haber = round(banco_haber + debito, 2)
@@ -906,10 +924,11 @@ def renglones_asiento_banco_mes(
             "Estado": "Ingresado",
         }
 
-    for cod, slot in sorted(por_cuenta.items(), key=lambda kv: kv[0]):
+    for clasif, slot in sorted(por_clasif.items(), key=lambda kv: kv[0].lower()):
         neto = round(slot["debe"] - slot["haber"], 2)
         if abs(neto) < 0.005:
             continue
+        cod = _cuenta_mayoritaria(slot["codigos"])
         if neto > 0:
             rows.append(_fila(cod, slot["desc"], neto, 0.0))
         else:

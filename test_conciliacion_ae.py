@@ -429,6 +429,38 @@ class TestAsientoExtractoAgrupaCuentas(unittest.TestCase):
         haber = sum(r["Haber"] for r in rows)
         self.assertAlmostEqual(debe, haber, places=2)
 
+    def test_engloba_por_clasificacion_y_toma_la_cuenta_del_grupo(self):
+        rows = renglones_asiento_banco_mes(
+            [
+                {
+                    "debito": 10,
+                    "credito": 0,
+                    "cuenta_codigo": "11408",
+                    "categoria": "Impuesto a los débitos",
+                },
+                {
+                    "debito": 20,
+                    "credito": 0,
+                    "cuenta_codigo": "99999",
+                    "categoria": "Impuesto a los débitos",
+                },
+                {
+                    "debito": 0,
+                    "credito": 50,
+                    "cuenta_codigo": "99999",
+                    "categoria": "Transferencias recibidas",
+                },
+            ],
+            codigo_banco="11104",
+            descripcion_banco="Banco",
+            periodo="01/2026",
+            fecha_str="31/01/2026",
+        )
+        by_desc = {r["Descripción"]: r for r in rows}
+        self.assertEqual(by_desc["Impuesto a los débitos"]["Debe"], 30)
+        self.assertEqual(by_desc["Impuesto a los débitos"]["Código"], "11408")
+        self.assertEqual(by_desc["Transferencias recibidas"]["Haber"], 50)
+
     def test_origen_sin_regla_es_a_clasificar(self):
         self.assertEqual(
             origen_linea_extracto(
@@ -518,7 +550,8 @@ class TestExtractoComponente(unittest.TestCase):
         )
         self.assertEqual(out[0]["categoria"], "IIBB")
         self.assertEqual(out[0]["cuenta_codigo"], "11402")
-        self.assertEqual(out[1]["cuenta_codigo"], "11402")
+        self.assertEqual(out[1]["cuenta_codigo"], "99999")
+        self.assertEqual(out[1]["categoria"], "IIBB")
 
     def test_mapa_clasif_completa_99999(self):
         from ui_conciliacion_ae import _aplicar_mapa_clasif
