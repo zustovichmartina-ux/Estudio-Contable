@@ -6,6 +6,7 @@ import unittest
 import fitz
 
 from procesador import (
+    _RapidOcrAdapter,
     _corregir_filas_extracto_por_saldos,
     _elegir_monto_y_saldo_extracto,
     _parsear_fecha,
@@ -144,6 +145,15 @@ class TestHintBancoExtracto(unittest.TestCase):
     def test_fecha_2026_es_valida(self):
         self.assertEqual(_parsear_fecha("01/01/2026").year, 2026)
         self.assertEqual(_parsear_fecha("15/01/26").year, 2026)
+
+    def test_rapidocr_adapter_tuplas(self):
+        class _Fake:
+            def __call__(self, _img):
+                box = [[0, 0], [10, 0], [10, 10], [0, 10]]
+                return ([[box, "SANTANDER", 0.99]], 0.01)
+
+        filas = _RapidOcrAdapter(_Fake()).readtext(None)
+        self.assertEqual(filas[0][1], "SANTANDER")
 
 
 if __name__ == "__main__":

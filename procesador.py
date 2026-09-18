@@ -2765,6 +2765,41 @@ class _NoOpOcrReader:
         return []
 
 
+class _RapidOcrAdapter:
+    """Adapta RapidOCR (Cloud, sin torch) al contrato readtext de EasyOCR."""
+
+    def __init__(self, engine) -> None:
+        self._engine = engine
+
+    def readtext(self, img, *args, **kwargs):
+        bruto = self._engine(img)
+        if bruto is None:
+            return []
+        if isinstance(bruto, tuple):
+            filas = bruto[0]
+        else:
+            filas = getattr(bruto, "boxes", None)
+            if filas is None:
+                filas = bruto
+            else:
+                textos = list(getattr(bruto, "txts", []) or [])
+                scores = list(getattr(bruto, "scores", []) or [])
+                cajas = list(filas or [])
+                out = []
+                for i, box in enumerate(cajas):
+                    txt = textos[i] if i < len(textos) else ""
+                    sc = float(scores[i]) if i < len(scores) else 0.0
+                    out.append((box, txt, sc))
+                return out
+        out = []
+        for item in filas or []:
+            if item is None:
+                continue
+            if isinstance(item, (list, tuple)) and len(item) >= 2:
+                out.append((item[0], item[1], float(item[2]) if len(item) > 2 else 1.0))
+        return out
+
+
 def _es_entorno_cloud_ocr() -> bool:
     """Cloud/Linux: DPI bajo y sin paralelizar EasyOCR. Windows local = estudio."""
     if str(os.environ.get("ESTUDIO_FORCE_LOCAL", "")).strip().lower() in {"1", "true", "yes"}:
@@ -2785,7 +2820,7 @@ def _es_entorno_cloud_ocr() -> bool:
 
 
 def _obtener_lector_ocr():
-    """Lazy singleton EasyOCR (o NoOp si falla). Compatible con @st.cache_resource."""
+    """Lazy singleton: EasyOCR en local si está; RapidOCR en Cloud (sin torch)."""
     global _lector_ocr, _lector_ocr_unavailable
     if _lector_ocr is not None:
         return _lector_ocr
@@ -2798,10 +2833,24 @@ def _obtener_lector_ocr():
         try:
             import easyocr
             _lector_ocr = easyocr.Reader(["es"], gpu=False, verbose=False)
+            return _lector_ocr
         except Exception as exc:
-            _lector_ocr_unavailable = True
-            print(f"[WARN] EasyOCR no disponible, OCR desactivado: {exc}", flush=True)
-            _lector_ocr = _NoOpOcrReader()
+            print(f"[WARN] EasyOCR no disponible: {exc}", flush=True)
+        try:
+            engine = None
+            try:
+                from rapidocr_onnxruntime import RapidOCR
+                engine = RapidOCR()
+            except Exception:
+                from rapidocr import RapidOCR
+                engine = RapidOCR()
+            if engine is not None:
+                _lector_ocr = _RapidOcrAdapter(engine)
+                return _lector_ocr
+        except Exception as exc:
+            print(f"[WARN] RapidOCR no disponible, OCR desactivado: {exc}", flush=True)
+        _lector_ocr_unavailable = True
+        _lector_ocr = _NoOpOcrReader()
     return _lector_ocr
 
 
@@ -7532,6 +7581,8 @@ def _paginas_texto_extracto_pdf(
     Con forzar_ocr=True reaplica OCR a todas las páginas (útiles para Provincia/BIP escaneados).
     Reusa cache en disco para no re-OCR el mismo PDF.
     """
+    if _es_entorno_cloud_ocr():
+        dpi_ocr = min(int(dpi_ocr or 160), 120)
     cache_dir = BASE_DIR / "_cache_extractos_ocr"
     cache_key = hashlib.sha1(data + f"|{dpi_ocr}|{int(forzar_ocr)}".encode("utf-8")).hexdigest()[:16]
     cache_path = cache_dir / f"{cache_key}.json"

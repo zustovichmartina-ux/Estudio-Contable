@@ -11236,21 +11236,25 @@ def _seccion_conciliacion_bancaria_balance() -> None:
 
         indice = _indice_sociedades_pj(clientes_pj)
         bancos = listar_bancos_conciliacion()
+        if not _selector_sociedad_devengamientos(clientes_pj):
+            return
 
-        col_sociedad, col_banco = st.columns(2)
-        with col_sociedad:
-            if not _selector_sociedad_devengamientos(clientes_pj):
-                return
-        with col_banco:
+        sociedad_id = st.session_state.get(_SOCiedad_KEY)
+        if sociedad_id is None:
+            return
+
+        paso = str(st.session_state.get(f"ce_paso_{sociedad_id}") or "subir")
+        en_extracto = paso in {"extracto", "asiento"} and bool(
+            st.session_state.get(f"ae_preview_{sociedad_id}")
+        )
+        if en_extracto:
+            banco_elegido = str(st.session_state.get(_BANCO_KEY) or (bancos[0] if bancos else ""))
+        else:
             banco_elegido = st.selectbox(
                 "Banco a conciliar",
                 bancos,
                 key=_BANCO_KEY,
             )
-
-        sociedad_id = st.session_state.get(_SOCiedad_KEY)
-        if sociedad_id is None:
-            return
 
         _detectar_cambio_banco_y_flush()
         if (
@@ -11264,12 +11268,11 @@ def _seccion_conciliacion_bancaria_balance() -> None:
         cuit_activo = st.session_state.cuit_activo
         nombre_activo = st.session_state.nombre_activo
 
-        if not plan_vinculado:
-            with col_sociedad:
-                st.error(_mensaje_plan_no_vinculado())
-                _widget_subir_plan_inline(
-                    sociedad_id, st.session_state.get("cuit_activo"), key_suffix="conc"
-                )
+        if not plan_vinculado and not en_extracto:
+            st.error(_mensaje_plan_no_vinculado())
+            _widget_subir_plan_inline(
+                sociedad_id, st.session_state.get("cuit_activo"), key_suffix="conc"
+            )
 
         render_conciliacion_ae(
             sociedad_id=int(sociedad_id),
@@ -11278,16 +11281,6 @@ def _seccion_conciliacion_bancaria_balance() -> None:
             nombre_activo=nombre_activo,
             plan_vinculado=bool(plan_vinculado),
         )
-
-        if (
-            sociedad_id is not None
-            and st.session_state.get("ae_mostrar_flujo_balance")
-            and str(st.session_state.get(f"ae_view_{sociedad_id}") or "") == "asiento"
-        ):
-            with st.expander("Asiento CN desde el Balance Excel (flujo anterior)", expanded=True):
-                _seccion_conciliacion_bancaria_banco(
-                    banco_elegido, sociedad_id, cuit_activo, nombre_activo, plan_vinculado,
-                )
 
 def _seccion_devengamientos_iibb(
     sociedad_id: int,
