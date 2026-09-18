@@ -2843,11 +2843,11 @@ def _obtener_lector_ocr():
             os.environ.setdefault("OMP_NUM_THREADS", "1")
             engine = None
             try:
-                from rapidocr_onnxruntime import RapidOCR
+                from rapidocr import RapidOCR
                 engine = RapidOCR()
             except Exception as exc_r1:
-                errores.append(f"rapidocr_onnxruntime: {exc_r1}")
-                from rapidocr import RapidOCR
+                errores.append(f"rapidocr: {exc_r1}")
+                from rapidocr_onnxruntime import RapidOCR
                 engine = RapidOCR()
             if engine is not None:
                 _lector_ocr = _RapidOcrAdapter(engine)
