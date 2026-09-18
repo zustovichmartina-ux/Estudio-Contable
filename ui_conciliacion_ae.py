@@ -16,6 +16,7 @@ import streamlit.components.v1 as components
 
 import database as db
 from capa_revision import gate_asiento, resolver_codigo_plan
+from clasif_cuentas_extracto import MAPA_CLASIF_ESTUDIO
 from conceptos_bancos import CACHE_PATH, cargar_instructivo
 from motor_conciliacion import (
     CATEGORIA_A_CUENTA_HINT,
@@ -75,33 +76,7 @@ _EXTRACTO_GRID = components.declare_component(
     path=str(Path(__file__).resolve().parent / "extracto_grid"),
 )
 
-_CLASIFS_BASE = (
-    "Pago ARBA",
-    "SIRCREB",
-    "IIBB",
-    "Ingresos brutos Tucuman",
-    "Impuestos a los débitos y créditos",
-    "Impuesto a los sellos",
-    "Percepción IVA",
-    "IVA",
-    "Rescate FIMA",
-    "Suscripción FCI",
-    "Gastos Bancarios",
-    "Inversiones",
-    "Intereses",
-    "Depositos en efvo",
-    "Cheques recibidos",
-    "Cheques emitidos",
-    "Pago de haberes",
-    "Pagos AFIP",
-    "Pagos tarjeta corporativa",
-    "Compras",
-    "Pago de Servicios",
-    "Transferencias recibidas",
-    "Transferencias emitidas",
-    "Pagos recibidos",
-    "Acreditaciones comercios",
-)
+_CLASIFS_BASE = tuple(MAPA_CLASIF_ESTUDIO.keys()) + ("Movimientos a identificar",)
 _CLASIF_SIN_CUENTA = {
     "",
     "sin clasificar",
@@ -124,42 +99,62 @@ def _clasif_tiene_cuenta(nombre: str) -> bool:
     return _norm_clasif(nombre) not in _CLASIF_SIN_CUENTA
 
 
+def _mapa_clasif_default() -> dict[str, str]:
+    return dict(MAPA_CLASIF_ESTUDIO)
+
+
+def _combinar_mapa_clasif(overlay: dict[str, str] | None) -> dict[str, str]:
+    out = _mapa_clasif_default()
+    for k, v in (overlay or {}).items():
+        nombre = str(k).strip()
+        codigo = str(v).strip()
+        if _clasif_tiene_cuenta(nombre) and codigo not in {"", "99999"}:
+            out[nombre] = codigo
+    return out
+
+
+def _overlay_mapa_clasif(mapa: dict[str, str] | None) -> dict[str, str]:
+    default = _mapa_clasif_default()
+    overlay: dict[str, str] = {}
+    for k, v in (mapa or {}).items():
+        nombre = str(k).strip()
+        codigo = str(v).strip()
+        if not _clasif_tiene_cuenta(nombre) or codigo in {"", "99999"}:
+            continue
+        if default.get(nombre) != codigo:
+            overlay[nombre] = codigo
+    return overlay
+
+
 def _cargar_mapa_clasif(sociedad_id: int) -> dict[str, str]:
     sid = str(int(sociedad_id))
     cache = st.session_state.get(f"clasif_map_{sid}")
-    if isinstance(cache, dict):
+    if isinstance(cache, dict) and cache:
         return dict(cache)
     try:
         raw = json.loads(_MAPA_CLASIF_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError, TypeError):
         raw = {}
-    mapa = raw.get(sid) if isinstance(raw, dict) else {}
-    if not isinstance(mapa, dict):
-        mapa = {}
-    clean = {
-        str(k).strip(): str(v).strip()
-        for k, v in mapa.items()
-        if _clasif_tiene_cuenta(str(k)) and str(v).strip() not in {"", "99999"}
-    }
-    st.session_state[f"clasif_map_{sid}"] = clean
-    return clean
+    overlay = raw.get(sid) if isinstance(raw, dict) else {}
+    if not isinstance(overlay, dict):
+        overlay = {}
+    merged = _combinar_mapa_clasif(overlay)
+    st.session_state[f"clasif_map_{sid}"] = merged
+    return merged
 
 
 def _guardar_mapa_clasif(sociedad_id: int, mapa: dict[str, str]) -> None:
     sid = str(int(sociedad_id))
-    clean = {
-        str(k).strip(): str(v).strip()
-        for k, v in (mapa or {}).items()
-        if _clasif_tiene_cuenta(str(k)) and str(v).strip() not in {"", "99999"}
-    }
-    st.session_state[f"clasif_map_{sid}"] = clean
+    merged = _combinar_mapa_clasif(mapa)
+    overlay = _overlay_mapa_clasif(merged)
+    st.session_state[f"clasif_map_{sid}"] = merged
     try:
         raw = json.loads(_MAPA_CLASIF_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError, TypeError):
         raw = {}
     if not isinstance(raw, dict):
         raw = {}
-    raw[sid] = clean
+    raw[sid] = overlay
     _MAPA_CLASIF_PATH.parent.mkdir(parents=True, exist_ok=True)
     _MAPA_CLASIF_PATH.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -812,9 +807,8 @@ def _paso_extracto(
     subtitulo = (
         f"{nombre_activo or ''} — {len(movs)} movimientos · {n_plan} cuentas del plan. "
         "Las que tienen regla quedan tomadas; el resto, sugeridas o a clasificar. "
-        "Cada clasificación queda asociada a una cuenta Tango: si marcás "
-        "retenciones IIBB bancos y elegís 11419, todos esos movimientos van a esa cuenta. "
-        "El asiento engloba después por clasificación."
+        "Cada clasificación queda asociada a una cuenta Tango (igual en todas las sociedades). "
+        "Si el plan de esa sociedad usa otra, cambiala a mano en la línea."
     )
     if n_plan <= 0:
         st.warning("No está el plan de cuentas de esta sociedad. Vinculalo y volvé a leer el extracto.")

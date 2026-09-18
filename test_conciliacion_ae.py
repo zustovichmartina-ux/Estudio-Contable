@@ -595,6 +595,17 @@ class TestExtractoComponente(unittest.TestCase):
         self.assertEqual(out[0]["origen"], "sugerido")
         self.assertEqual(out[1]["cuenta_codigo"], "42501")
 
+    def test_catalogo_estudio_asocia_iibb_bancos_a_11419(self):
+        from clasif_cuentas_extracto import MAPA_CLASIF_ESTUDIO
+        from ui_conciliacion_ae import _combinar_mapa_clasif, _overlay_mapa_clasif
+
+        mapa = _combinar_mapa_clasif({})
+        self.assertEqual(mapa["Retenciones IIBB bancos"], "11419")
+        self.assertEqual(mapa["Gastos Bancarios"], MAPA_CLASIF_ESTUDIO["Gastos Bancarios"])
+        overlay = _overlay_mapa_clasif({**mapa, "Gastos Bancarios": "52201"})
+        self.assertEqual(overlay, {"Gastos Bancarios": "52201"})
+        self.assertNotIn("Retenciones IIBB bancos", overlay)
+
     def test_saca_saldo_anterior_de_la_grilla(self):
         from ui_conciliacion_ae import _filas_componente, _sin_filas_saldo
 
