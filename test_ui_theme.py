@@ -1,4 +1,4 @@
-"""Tema visual: paleta del estudio, logo, sin marca Samsara."""
+"""Skin CSS: paleta/logo intactos y módulos de negocio sin tocar."""
 
 from __future__ import annotations
 
@@ -8,54 +8,46 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 
 
-class TestUiThemeEstudio(unittest.TestCase):
+class TestSkinSoloCosmetico(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.css = (ROOT / "assets" / "estudio.css").read_text(encoding="utf-8")
         cls.app = (ROOT / "app.py").read_text(encoding="utf-8")
-        cls.theme = (ROOT / "ui_theme.py").read_text(encoding="utf-8")
         cls.config = (ROOT / ".streamlit" / "config.toml").read_text(encoding="utf-8")
 
-    def test_css_compartido_existe(self) -> None:
-        self.assertTrue((ROOT / "assets" / "estudio.css").is_file())
-        self.assertIn("--ec-lagoon: #2563EB", self.css)
-        self.assertIn("--ec-radius: 22px", self.css)
-        self.assertIn("--ec-radius-lg: 28px", self.css)
-        self.assertIn("cubic-bezier", self.css)
-
-    def test_paleta_estudio_intacta(self) -> None:
-        for color in ("#0B1C33", "#2563EB", "#3B82F6", "#F4F6FA", "#0F172A", "#64748B"):
+    def test_paleta_y_logo_intactos(self) -> None:
+        for color in ("#2563EB", "#0B1C33", "#F4F6FA", "#0F172A", "#3B82F6"):
             self.assertIn(color, self.css)
         self.assertIn('primaryColor = "#2563EB"', self.config)
-        self.assertIn('backgroundColor = "#F4F6FA"', self.config)
-        self.assertIn('textColor = "#0F172A"', self.config)
-
-    def test_logo_estudio_sin_cambiar(self) -> None:
-        logo = ROOT / "assets" / "estudio-zona-guemes-wordmark-oscuro.png"
-        self.assertTrue(logo.is_file())
         self.assertIn("estudio-zona-guemes-wordmark-oscuro.png", self.app)
-        self.assertIn("estudio-zona-guemes-wordmark-oscuro.png", self.theme)
+        self.assertTrue((ROOT / "assets" / "estudio-zona-guemes-wordmark-oscuro.png").is_file())
 
-    def test_sin_teal_ni_gold_samsara(self) -> None:
+    def test_app_solo_inyecta_css(self) -> None:
+        self.assertIn('BASE_DIR / "assets" / "estudio.css"', self.app)
+        self.assertNotIn("_formulario_login_oficina", self.app)
+        self.assertNotIn("col_login", self.app)
+
+    def test_modulos_intactos(self) -> None:
+        for nombre in (
+            "Devengamiento de Impuestos",
+            "Conciliación Bancaria",
+            "Préstamos Financieros",
+            "Inversiones",
+            "Herramientas",
+            "Tango",
+            "ARCA",
+        ):
+            self.assertIn(nombre, self.app)
+        self.assertIn("ventana_principal_v4", self.app)
+        self.assertIn("_pantalla_login_oficina", self.app)
+        self.assertIn("render_arca_module", self.app)
+
+    def test_radios_suaves_sin_teal(self) -> None:
+        self.assertIn("--ec-radius: 16px", self.css)
+        self.assertIn("--ec-radius-sm: 12px", self.css)
         bajo = self.css.lower()
-        prohibidos = (
-            "#0d9488",
-            "#14b8a6",
-            "#2dd4bf",
-            "#0f766e",
-            "#134e4a",
-            "#d4af37",
-            "#c9a227",
-            "#d4a017",
-            "#c9a84c",
-        )
-        for token in prohibidos:
+        for token in ("#0d9488", "#14b8a6", "#d4af37", "#c9a227"):
             self.assertNotIn(token, bajo)
-
-    def test_app_inyecta_tema_compartido(self) -> None:
-        self.assertIn("from ui_theme import inyectar_tema", self.app)
-        self.assertIn("inyectar_tema()", self.app)
-        self.assertIn("def inyectar_tema", self.theme)
 
 
 if __name__ == "__main__":

@@ -159,7 +159,6 @@ from completar_cuadro_bancario import (
     explorar_buzon_cuadros_bancarios,
 )
 from liquidaciones_tarjetas_estudio import procesar_pdfs_tarjetas_estudio
-from ui_theme import inyectar_tema
 
 BASE_DIR = Path(__file__).resolve().parent
 LOGO_ESTUDIO_PATH = BASE_DIR / "assets" / "estudio-zona-guemes-wordmark-oscuro.png"
@@ -193,7 +192,13 @@ def _es_entorno_cloud() -> bool:
         return True
     return False
 
-inyectar_tema()
+st.markdown(
+    "<style>\n"
+    + (BASE_DIR / "assets" / "estudio.css").read_text(encoding="utf-8")
+    + "\n</style>",
+    unsafe_allow_html=True,
+)
+
 
 # No inyectar JS (components.html + MutationObserver / hideDeploy / scrub de
 # excepciones): mutar el DOM de Streamlit mientras React reconcilia provoca
@@ -306,7 +311,7 @@ _VENTANAS_PRINCIPALES = (
     "Tango",
     "ARCA",
 )
-# v4: radio vertical en sidebar. v3 era segmented top.
+# v4: radio vertical en sidebar (formato Samsara). v3 era segmented top.
 _VENTANA_KEY = "ventana_principal_v4"
 _VENTANA_KEY_LEGACY = "ventana_principal_activa"
 _VENTANA_KEY_V3 = "ventana_principal_v3"
@@ -383,7 +388,7 @@ def _migrar_ventana_principal_session() -> None:
 
 
 def _render_nav_ventanas_principales() -> str:
-    """Menú vertical en la sidebar."""
+    """Menú vertical en la sidebar (mismo formato que Samsara)."""
     _migrar_ventana_principal_session()
     opciones = list(_VENTANAS_PRINCIPALES)
     actual = str(st.session_state.get(_VENTANA_KEY, opciones[0]))
@@ -9341,13 +9346,12 @@ def _render_barra_fija_export_tango(
             z-index: 999980 !important;
             width: 100% !important;
             max-width: 100% !important;
-            background: var(--ec-topbar, #0B1C33) !important;
-            border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
-            padding: 0.7rem 1.25rem 0.8rem 1.25rem !important;
+            background: #0B0D10 !important;
+            border-top: 1px solid #1C1E22 !important;
+            padding: 0.55rem 1.15rem 0.65rem 1.15rem !important;
             margin: 0 !important;
-            box-shadow: 0 -8px 24px rgba(11, 28, 51, 0.18) !important;
+            box-shadow: none !important;
             align-items: center !important;
-            border-radius: 22px 22px 0 0 !important;
         }}
         </style>
         <div class="ec-tango-sticky-spacer"></div>
@@ -10867,22 +10871,20 @@ def _herramienta_completar_cuadro_bancario() -> None:
         help="Se ignoran movimientos de otros años (p. ej. extractos trimestrales).",
     )
 
-    with st.container(border=True):
-        st.markdown("##### Buzón de carpeta")
-        st.caption("Pegá la carpeta del cliente. El estudio busca el Excel y los PDF solos.")
-        ruta_buzon = st.text_input(
-            "Ruta de la carpeta del cliente",
-            key="cuadro_bancario_ruta_buzon_v1",
-            placeholder=r"\\TANGOSRV\Compartido\CLIENTES\TRUJILLO HERNAN\Ganancias Personas Fisicas\GANANCIAS 2025",
-            help="Pegá la carpeta (Copiar como ruta). Se buscan Excel y PDF en subcarpetas.",
+    st.markdown("##### Buzón de carpeta")
+    ruta_buzon = st.text_input(
+        "Ruta de la carpeta del cliente",
+        key="cuadro_bancario_ruta_buzon_v1",
+        placeholder=r"\\TANGOSRV\Compartido\CLIENTES\TRUJILLO HERNAN\Ganancias Personas Fisicas\GANANCIAS 2025",
+        help="Pegá la carpeta (Copiar como ruta). Se buscan Excel y PDF en subcarpetas.",
+    )
+    col_explorar, _ = st.columns([1, 2])
+    with col_explorar:
+        explorar = st.button(
+            "Explorar carpeta",
+            key="cuadro_bancario_explorar_v1",
+            use_container_width=True,
         )
-        col_explorar, _ = st.columns([1, 2])
-        with col_explorar:
-            explorar = st.button(
-                "Explorar carpeta",
-                key="cuadro_bancario_explorar_v1",
-                use_container_width=True,
-            )
 
     if explorar:
         st.session_state.cuadro_bancario_resultado = None
@@ -12700,14 +12702,6 @@ def _cerrar_sesion_oficina() -> None:
 def _pantalla_login_oficina() -> None:
     """Pantalla de ingreso: cada persona de la oficina elige su usuario."""
     _render_titulo_estudio("login")
-    _, col_login, _ = st.columns([0.85, 1.4, 0.85])
-    with col_login:
-        with st.container(border=True):
-            _formulario_login_oficina()
-
-
-def _formulario_login_oficina() -> None:
-    """Campos de usuario / PIN (misma lógica, layout más aireado)."""
     if _es_entorno_cloud():
         st.caption("Cada uno elige su nombre. PIN del equipo: el que les pasó el estudio.")
         try:

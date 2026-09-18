@@ -1,5 +1,5 @@
-/* Tema Estudio Zona Güemes — paleta propia (navy / azul #2563EB).
-   Fluidez: radios amplios, cards soft, buzones premium, transiciones suaves. */
+/* Skin visual Estudio Zona Güemes (solo CSS).
+   Paleta y selectores existentes. Radios un poco más suaves. */
 
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
 
@@ -22,15 +22,10 @@
     --ec-bg: #F4F6FA;
     --ec-card: #FFFFFF;
     --ec-accent-soft: rgba(37, 99, 235, 0.12);
-    --ec-radius-xs: 12px;
-    --ec-radius-sm: 16px;
-    --ec-radius: 22px;
-    --ec-radius-lg: 28px;
-    --ec-radius-pill: 999px;
-    --ec-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 28px rgba(15, 23, 42, 0.06);
-    --ec-shadow-hover: 0 2px 6px rgba(15, 23, 42, 0.06), 0 16px 36px rgba(15, 23, 42, 0.10);
-    --ec-ease: cubic-bezier(0.22, 1, 0.36, 1);
-    --ec-duration: 200ms;
+    --ec-radius: 16px;
+    --ec-radius-sm: 12px;
+    --ec-radius-lg: 18px;
+    --ec-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px rgba(15, 23, 42, 0.04);
     --ec-font: Inter, "Segoe UI", system-ui, sans-serif;
     --ec-display: Outfit, Inter, sans-serif;
 }
@@ -62,8 +57,8 @@ header[data-testid="stHeader"] {
 }
 
 .main .block-container {
-    padding-top: 0.95rem !important;
-    padding-bottom: 2.8rem !important;
+    padding-top: 0.7rem !important;
+    padding-bottom: 2.4rem !important;
     max-width: 1440px;
     opacity: 1 !important;
 }
@@ -74,26 +69,24 @@ header[data-testid="stHeader"] {
 .main [data-testid="stCaptionContainer"] {
     font-size: 0.95rem !important;
     color: var(--ec-ink) !important;
-    line-height: 1.55 !important;
+    line-height: 1.5 !important;
 }
 .main h1 {
     font-family: var(--ec-display) !important;
-    font-size: 1.75rem !important;
+    font-size: 1.7rem !important;
     font-weight: 650 !important;
-    letter-spacing: -0.035em !important;
+    letter-spacing: -0.03em !important;
     color: var(--ec-ink) !important;
-    margin-bottom: 0.3rem !important;
+    margin-bottom: 0.25rem !important;
 }
 .main h2 {
-    font-size: 1.14rem !important;
+    font-size: 1.12rem !important;
     font-weight: 650 !important;
-    letter-spacing: -0.02em !important;
     color: var(--ec-ink) !important;
 }
 .main h3, .main h4 {
-    font-size: 1.02rem !important;
+    font-size: 1rem !important;
     font-weight: 650 !important;
-    letter-spacing: -0.015em !important;
     color: var(--ec-ink) !important;
 }
 .main small,
@@ -101,15 +94,12 @@ header[data-testid="stHeader"] {
     color: var(--ec-sand) !important;
 }
 
-/* —— Sidebar / shell —— */
 [data-testid="stSidebar"] {
     background: var(--ec-night) !important;
     border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
 }
 [data-testid="stSidebar"] > div:first-child {
-    padding-top: 1rem;
-    padding-left: 0.85rem;
-    padding-right: 0.85rem;
+    padding-top: 0.85rem;
 }
 [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
 [data-testid="stSidebar"] label,
@@ -120,7 +110,7 @@ header[data-testid="stHeader"] {
 .ec-side-label,
 [data-testid="stSidebar"] .ec-side-label,
 [data-testid="stSidebar"] p.ec-side-label {
-    margin: 1rem 0 0.4rem 0.2rem !important;
+    margin: 0.85rem 0 0.35rem 0.15rem !important;
     font-size: 0.68rem !important;
     font-weight: 650 !important;
     letter-spacing: 0.14em !important;
@@ -128,32 +118,18 @@ header[data-testid="stHeader"] {
     color: #94A3B8 !important;
 }
 
-/* —— Superficies compartidas: cards, paneles, tablas —— */
 div[data-testid="stExpander"],
 div[data-testid="stForm"],
 div[data-testid="stAlert"],
 div[data-testid="stMetric"],
 .stDataFrame,
-[data-testid="stFileUploader"],
-div[data-testid="stVerticalBlockBorderWrapper"] {
-    border-radius: var(--ec-radius) !important;
+[data-testid="stFileUploader"] {
+    border-radius: var(--ec-radius-sm) !important;
 }
 .main div[data-testid="stExpander"] {
     background: var(--ec-card) !important;
     border: 1px solid var(--ec-line) !important;
     box-shadow: var(--ec-shadow);
-    overflow: hidden;
-    transition: box-shadow var(--ec-duration) var(--ec-ease), border-color var(--ec-duration) var(--ec-ease) !important;
-}
-.main div[data-testid="stExpander"]:hover {
-    box-shadow: var(--ec-shadow-hover);
-}
-
-.main div[data-testid="stVerticalBlockBorderWrapper"] {
-    background: var(--ec-card) !important;
-    border: 1px solid var(--ec-line) !important;
-    box-shadow: var(--ec-shadow) !important;
-    overflow: hidden;
 }
 
 .main .stTextInput input,
@@ -165,29 +141,24 @@ div[data-testid="stVerticalBlockBorderWrapper"] {
     color: var(--ec-ink) !important;
     font-size: 0.95rem !important;
     box-shadow: none !important;
-    min-height: 2.5rem !important;
-    transition: border-color var(--ec-duration) var(--ec-ease), box-shadow var(--ec-duration) var(--ec-ease) !important;
+    min-height: 2.35rem !important;
 }
 .main .stTextInput input:focus,
 .main .stNumberInput input:focus,
 .main .stTextArea textarea:focus {
     border-color: var(--ec-lagoon) !important;
-    box-shadow: 0 0 0 4px var(--ec-accent-soft) !important;
+    box-shadow: 0 0 0 3px var(--ec-accent-soft) !important;
 }
 
 .stButton > button,
 .stDownloadButton > button,
 .stFormSubmitButton > button {
-    border-radius: var(--ec-radius-sm) !important;
+    border-radius: 10px !important;
     font-weight: 600 !important;
     font-size: 0.9rem !important;
-    padding: 0.5rem 1.15rem !important;
-    min-height: 2.5rem !important;
-    transition: background var(--ec-duration) var(--ec-ease),
-                border-color var(--ec-duration) var(--ec-ease),
-                color var(--ec-duration) var(--ec-ease),
-                box-shadow var(--ec-duration) var(--ec-ease),
-                transform var(--ec-duration) var(--ec-ease) !important;
+    padding: 0.42rem 1rem !important;
+    min-height: 2.35rem !important;
+    transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease !important;
     box-shadow: none !important;
 }
 .stButton > button[kind="primary"],
@@ -196,13 +167,6 @@ div[data-testid="stVerticalBlockBorderWrapper"] {
     background: var(--ec-lagoon) !important;
     color: #FFFFFF !important;
     border: 1px solid var(--ec-lagoon) !important;
-}
-.stButton > button[kind="primary"]:hover,
-.stFormSubmitButton > button[kind="primary"]:hover,
-.stDownloadButton > button:hover {
-    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22) !important;
-    transform: translateY(-1px);
-    opacity: 1 !important;
 }
 .main .stButton > button[kind="secondary"] {
     background: #FFFFFF !important;
@@ -214,19 +178,18 @@ div[data-testid="stVerticalBlockBorderWrapper"] {
     color: var(--ec-lagoon) !important;
     border-color: #BFDBFE !important;
     opacity: 1 !important;
-    transform: translateY(-1px);
 }
 .stButton > button:hover,
 .stDownloadButton > button:hover,
 .stFormSubmitButton > button:hover {
-    opacity: 0.96;
+    opacity: 0.94;
 }
 
 .main div[data-testid="stAlert"] {
     border: 1px solid var(--ec-line) !important;
     background: #FFFFFF !important;
     box-shadow: var(--ec-shadow);
-    border-radius: var(--ec-radius) !important;
+    border-radius: var(--ec-radius-sm) !important;
     color: var(--ec-ink) !important;
 }
 
@@ -236,50 +199,29 @@ div[data-testid="stVerticalBlockBorderWrapper"] {
     box-shadow: var(--ec-shadow);
     overflow: hidden;
     background: #FFFFFF !important;
-    border-radius: var(--ec-radius) !important;
+    border-radius: var(--ec-radius-sm) !important;
 }
 .main th, .main td {
     font-size: 0.875rem !important;
     color: var(--ec-ink) !important;
 }
 
-/* Buzones / zonas de import: más premium, menos rígidos */
-.main [data-testid="stFileUploader"] {
-    background: transparent !important;
+.main [data-testid="stFileUploader"] section {
+    border-radius: var(--ec-radius) !important;
+    border: 1px dashed #CBD5E1 !important;
+    background: #FFFFFF !important;
 }
-.main [data-testid="stFileUploader"] section,
-.main [data-testid="stFileUploaderDropzone"] {
-    border-radius: var(--ec-radius-lg) !important;
-    border: 1.5px dashed #CBD5E1 !important;
-    background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%) !important;
-    min-height: 7.2rem !important;
-    padding: 1.35rem 1.2rem !important;
-    box-shadow: var(--ec-shadow);
-    transition: border-color var(--ec-duration) var(--ec-ease),
-                background var(--ec-duration) var(--ec-ease),
-                box-shadow var(--ec-duration) var(--ec-ease) !important;
-}
-.main [data-testid="stFileUploader"] section:hover,
-.main [data-testid="stFileUploaderDropzone"]:hover {
+.main [data-testid="stFileUploader"] section:hover {
     border-color: var(--ec-lagoon) !important;
-    background: linear-gradient(180deg, #EFF6FF 0%, #FFFFFF 100%) !important;
-    box-shadow: var(--ec-shadow-hover);
-}
-.main [data-testid="stFileUploader"] button {
-    border-radius: var(--ec-radius-pill) !important;
+    background: #EFF6FF !important;
 }
 
 .main [data-testid="stMetric"] {
     background: var(--ec-card);
     border: 1px solid var(--ec-line);
     border-radius: var(--ec-radius);
-    padding: 1.1rem 1.2rem;
+    padding: 0.95rem 1.1rem;
     box-shadow: var(--ec-shadow);
-    transition: box-shadow var(--ec-duration) var(--ec-ease), transform var(--ec-duration) var(--ec-ease);
-}
-.main [data-testid="stMetric"]:hover {
-    box-shadow: var(--ec-shadow-hover);
-    transform: translateY(-1px);
 }
 [data-testid="stMetricValue"] {
     font-family: var(--ec-display) !important;
@@ -302,14 +244,14 @@ div[data-testid="stVerticalBlockBorderWrapper"] {
 
 .stProgress > div > div > div > div {
     background: var(--ec-lagoon) !important;
-    border-radius: var(--ec-radius-pill) !important;
+    border-radius: 4px !important;
 }
 
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
     background: rgba(100, 116, 139, 0.35);
-    border-radius: var(--ec-radius-pill);
+    border-radius: 8px;
     border: 2px solid transparent;
     background-clip: content-box;
 }
@@ -322,7 +264,7 @@ a { color: var(--ec-sky) !important; text-decoration: none !important; }
 a:hover { text-decoration: underline !important; }
 
 code, pre {
-    border-radius: var(--ec-radius-xs) !important;
+    border-radius: 4px !important;
     font-size: 13px !important;
 }
 
@@ -352,19 +294,17 @@ div[data-testid="stToolbar"] a[href*="share.streamlit"] {
     flex-wrap: nowrap !important;
     align-items: flex-end !important;
     justify-content: flex-start !important;
-    gap: 0.85rem !important;
-    margin: 0 0 1.35rem 0 !important;
-    padding: 0.85rem 1.15rem 0.15rem 1.05rem !important;
-    border: 1px solid var(--ec-line) !important;
-    border-radius: var(--ec-radius) !important;
-    background: var(--ec-card) !important;
-    box-shadow: var(--ec-shadow);
+    gap: 0.7rem !important;
+    margin: 0 0 1.15rem 0 !important;
+    padding: 0.15rem 0 0 0 !important;
+    border-bottom: 1px solid var(--ec-line) !important;
     overflow: visible !important;
+    background: transparent !important;
 }
 .ec-pagehead-copy {
     flex: 1 1 auto !important;
     min-width: 0 !important;
-    padding: 0 0 0.85rem 0 !important;
+    padding: 0 0 0.7rem 0 !important;
     background: transparent !important;
 }
 .ec-saludo-wrap {
@@ -440,11 +380,11 @@ div[data-testid="stToolbar"] a[href*="share.streamlit"] {
     margin: 0.35rem 0 0 0 !important;
     font-size: 0.95rem !important;
     color: var(--ec-sand) !important;
-    line-height: 1.45 !important;
+    line-height: 1.4 !important;
 }
 .ec-brand {
-    padding: 0 0 0.95rem 0;
-    margin: 0 0 0.45rem 0;
+    padding: 0 0 0.85rem 0;
+    margin: 0 0 0.55rem 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 [data-testid="stSidebar"] .ec-brand img,
@@ -519,22 +459,20 @@ div[data-testid="element-container"]:has(.st-key-ec_toolbar_menu) {
     align-items: center !important;
     justify-content: center !important;
     box-sizing: border-box !important;
-    min-height: 2.05rem !important;
-    height: 2.05rem !important;
-    padding: 0 1rem !important;
+    min-height: 2rem !important;
+    height: 2rem !important;
+    padding: 0 0.95rem !important;
     font-size: 0.8125rem !important;
     font-weight: 500 !important;
     letter-spacing: 0.01em !important;
     line-height: 1 !important;
-    border-radius: var(--ec-radius-pill) !important;
+    border-radius: 999px !important;
     background: var(--ec-charcoal) !important;
     color: var(--ec-cream) !important;
     border: 1px solid var(--ec-charcoal) !important;
     box-shadow: none !important;
     white-space: nowrap !important;
-    transition: background var(--ec-duration) var(--ec-ease),
-                border-color var(--ec-duration) var(--ec-ease),
-                transform var(--ec-duration) var(--ec-ease) !important;
+    transition: background 0.12s ease, border-color 0.12s ease !important;
 }
 .st-key-ec_toolbar_bib button:hover,
 .st-key-ec_toolbar_menu button:hover,
@@ -543,18 +481,16 @@ div[data-testid="element-container"]:has(.st-key-ec_toolbar_menu) {
     background: var(--ec-lagoon) !important;
     border-color: var(--ec-lagoon) !important;
     color: #FFFFFF !important;
-    transform: translateY(-1px);
 }
-
-/* Nav principal: menú vertical en la sidebar */
+/* Nav principal: en la sidebar, formato Samsara */
 [data-testid="stSidebar"] .st-key-ventana_principal_v4 {
-    margin: 0.2rem 0 0.95rem 0 !important;
+    margin: 0.15rem 0 0.85rem 0 !important;
 }
 [data-testid="stSidebar"] .st-key-ventana_principal_v4 [data-testid="stRadio"],
 [data-testid="stSidebar"] .st-key-ventana_principal_v4 [role="radiogroup"] {
     display: flex !important;
     flex-direction: column !important;
-    gap: 6px !important;
+    gap: 4px !important;
     background: transparent !important;
     border: none !important;
 }
@@ -562,15 +498,14 @@ div[data-testid="element-container"]:has(.st-key-ec_toolbar_menu) {
 [data-testid="stSidebar"] .st-key-ventana_principal_v4 [role="radiogroup"] label {
     display: flex !important;
     align-items: center !important;
-    border-radius: var(--ec-radius-sm) !important;
-    padding: 0.55rem 0.85rem !important;
+    border-radius: 10px !important;
+    padding: 0.45rem 0.75rem !important;
     margin: 0 !important;
     background: transparent !important;
     color: rgba(244, 244, 245, 0.78) !important;
     font-size: 0.875rem !important;
     font-weight: 500 !important;
     border: none !important;
-    transition: background var(--ec-duration) var(--ec-ease), color var(--ec-duration) var(--ec-ease) !important;
 }
 [data-testid="stSidebar"] .st-key-ventana_principal_v4 label:hover {
     background: var(--ec-charcoal) !important;
@@ -586,48 +521,40 @@ div[data-testid="element-container"]:has(.st-key-ec_toolbar_menu) {
 [data-testid="stSidebar"] .st-key-ventana_principal_v4 [data-baseweb="radio"] > div:first-child {
     display: none !important;
 }
-
-/* Tabs: píldoras en track, menos rígidas */
 .stTabs [data-baseweb="tab-list"] {
-    background: #EEF2F7 !important;
+    background: transparent !important;
     border: none !important;
-    border-radius: var(--ec-radius-pill) !important;
-    padding: 4px !important;
+    border-bottom: 1px solid var(--ec-line) !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
     gap: 4px !important;
-    flex-wrap: wrap !important;
-    width: fit-content !important;
-    max-width: 100% !important;
 }
 .stTabs [data-baseweb="tab"] {
     background: transparent !important;
     border: none !important;
-    border-radius: var(--ec-radius-pill) !important;
+    border-radius: 10px 10px 0 0 !important;
     color: var(--ec-sand) !important;
     font-size: 0.9rem !important;
     font-weight: 550 !important;
-    padding: 0.42rem 0.95rem !important;
-    transition: background var(--ec-duration) var(--ec-ease), color var(--ec-duration) var(--ec-ease) !important;
+    padding: 0.4rem 0.9rem !important;
 }
 .stTabs [data-baseweb="tab"][aria-selected="true"] {
     background: var(--ec-lagoon) !important;
     color: #FFFFFF !important;
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.22);
 }
 .stTabs [data-baseweb="tab-highlight"],
 .stTabs [data-baseweb="tab-border"] {
     display: none !important;
 }
-.stTabs [data-baseweb="tab-panel"] {
-    padding-top: 1rem !important;
+.main .block-container {
+    padding-top: 0.7rem !important;
 }
-
 .ec-hero {
-    margin: 0 0 1.35rem 0;
-    padding: 1.7rem 1.7rem;
-    border-radius: var(--ec-radius-lg);
+    margin: 0 0 1.15rem 0;
+    padding: 1.4rem 1.5rem;
+    border-radius: 16px;
     background: linear-gradient(120deg, #0B1C33 0%, #1E3A8A 55%, #2563EB 100%);
     color: #FFFFFF;
-    box-shadow: var(--ec-shadow);
 }
 .ec-hero p.ec-hero-hola,
 .stMarkdown p.ec-hero-hola {
@@ -643,13 +570,13 @@ div[data-testid="element-container"]:has(.st-key-ec_toolbar_menu) {
 .ec-hero p.ec-hero-sub,
 .stMarkdown p.ec-hero-sub {
     color: rgba(255, 255, 255, 0.9) !important;
-    margin: 0.5rem 0 0 0 !important;
-    font-size: 1rem !important;
+    margin: 0.45rem 0 0 0 !important;
+    font-size: 0.98rem !important;
     text-transform: none !important;
-    line-height: 1.4 !important;
+    line-height: 1.35 !important;
 }
 .ec-titulo {
-    margin: 0.05rem 0 0.95rem 0;
+    margin: 0.05rem 0 0.85rem 0;
     font-family: var(--ec-display);
     font-size: 1.55rem;
     font-weight: 650;
@@ -658,56 +585,11 @@ div[data-testid="element-container"]:has(.st-key-ec_toolbar_menu) {
     line-height: 1.15;
     text-transform: none;
 }
-
-/* Popovers del header (Biblioteca / Menú) */
-[data-testid="stPopover"] [data-testid="stVerticalBlock"] {
-    border-radius: var(--ec-radius) !important;
-}
-
-/* Barra sticky de export Tango: misma navy del shell */
-.ec-tango-sticky-spacer { height: 5.75rem; }
-
-/* Login y buzón: cards con más aire */
-div[data-testid="stVerticalBlockBorderWrapper"]:has(.st-key-login_usuario_select),
-div[data-testid="stVerticalBlockBorderWrapper"]:has(.st-key-cuadro_bancario_ruta_buzon_v1) {
-    padding: 0.55rem 0.35rem 0.75rem !important;
-}
-
-@media (max-width: 768px) {
-    .main .block-container {
-        padding-left: 0.85rem !important;
-        padding-right: 0.85rem !important;
-        padding-top: 0.7rem !important;
+    .main div[data-testid="stVerticalBlockBorderWrapper"] {
+        border-radius: var(--ec-radius) !important;
     }
-    .ec-pagehead {
-        flex-wrap: wrap !important;
-        padding: 0.75rem 0.9rem 0.1rem 0.9rem !important;
+    .main .stTextInput input,
+    .main .stNumberInput input,
+    .main .stTextArea textarea {
+        transition: border-color 0.16s ease, box-shadow 0.16s ease !important;
     }
-    .ec-saludo-wrap {
-        flex-basis: 5rem !important;
-        width: 5rem !important;
-        min-height: 6.2rem !important;
-    }
-    .ec-pagehead-title,
-    .stMarkdown p.ec-pagehead-title {
-        font-size: 1.35rem !important;
-    }
-    .ec-hero {
-        padding: 1.25rem 1.2rem;
-        border-radius: var(--ec-radius);
-    }
-    .ec-hero p.ec-hero-hola,
-    .stMarkdown p.ec-hero-hola {
-        font-size: 1.55rem !important;
-    }
-    .stTabs [data-baseweb="tab-list"] {
-        width: 100% !important;
-    }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after {
-        transition: none !important;
-        transform: none !important;
-    }
-}
