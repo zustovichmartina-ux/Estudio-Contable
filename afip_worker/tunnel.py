@@ -9,7 +9,10 @@ import os
 import re
 import shutil
 import subprocess
+import threading
 import time
+import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
 
 from .jobs import _repo_root
@@ -75,6 +78,85 @@ def save_public_url(url: str) -> Path:
     return path
 
 
+def public_health(url: str) -> bool:
+    text = (url or "").strip().rstrip("/")
+    if not text.startswith("https://"):
+        return False
+    req = urllib.request.Request(
+        f"{text}/health",
+        headers={"User-Agent": "EstudioContable-ARCA/1.0", "Accept": "application/json"},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            return int(getattr(resp, "status", 200) or 200) == 200
+    except Exception:
+        return False
+
+
+def _publish_via_git(url: str) -> None:
+    git = shutil.which("git")
+    if not git:
+        LOG.warning("git no está: la web no ve la URL hasta un push")
+        return
+    root = _repo_root()
+    rel = TUNNEL_URL_REL.replace("\\", "/")
+    try:
+        subprocess.run(
+            [git, "add", "--", rel],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=20,
+        )
+        diff = subprocess.run(
+            [git, "diff", "--cached", "--quiet", "--", rel],
+            cwd=root,
+            capture_output=True,
+            timeout=20,
+        )
+        if diff.returncode == 0:
+            subprocess.run(
+                [git, "push", "origin", "HEAD"],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=40,
+            )
+            return
+        commit = subprocess.run(
+            [git, "commit", "-m", "Refresh ARCA tunnel URL", "--", rel],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+        )
+        if commit.returncode != 0:
+            LOG.warning("no pude commitear URL: %s", (commit.stderr or commit.stdout)[:180])
+            return
+        push = subprocess.run(
+            [git, "push", "origin", "HEAD"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=40,
+        )
+        if push.returncode == 0:
+            LOG.info("URL de túnel pusheada para la web")
+        else:
+            LOG.warning("no pude pushear URL: %s", (push.stderr or push.stdout)[:180])
+    except Exception as exc:
+        LOG.warning("no pude publicar URL por git: %s", type(exc).__name__)
+
+
 def publish_public_url(url: str) -> None:
     """Deja la URL del túnel en git para que Streamlit Cloud la lea sin tocar Secrets."""
     url = (url or "").strip()
@@ -83,7 +165,7 @@ def publish_public_url(url: str) -> None:
     save_public_url(url)
     gh = shutil.which("gh")
     if not gh:
-        LOG.warning("gh no está: la URL queda local hasta el próximo push")
+        _publish_via_git(url)
         return
     content_b64 = base64.b64encode((url + "\n").encode("utf-8")).decode("ascii")
     api = f"repos/{GITHUB_REPO}/contents/{TUNNEL_URL_REL}"
@@ -101,6 +183,7 @@ def publish_public_url(url: str) -> None:
             sha = str((json.loads(got.stdout) or {}).get("sha") or "")
     except Exception as exc:
         LOG.warning("no pude leer URL publicada: %s", type(exc).__name__)
+        _publish_via_git(url)
         return
     payload: dict[str, str] = {
         "message": "Refresh ARCA tunnel URL",
@@ -120,10 +203,23 @@ def publish_public_url(url: str) -> None:
         )
         if put.returncode == 0:
             LOG.info("URL de túnel publicada para la web")
-        else:
-            LOG.warning("no pude publicar URL: %s", (put.stderr or put.stdout)[:180])
+            return
+        LOG.warning("no pude publicar URL: %s", (put.stderr or put.stdout)[:180])
     except Exception as exc:
         LOG.warning("no pude publicar URL: %s", type(exc).__name__)
+    _publish_via_git(url)
+
+
+def _drain_stdout(proc: subprocess.Popen[str]) -> None:
+    try:
+        if not proc.stdout:
+            return
+        for line in proc.stdout:
+            text = (line or "").strip()
+            if text:
+                LOG.info("cloudflared: %s", text)
+    except Exception:
+        return
 
 
 def start_cloudflared_tunnel(*, port: int, token: str) -> subprocess.Popen[str] | None:
@@ -164,7 +260,67 @@ def start_cloudflared_tunnel(*, port: int, token: str) -> subprocess.Popen[str] 
             write_bridge_info(url=url, token=token, port=port)
             publish_public_url(url)
             LOG.info("TUNNEL_URL %s", url)
+            threading.Thread(target=_drain_stdout, args=(proc,), daemon=True).start()
             return proc
     LOG.warning("no apareció URL trycloudflare en 45s")
     write_bridge_info(url="(túnel sin URL todavía)", token=token, port=port)
+    threading.Thread(target=_drain_stdout, args=(proc,), daemon=True).start()
     return proc
+
+
+@dataclass
+class TunnelState:
+    proc: subprocess.Popen[str] | None = None
+    url: str = ""
+    port: int = 8765
+    token: str = ""
+    next_check: float = 0.0
+    failures: int = 0
+
+
+def _read_saved_url() -> str:
+    try:
+        raw = public_url_path().read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    parts = raw.strip().split()
+    if not parts:
+        return ""
+    text = parts[0].strip().strip('"').strip("'")
+    if text.startswith("https://"):
+        return text.rstrip("/")
+    return ""
+
+
+def maintain_tunnel(state: TunnelState) -> None:
+    """Si cloudflared se colgó o el hostname de trycloudflare murió, relanza el túnel."""
+    now = time.time()
+    if now < state.next_check:
+        return
+    state.next_check = now + 45.0
+    proc_dead = state.proc is None or state.proc.poll() is not None
+    url = state.url or _read_saved_url()
+    url_ok = (not proc_dead) and public_health(url)
+    if url_ok:
+        state.url = url
+        state.failures = 0
+        return
+    state.failures += 1
+    LOG.warning(
+        "túnel ARCA caído (proc_dead=%s url_ok=%s fails=%s); relanzo cloudflared",
+        proc_dead,
+        url_ok,
+        state.failures,
+    )
+    if state.proc and state.proc.poll() is None:
+        try:
+            state.proc.kill()
+        except Exception:
+            pass
+        try:
+            state.proc.wait(timeout=5)
+        except Exception:
+            pass
+    state.proc = start_cloudflared_tunnel(port=state.port, token=state.token)
+    state.url = _read_saved_url()
+    state.next_check = time.time() + 60.0

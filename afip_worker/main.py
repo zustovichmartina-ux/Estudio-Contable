@@ -29,7 +29,7 @@ from afip_worker.jobs import (
 from afip_worker.notify import aviso_tarea
 from afip_worker.server import start_api_thread
 from afip_worker.token import load_or_create_token
-from afip_worker.tunnel import start_cloudflared_tunnel
+from afip_worker.tunnel import TunnelState, maintain_tunnel, public_url_path, start_cloudflared_tunnel
 
 LOG = logging.getLogger("afip_worker")
 
@@ -127,11 +127,20 @@ def process_one(*, dry_run: bool = True, root: Path | None = None) -> bool:
     return True
 
 
-def loop(*, dry_run: bool = True, interval: float = 3.0, once: bool = False, root: Path | None = None) -> None:
+def loop(
+    *,
+    dry_run: bool = True,
+    interval: float = 3.0,
+    once: bool = False,
+    root: Path | None = None,
+    tunnel: TunnelState | None = None,
+) -> None:
     root = root or jobs_root()
     ensure_job_dirs(root)
     LOG.info("worker start dry_run=%s root=%s", dry_run, root)
     while True:
+        if tunnel is not None:
+            maintain_tunnel(tunnel)
         worked = process_one(dry_run=dry_run, root=root)
         if once:
             break
@@ -161,14 +170,21 @@ def main(argv: list[str] | None = None) -> int:
     if root:
         ensure_job_dirs(root)
 
+    tunnel: TunnelState | None = None
     if args.serve:
         token = load_or_create_token()
         start_api_thread(host=args.host, port=args.port, token=token)
         LOG.info("AFIP_WORKER_TOKEN listo (jobs/.worker_token). No lo subas a git.")
         if not args.no_tunnel:
-            start_cloudflared_tunnel(port=args.port, token=token)
+            tunnel = TunnelState(port=args.port, token=token)
+            tunnel.proc = start_cloudflared_tunnel(port=args.port, token=token)
+            try:
+                tunnel.url = public_url_path().read_text(encoding="utf-8").strip().split()[0]
+            except Exception:
+                tunnel.url = ""
+            tunnel.next_check = time.time() + 60.0
 
-    loop(dry_run=dry_run, interval=args.interval, once=args.once, root=root)
+    loop(dry_run=dry_run, interval=args.interval, once=args.once, root=root, tunnel=tunnel)
     return 0
 
 
