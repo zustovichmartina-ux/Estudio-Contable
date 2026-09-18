@@ -26,7 +26,6 @@ from motor_conciliacion import (
     money,
     origen_linea_extracto,
     renglones_asiento_banco_mes,
-    validar_saldos_corridos,
 )
 from procesador import (
     AsientoDevengamiento,
@@ -746,9 +745,6 @@ def _paso_subir(
             return
         filas = df_extracto_a_filas(df)
         filas = _sin_filas_saldo(filas)
-        ok_saldo, msg_saldo = validar_saldos_corridos(filas)
-        if not ok_saldo:
-            st.warning(f"El saldo corrido no cierra del todo: {msg_saldo}. Igual se muestra para imputar.")
         banco = str((meta or {}).get("banco") or "") or banco_elegido or ""
         resultados = correr_motor(
             filas,
