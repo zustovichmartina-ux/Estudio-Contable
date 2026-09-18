@@ -12030,8 +12030,8 @@ def _herramienta_liquidaciones_estudio() -> None:
     st.markdown("#### Liquidaciones de tarjetas")
     st.caption(
         "Subí **todos** los PDF del período (Naranja, Favacard, Cabal, First Data / Fiserv). "
-        "El Excel sale en el formato del estudio: resumen por marca, First Data "
-        "liquidación por liquidación, y **todos** los cupones (VENTA + LIQUIDACIÓN) con control."
+        "El Excel sale en el formato del estudio: **Resumen** + una hoja por medio "
+        "(Master/Visa crédito y débito, CABAL, FAVA, Naranja), liquidación por liquidación."
     )
     archivos = st.file_uploader(
         "PDFs de liquidaciones",
@@ -12084,7 +12084,7 @@ def _herramienta_liquidaciones_estudio() -> None:
     if res.n_control_diff:
         st.warning(
             f"{res.n_control_diff} liquidación/es de First Data no cierran al centavo. "
-            "Revisá la hoja Control."
+            "Revisá la columna Diferencia de cada hoja."
         )
     with st.expander("Qué se leyó de cada PDF", expanded=False):
         for m in res.mensajes or []:

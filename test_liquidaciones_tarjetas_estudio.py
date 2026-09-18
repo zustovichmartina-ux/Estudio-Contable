@@ -30,9 +30,11 @@ def test_recife_agosto_si_hay_red() -> None:
     assert res.n_control_ok == 69, (res.n_control_ok, res.n_control_diff)
     assert res.n_ventas >= 200, res.n_ventas
     assert res.excel_bytes[:2] == b"PK"
-    assert "First Data" in res.hojas
-    assert "Movimientos" in res.hojas
-    assert "Control" in res.hojas
+    assert "Resumen" in res.hojas
+    assert "Master Crédito" in res.hojas
+    assert "Naranja" in res.hojas
+    assert "FAVA" in res.hojas
+    assert "CABAL" in res.hojas
 
 
 if __name__ == "__main__":

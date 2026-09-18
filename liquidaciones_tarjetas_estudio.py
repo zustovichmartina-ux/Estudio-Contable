@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Liquidaciones de tarjetas en el formato del estudio (Recife / plantilla).
+"""Liquidaciones de tarjetas — formato del estudio (Liquidaciones de Tarjetas 1.xlsx).
 
-PDFs Naranja, Favacard, Cabal y First Data/Fiserv → Excel con:
-- LIQUIDACIONES (resumen por marca, fórmulas del estudio)
-- First Data (una fila por liquidación)
-- Movimientos (cada VENTA/cupón + cada LIQUIDACIÓN, todas las columnas)
-- Control (neto calculado vs PDF)
+Hojas: Resumen + una solapa por medio (Master/Visa crédito-débito, CABAL, FAVA, Naranja).
+Cada liquidación es una fila: nro, local, tipo, fechas, ventas, gravado 21%, IVA CF,
+percepciones, SIRTAC, neto PDF, neto calculado y diferencia.
 """
 from __future__ import annotations
 
@@ -26,14 +24,14 @@ from procesadores.tarjeta_parser import (
     extraer_con_plantilla,
 )
 
-COLOR_TITULO = "1F4E79"
-COLOR_HEADER = "1F4E79"
+COLOR_TITULO = "1F4E78"
+COLOR_HEADER = "1F4E78"
+COLOR_TOTAL = "D9E1F2"
 COLOR_ZEBRA = "F2F2F2"
-COLOR_TOTAL = "DCE6F1"
 COLOR_BORDE = "BFBFBF"
 TOL = 0.05
-_FONT = "Calibri"
-_NUM = "#,##0.00"
+_FONT = "Arial"
+_NUM = r'\$#,##0.00;[Red]"-$"#,##0.00'
 _THIN = Border(
     left=Side(style="thin", color=COLOR_BORDE),
     right=Side(style="thin", color=COLOR_BORDE),
@@ -41,20 +39,56 @@ _THIN = Border(
     bottom=Side(style="thin", color=COLOR_BORDE),
 )
 _FILL_HDR = PatternFill("solid", fgColor=COLOR_HEADER)
-_FILL_TTL = PatternFill("solid", fgColor=COLOR_TITULO)
 _FILL_ZEBRA = PatternFill("solid", fgColor=COLOR_ZEBRA)
 _FILL_TOT = PatternFill("solid", fgColor=COLOR_TOTAL)
-_FONT_TTL = Font(name=_FONT, bold=True, color="FFFFFF", size=12)
+_FONT_TITLE = Font(name=_FONT, bold=True, size=16, color=COLOR_TITULO)
+_FONT_SUB = Font(name=_FONT, size=10, color="666666")
 _FONT_HDR = Font(name=_FONT, bold=True, color="FFFFFF", size=10)
 _FONT_BODY = Font(name=_FONT, size=10)
 _FONT_BOLD = Font(name=_FONT, bold=True, size=10)
+_WRAP = Alignment(wrap_text=True, horizontal="center", vertical="center")
+
+MEDIOS_ORDEN = (
+    "Master Crédito",
+    "Master Débito",
+    "Visa Crédito",
+    "Visa Débito",
+    "CABAL",
+    "FAVA",
+    "Naranja",
+)
+HDR_DETALLE = [
+    "Nro. Liquidación",
+    "Local",
+    "Tipo",
+    "F. Presentación",
+    "F. Pago (Acreditación)",
+    "Ventas Brutas",
+    "Neto Gravado 21% (Arancel+Dto.Financ.)",
+    "IVA Crédito Fiscal 21%",
+    "Percepción IIBB",
+    "Retención IIBB SIRTAC",
+    "Percepción IVA",
+    "Neto según Liquidación",
+    "Neto Calculado",
+    "Diferencia",
+]
+NOTA_HOJA = (
+    'Notas: "Local" indica de qué comercio proviene cada liquidación '
+    "(JBJ=Juan B. Justo, GUE=Güemes), sumados en esta solapa. "
+    '"Neto Gravado 21%" e "IVA Crédito Fiscal 21%" agrupan Arancel '
+    "(+cuotas/costo financiero) y Dto.Financiación con su IVA. "
+    'Filas "Ajuste retenc." son correcciones sin venta asociada; '
+    '"Nota de crédito" son devoluciones con importes negativos.'
+)
 
 RE_PAGO = re.compile(
     r"IMPORTE\s*NETO\s*DE\s*PAGOS\s*\$\s*([\d.]+,\d{2})(-)?"
     r".{0,250}?"
     r"el\s+d[ií]a\s+(\d{2}/\d{2}/\d{4})"
     r".{0,180}?"
-    r"Nro\.?\s*Liq:\s*(\d+)",
+    r"Nro\.?\s*Liq:\s*(\d+)"
+    r"(?:F\.?\s*Pres\s*(\d{2}/\d{2}/\d{4}))?",
     re.I | re.S,
 )
 RE_VENTA_CTDO = re.compile(
@@ -67,32 +101,13 @@ RE_VTA_CUO = re.compile(
     r"Cup[^\s]*\s+([\d.]+,\d{2})\s+([\d.]+,\d{2})\s+([\d.]+,\d{2})",
     re.I,
 )
-
-HEADERS_MOV = [
-    "Transacción",
-    "Ventas c/descuento",
-    "VENTAS C/DTO PLAN CUOTAS",
-    "Dto. Arancel",
-    "ARANCEL CUOTAS",
-    "DTO S/VENTAS FIN ADQ CONT",
-    "DTO S/VENTAS FIN ADQ CUOTA",
-    "IVA ARANCEL CUOTAS 21,00%",
-    "IVA S/DTO FIN ADQ CUOTA 21,00%",
-    "IVA S/DTO FIN ADQ CONT 21,00%",
-    "IVA CRED.FISC.COMERCIO S/ARANC 21,00%",
-    "PERCEPCION IVA R.G. 2408 1,50 %",
-    "PERCEPCION IVA R.G. 2408 3,00 %",
-    "RETENCION ING.BRUTOS SIRTAC",
-    "PER B.A.I.BR.DN.01/04",
-    "QR PERC. IIBB. CABA REG GRAL",
-    "QR PERCEPCION IVA 2408",
-    "SERVICIO OPER. INTERNAC.",
-    "IVA RI SERV.OPER. INT.",
-    "IMPORTE NETO DE PAGOS",
-    "Nro Liquidación",
-    "Fecha pago",
-    "Archivo",
-]
+RE_TOTAL_PRESENTADO = re.compile(r"Total\s+presentado:\s*([\d.]+,\d{2})", re.I)
+RE_CUIT = re.compile(r"CUIT:\s*(\d{2}-\d{8}-\d)")
+RE_NRO_COM = re.compile(r"N.?º?\s*Comercio:\s*([0-9/ ]+)", re.I)
+RE_TITULO_FD = re.compile(
+    r"TARJETA\s+DE\s+(CR[EÉ]DITO|D[EÉ]BITO)\s+PESOS\s+(\w+)\s+(\d{4})",
+    re.I,
+)
 
 
 def money(s: str | None, neg: str | None = None) -> float:
@@ -140,6 +155,48 @@ def clasificar_pdf(nombre: str, texto: str) -> str:
     return "OTRO"
 
 
+def _fecha(s: str) -> str:
+    m = re.search(r"(\d{2})/(\d{2})/(\d{2,4})", str(s or ""))
+    if not m:
+        return str(s or "")
+    d, mo, y = m.groups()
+    if len(y) == 2:
+        y = "20" + y
+    return f"{d}/{mo}/{y}"
+
+
+def _local(nombre: str, texto: str = "") -> str:
+    n = (nombre or "").upper()
+    if re.search(r"\bGUE\b", n) or "6378" in n:
+        return "GUE"
+    if re.search(r"\bJBJ\b", n) or "5031" in n or "1614" in n:
+        return "JBJ"
+    blob = f"{nombre} {texto[:2000]}".upper()
+    if re.search(r"\bGUE\b|GUEMES|GÜEMES", blob):
+        return "GUE"
+    if re.search(r"\bJBJ\b|JUSTO", blob):
+        return "JBJ"
+    return ""
+
+
+def _medio_fd(nombre: str, texto: str) -> str:
+    n = (nombre or "").upper()
+    t = (texto or "")[:2500].upper()
+    deb = bool(
+        re.search(r"DEBIT|DEB\b", n)
+        or re.search(r"TARJETA DE D[EÉ]BITO", t)
+    )
+    if "VISA" in n or "VISA" in t:
+        return "Visa Débito" if deb else "Visa Crédito"
+    if "MASTER" in n or "MASTERCARD" in t:
+        return "Master Débito" if deb else "Master Crédito"
+    m = RE_TITULO_FD.search(texto or "")
+    if m:
+        deb = "DEB" in m.group(1).upper()
+        return "Master Débito" if deb else "Master Crédito"
+    return "Master Crédito"
+
+
 @dataclass
 class VentaCupon:
     fecha: str
@@ -173,6 +230,11 @@ class LiqFD:
     iva_serv_int: float = 0.0
     otras: float = 0.0
     neto: float = 0.0
+    fecha_pres: str = ""
+    local: str = ""
+    tipo: str = "Liquidación de ventas"
+    medio: str = ""
+    presentado: float = 0.0
     cupones: list[VentaCupon] = field(default_factory=list)
     otras_det: list[str] = field(default_factory=list)
 
@@ -181,46 +243,60 @@ class LiqFD:
         return round(self.ventas_contado + self.ventas_cuotas, 2)
 
     @property
-    def bi21(self) -> float:
+    def neto_gravado(self) -> float:
         return round(
             self.arancel + self.arancel_cuotas + self.dto_cont + self.dto_cuota + self.serv_int,
             2,
         )
 
     @property
+    def iva_cf(self) -> float:
+        return round(
+            self.iva_arancel
+            + self.iva_arancel_cuotas
+            + self.iva_dto_cont
+            + self.iva_dto_cuota
+            + self.iva_serv_int,
+            2,
+        )
+
+    @property
+    def perc_iibb(self) -> float:
+        return round(self.per_iibb_ba + self.perc_caba, 2)
+
+    @property
     def perc_iva(self) -> float:
         return round(self.perc_iva_15 + self.perc_iva_30 + self.perc_iva_qr, 2)
 
     @property
-    def ret_iibb(self) -> float:
-        return round(self.sirtac, 2)
-
-    @property
     def deducciones(self) -> float:
         return round(
-            self.arancel
-            + self.arancel_cuotas
-            + self.dto_cont
-            + self.dto_cuota
-            + self.iva_arancel
-            + self.iva_arancel_cuotas
-            + self.iva_dto_cont
-            + self.iva_dto_cuota
-            + self.perc_iva_15
-            + self.perc_iva_30
-            + self.sirtac
-            + self.per_iibb_ba
-            + self.perc_caba
-            + self.perc_iva_qr
-            + self.serv_int
-            + self.iva_serv_int
-            + self.otras,
+            self.neto_gravado + self.iva_cf + self.perc_iibb + self.sirtac + self.perc_iva + self.otras,
             2,
         )
 
     @property
     def neto_calc(self) -> float:
         return round(self.ventas - self.deducciones, 2)
+
+
+@dataclass
+class FilaLiq:
+    nro: str
+    local: str
+    tipo: str
+    f_pres: str
+    f_pago: str
+    ventas: float
+    neto_gravado: float
+    iva_cf: float
+    perc_iibb: float
+    sirtac: float
+    perc_iva: float
+    neto: float
+    medio: str
+    declarado: float = 0.0
+    archivo: str = ""
 
 
 @dataclass
@@ -243,14 +319,14 @@ class ResultadoTarjetasEstudio:
 
 def _aplicar_deduccion(liq: LiqFD, concepto: str, monto: float) -> None:
     u = re.sub(r"\s+", " ", concepto.upper())
-    if "ARANCEL CUOTAS" in u:
+    if "IVA ARANCEL CUOTAS" in u or ("IVA" in u and "ARANCEL CUOTAS" in u):
+        liq.iva_arancel_cuotas = round(liq.iva_arancel_cuotas + monto, 2)
+    elif "ARANCEL CUOTAS" in u:
         liq.arancel_cuotas = round(liq.arancel_cuotas + monto, 2)
     elif re.search(r"\bARANCEL\b", u) and "IVA" not in u:
         liq.arancel = round(liq.arancel + monto, 2)
     elif "IVA CRED" in u or "S/ARANC" in u:
         liq.iva_arancel = round(liq.iva_arancel + monto, 2)
-    elif "IVA ARANCEL CUOTAS" in u:
-        liq.iva_arancel_cuotas = round(liq.iva_arancel_cuotas + monto, 2)
     elif "IVA S/DTO FIN ADQ CUOTA" in u:
         liq.iva_dto_cuota = round(liq.iva_dto_cuota + monto, 2)
     elif "IVA S/DTO FIN ADQ CONT" in u:
@@ -283,6 +359,12 @@ def _aplicar_deduccion(liq: LiqFD, concepto: str, monto: float) -> None:
 
 def parsear_fd(path: Path, texto: str | None = None) -> list[LiqFD]:
     text = texto if texto is not None else texto_pdf(path)
+    presentado = 0.0
+    m_tp = RE_TOTAL_PRESENTADO.search(text)
+    if m_tp:
+        presentado = money(m_tp.group(1))
+    medio = _medio_fd(path.name, text)
+    local = _local(path.name, text)
     out: list[LiqFD] = []
     matches = list(RE_PAGO.finditer(text))
     for i, m in enumerate(matches):
@@ -291,8 +373,12 @@ def parsear_fd(path: Path, texto: str | None = None) -> list[LiqFD]:
         liq = LiqFD(
             archivo=path.name,
             nro=m.group(4),
-            fecha=m.group(3),
+            fecha=_fecha(m.group(3)),
             neto=money(m.group(1), m.group(2)),
+            fecha_pres=_fecha(m.group(5) or ""),
+            local=local,
+            medio=medio,
+            presentado=presentado,
         )
         for mv in re.finditer(
             r"\+\s*VENTAS\s+C/?DESCUENTO\s+CONTADO\s*\$\s*([\d.]+,\d{2})(-)?",
@@ -312,10 +398,13 @@ def parsear_fd(path: Path, texto: str | None = None) -> list[LiqFD]:
             re.I,
         ):
             liq.ventas_cuotas = round(liq.ventas_cuotas + money(mv.group(1), mv.group(2)), 2)
+        qrpct = False
         for md in re.finditer(r"-\s*((?:(?!\$).){3,90}?)\$\s*([\d.]+,\d{2})(-)?", bloque):
             conc = re.sub(r"\s+", " ", md.group(1)).strip()
             if re.search(r"0800|www\.|Rep[uú]blica|Estimado|Centro de Atenci", conc, re.I):
                 continue
+            if "QRPCT" in conc.upper():
+                qrpct = True
             _aplicar_deduccion(liq, conc, money(md.group(2), md.group(3)))
         for mc in RE_VENTA_CTDO.finditer(bloque):
             liq.cupones.append(
@@ -325,6 +414,12 @@ def parsear_fd(path: Path, texto: str | None = None) -> list[LiqFD]:
             liq.cupones.append(
                 VentaCupon(mc.group(1), money(mc.group(2)), money(mc.group(3)), money(mc.group(4)))
             )
+        if liq.ventas < 0:
+            liq.tipo = "Nota de crédito"
+        elif qrpct or abs(liq.ventas) < 0.01:
+            liq.tipo = "Ajuste retenc. (QRPCT)"
+        else:
+            liq.tipo = "Liquidación de ventas"
         out.append(liq)
     return out
 
@@ -336,22 +431,38 @@ def parsear_naranja(path: Path, texto: str | None = None) -> dict[str, float | s
         m = re.search(pat, t, re.I | re.S)
         return money(m.group(1)) if m else 0.0
 
-    etiqueta = path.stem
-    if re.search(r"\bGUE\b|GUEMES", path.name + t[:800], re.I):
-        etiqueta = "Güemes"
-    elif re.search(r"\bJBJ\b|JUSTO", path.name + t[:800], re.I):
-        etiqueta = "JB Justo"
+    nro = ""
+    m_nro = re.search(r"Tipo y N[º°o.]+\s*:\s*([A-Z0-9\-]+)", t, re.I)
+    if m_nro:
+        nro = m_nro.group(1).strip()
+    m_pago = re.search(r"Fecha de Pago\s+(\d{2}/\d{2}/\d{2,4})", t, re.I)
+    f_pago = _fecha(m_pago.group(1) if m_pago else "")
+    m_comp = re.search(r"(\d{2}/\d{2}/\d{2,4})\s+\d{5,}", t)
+    f_pres = _fecha(m_comp.group(1) if m_comp else "")
+    local = _local(path.name, t)
+    if local == "GUE":
+        etiqueta = "GUE"
+    elif local == "JBJ":
+        etiqueta = "JBJ"
+    else:
+        etiqueta = path.stem
+    arancel = grab(r"Arancel\s+-\s*\$\s*([\d.]+,\d{2})")
+    interes = grab(r"Inter[eé]s\s+Plan[^\n]*\$\s*([\d.]+,\d{2})")
     return {
         "archivo": path.name,
-        "etiqueta": etiqueta,
+        "nro": nro,
+        "local": etiqueta if etiqueta in ("GUE", "JBJ") else local,
+        "f_pres": f_pres,
+        "f_pago": f_pago,
         "total": grab(r"Totales\s+1\s+\$\s*([\d.]+,\d{2})"),
-        "arancel": grab(r"Arancel\s+-\s*\$\s*([\d.]+,\d{2})"),
-        "interes": grab(r"Inter[eé]s\s+Plan[^\n]*\$\s*([\d.]+,\d{2})"),
+        "arancel": arancel,
+        "interes": interes,
         "iva": grab(r"IVA\s+21\.0\s*%\s+\$\s*([\d.]+,\d{2})"),
         "perc_iva": grab(r"Percepci[oó]n\s+de\s+IVA[^\n]*\$\s*([\d.]+,\d{2})"),
         "perc_iibb": grab(r"Percepci[oó]n\s+Ingresos?\s+Brutos[^\n]*\$\s*([\d.]+,\d{2})"),
         "sirtac": grab(r"Sirtac[^\n]*\$\s*([\d.]+,\d{2})"),
         "neto": grab(r"Neto Liquidado.*?Importe\s+\$\s*([\d.]+,\d{2})"),
+        "bi": round(arancel + interes, 2),
     }
 
 
@@ -362,17 +473,28 @@ def parsear_fava(path: Path, texto: str | None = None) -> dict[str, float | str]
         m = re.search(pat, t, re.I)
         return money(m.group(1)) if m else 0.0
 
-    etiqueta = path.stem
-    if re.search(r"\bGUE\b|GUEMES", path.name + t[:800], re.I):
-        etiqueta = "Güemes"
-    elif re.search(r"\bJBJ\b|JUSTO", path.name + t[:800], re.I):
-        etiqueta = "JB Justo"
+    nro = ""
+    m_nro = re.search(r"N[°º]\s*A\s*(\d{4}-\d+)", t, re.I)
+    if m_nro:
+        nro = "A" + m_nro.group(1)
+    m_pago = re.search(r"COMPROBANTELIQUIDACION PAGO.*?Fecha:\s*(\d{2}/\d{2}/\d{2,4})", t, re.I | re.S)
+    f_pago = _fecha(m_pago.group(1) if m_pago else "")
+    m_pres = re.search(
+        r"DETALLE ULTIMA PRESENTACION.*?(\d{2}/\d{2}/\d{2,4})",
+        t,
+        re.I | re.S,
+    )
+    f_pres = _fecha(m_pres.group(1) if m_pres else "")
+    local = _local(path.name, t)
     com = grab(r"Cargos y Bonific\.\s*Comisi[oó]n\s*:\s*-?\s*([\d.]+,\d{2})")
     dto = grab(r"Descuento Plan C\s*:\s*-?\s*([\d.]+,\d{2})")
     bon = grab(r"Bonificacion Plan C\s*:\s*([\d.]+,\d{2})")
     return {
         "archivo": path.name,
-        "etiqueta": etiqueta,
+        "nro": nro,
+        "local": local,
+        "f_pres": f_pres,
+        "f_pago": f_pago,
         "total": grab(r"Total de la presentaci[oó]n\s*:\s*([\d.]+,\d{2})"),
         "comision": com,
         "dto": dto,
@@ -388,6 +510,7 @@ def parsear_fava(path: Path, texto: str | None = None) -> dict[str, float | str]
 
 def parsear_cabal(path: Path, texto: str | None = None) -> list[dict[str, float | str]]:
     t = texto if texto is not None else texto_pdf(path)
+    local = _local(path.name, t) or "JBJ"
     bloques = re.split(r"FECHA DE PAGO\s*:", t)
     out: list[dict[str, float | str]] = []
     for b in bloques[1:]:
@@ -399,6 +522,8 @@ def parsear_cabal(path: Path, texto: str | None = None) -> list[dict[str, float 
             m = re.search(pat, b, re.I)
             return money(m.group(1)) if m else 0.0
 
+        m_pago = re.search(r"(\d{2}/\d{2}/\d{4})", b)
+        f_pago = _fecha(m_pago.group(1) if m_pago else "")
         m_ar = re.search(r"ARANCEL DE DESCUENTO\s+[\d.,]+%\s+([\d.]+,\d{2})(-)?", b, re.I)
         arancel = money(m_ar.group(1), m_ar.group(2)) if m_ar else 0.0
         cft_m = re.search(r"COSTO FINANCIERO TOTAL\s+([\d.]+,\d{2})(-)?", b, re.I)
@@ -409,385 +534,318 @@ def parsear_cabal(path: Path, texto: str | None = None) -> list[dict[str, float 
             nums_s = re.findall(r"([\d.]+,\d{2})(-)?", m_sirtac.group(0))
             if nums_s:
                 sirtac = money(nums_s[-1][0], nums_s[-1][1])
-        tipo = "DEBITO" if "CABAL DEBITO" in b.upper() else "CREDITO"
+        iva = 0.0
+        m_iva = re.search(r"IVA S/ARANCEL \+ COSTO FINANCIERO[^\n]+", b, re.I)
+        if not m_iva:
+            m_iva = re.search(r"IVA S/ARANCEL DE DESCUENTO[^\n]+", b, re.I)
+        if m_iva:
+            nums_i = re.findall(r"([\d.]+,\d{2})(-)?", m_iva.group(0))
+            if nums_i:
+                iva = money(nums_i[-1][0], nums_i[-1][1])
+        m_pres = re.search(
+            r"(\d{2}/\d{2}/\d{4})\s+\S+\s+\S+\s+\d+\s+\*TOTAL RESUMEN\*",
+            b,
+            re.I,
+        )
+        if m_pres:
+            f_pres = _fecha(m_pres.group(1))
+        else:
+            fechas_venta = re.findall(r"(\d{2}/\d{2}/\d{4})\s+\d+", b)
+            f_pres = _fecha(fechas_venta[-1] if fechas_venta else f_pago)
         out.append(
             {
                 "archivo": path.name,
-                "nro": m_nro.group(1),
-                "tipo": tipo,
-                "etiqueta": f"Cabal {tipo} {m_nro.group(1)}",
+                "nro": m_nro.group(1).lstrip("0") or m_nro.group(1),
+                "local": local,
+                "f_pres": f_pres,
+                "f_pago": f_pago,
                 "total": grab(r"TOTAL DE VENTAS\.[^\n]*?([\d.]+,\d{2})"),
                 "arancel": arancel,
                 "cft": cft,
+                "iva": iva,
                 "sirtac": sirtac,
                 "neto": grab(r"IMPORTE NETO FINAL A LIQUIDAR\s*\.*\s*([\d.]+,\d{2})"),
+                "bi": round(arancel + cft, 2),
             }
         )
     return out
 
 
-def _fmt(cell) -> None:
+def _orden_fila(x: FilaLiq) -> tuple:
+    return ({"JBJ": 0, "GUE": 1}.get(x.local, 9), x.f_pago, x.nro)
+
+
+def _fmt_money(cell) -> None:
     cell.number_format = _NUM
     cell.font = _FONT_BODY
     cell.border = _THIN
 
 
-def _bi_formula(*montos: float) -> float | str | None:
-    parts = [round(float(x), 2) for x in montos if abs(float(x or 0)) > 0.001]
-    if not parts:
-        return None
-    if len(parts) == 1:
-        return parts[0]
-    return "=" + "+".join(str(p) for p in parts)
-
-
-def _titulo_seccion(ws: Worksheet, row: int, texto: str, last_col: int = 10) -> None:
-    ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=last_col)
-    cell = ws.cell(row, 2, texto)
-    cell.font = _FONT_TTL
-    cell.fill = _FILL_TTL
-    cell.alignment = Alignment(horizontal="left", vertical="center")
-
-
-def _headers(ws: Worksheet, row: int, titulos: list[str], start_col: int = 2) -> None:
-    for i, h in enumerate(titulos):
-        cell = ws.cell(row, start_col + i, h)
-        cell.font = _FONT_HDR
-        cell.fill = _FILL_HDR
-        cell.alignment = Alignment(wrap_text=True, horizontal="center", vertical="center")
-        cell.border = _THIN
-
-
-def _escribir_liquidaciones(
-    ws: Worksheet,
+def _filas_desde_datos(
     naranja: list[dict],
     fava: list[dict],
     cabal: list[dict],
     liqs: list[LiqFD],
+) -> list[FilaLiq]:
+    filas: list[FilaLiq] = []
+    for x in liqs:
+        filas.append(
+            FilaLiq(
+                nro=x.nro,
+                local=x.local,
+                tipo=x.tipo,
+                f_pres=x.fecha_pres,
+                f_pago=x.fecha,
+                ventas=x.ventas,
+                neto_gravado=x.neto_gravado,
+                iva_cf=x.iva_cf,
+                perc_iibb=x.perc_iibb,
+                sirtac=x.sirtac,
+                perc_iva=x.perc_iva,
+                neto=x.neto,
+                medio=x.medio,
+                declarado=x.presentado,
+                archivo=x.archivo,
+            )
+        )
+    for item in cabal:
+        filas.append(
+            FilaLiq(
+                nro=str(item.get("nro") or ""),
+                local=str(item.get("local") or ""),
+                tipo="Liquidación de ventas",
+                f_pres=str(item.get("f_pres") or ""),
+                f_pago=str(item.get("f_pago") or ""),
+                ventas=float(item.get("total") or 0),
+                neto_gravado=float(item.get("bi") or 0),
+                iva_cf=float(item.get("iva") or 0),
+                perc_iibb=0.0,
+                sirtac=float(item.get("sirtac") or 0),
+                perc_iva=0.0,
+                neto=float(item.get("neto") or 0),
+                medio="CABAL",
+                declarado=float(item.get("total") or 0),
+                archivo=str(item.get("archivo") or ""),
+            )
+        )
+    for item in fava:
+        filas.append(
+            FilaLiq(
+                nro=str(item.get("nro") or ""),
+                local=str(item.get("local") or ""),
+                tipo="Liquidación de ventas",
+                f_pres=str(item.get("f_pres") or ""),
+                f_pago=str(item.get("f_pago") or ""),
+                ventas=float(item.get("total") or 0),
+                neto_gravado=float(item.get("bi") or 0),
+                iva_cf=float(item.get("iva") or 0),
+                perc_iibb=float(item.get("perc_iibb") or 0),
+                sirtac=float(item.get("sirtac") or 0),
+                perc_iva=float(item.get("perc_iva") or 0),
+                neto=float(item.get("neto") or 0),
+                medio="FAVA",
+                declarado=float(item.get("total") or 0),
+                archivo=str(item.get("archivo") or ""),
+            )
+        )
+    for item in naranja:
+        filas.append(
+            FilaLiq(
+                nro=str(item.get("nro") or ""),
+                local=str(item.get("local") or ""),
+                tipo="Liquidación de ventas",
+                f_pres=str(item.get("f_pres") or ""),
+                f_pago=str(item.get("f_pago") or ""),
+                ventas=float(item.get("total") or 0),
+                neto_gravado=float(item.get("bi") or 0),
+                iva_cf=float(item.get("iva") or 0),
+                perc_iibb=float(item.get("perc_iibb") or 0),
+                sirtac=float(item.get("sirtac") or 0),
+                perc_iva=float(item.get("perc_iva") or 0),
+                neto=float(item.get("neto") or 0),
+                medio="Naranja",
+                declarado=float(item.get("total") or 0),
+                archivo=str(item.get("archivo") or ""),
+            )
+        )
+    return filas
+
+
+def _encabezado_hoja(ws: Worksheet, titulo: str, comercio: str, cuit: str, periodo: str) -> None:
+    ws["A1"] = titulo
+    ws["A1"].font = _FONT_TITLE
+    ws.merge_cells("A1:N1")
+    cuit_txt = f"CUIT {cuit}" if cuit else ""
+    ws["A2"] = f"Comercio: {comercio or '—'} — {cuit_txt}".strip(" —")
+    ws["A2"].font = _FONT_SUB
+    ws.merge_cells("A2:N2")
+    ws["A3"] = (
+        "Entidad pagadora: Banco de la Nación Argentina (First Data/Fiserv), "
+        "salvo CABAL y FAVA/Naranja (procesadoras propias)."
+    )
+    ws["A3"].font = _FONT_SUB
+    ws.merge_cells("A3:N3")
+    ws.row_dimensions[1].height = 22
+
+
+def _escribir_hoja_medio(
+    ws: Worksheet,
+    medio: str,
+    filas: list[FilaLiq],
     comercio: str,
+    cuit: str,
+    periodo: str,
+) -> int:
+    _encabezado_hoja(
+        ws,
+        f"Liquidación de Tarjeta — {medio} — {periodo}".strip(" —"),
+        comercio,
+        cuit,
+        periodo,
+    )
+    header_row = 5
+    for i, h in enumerate(HDR_DETALLE, 1):
+        cell = ws.cell(header_row, i, h)
+        cell.font = _FONT_HDR
+        cell.fill = _FILL_HDR
+        cell.alignment = _WRAP
+        cell.border = _THIN
+    ws.row_dimensions[header_row].height = 36
+    start = header_row + 1
+    for i, fila in enumerate(filas):
+        r = start + i
+        ws.cell(r, 1, fila.nro)
+        ws.cell(r, 2, fila.local)
+        ws.cell(r, 3, fila.tipo)
+        ws.cell(r, 4, fila.f_pres)
+        ws.cell(r, 5, fila.f_pago)
+        ws.cell(r, 6, fila.ventas)
+        ws.cell(r, 7, fila.neto_gravado)
+        ws.cell(r, 8, fila.iva_cf)
+        ws.cell(r, 9, fila.perc_iibb)
+        ws.cell(r, 10, fila.sirtac)
+        ws.cell(r, 11, fila.perc_iva)
+        ws.cell(r, 12, fila.neto)
+        ws.cell(r, 13, f"=F{r}-G{r}-H{r}-I{r}-J{r}-K{r}")
+        ws.cell(r, 14, f"=L{r}-M{r}")
+        for c in range(1, 15):
+            cell = ws.cell(r, c)
+            cell.font = _FONT_BODY
+            cell.border = _THIN
+            if c >= 6:
+                cell.number_format = _NUM
+            if i % 2:
+                cell.fill = _FILL_ZEBRA
+    last = start + len(filas) - 1
+    tot = last + 1
+    ws.cell(tot, 1, "TOTAL")
+    ws.cell(tot, 2, f"{len(filas)} liq.")
+    for col, letter in enumerate("FGHIJKLMN", 6):
+        ws.cell(tot, col, f"=SUM({letter}{start}:{letter}{last})")
+    for c in range(1, 15):
+        cell = ws.cell(tot, c)
+        cell.font = _FONT_BOLD
+        cell.fill = _FILL_TOT
+        cell.border = _THIN
+        if c >= 6:
+            cell.number_format = _NUM
+    nota_row = tot + 2
+    ws.merge_cells(start_row=nota_row, start_column=1, end_row=nota_row, end_column=14)
+    ws.cell(nota_row, 1, NOTA_HOJA).font = _FONT_SUB
+    ws.cell(nota_row, 1).alignment = Alignment(wrap_text=True, vertical="top")
+    ws.row_dimensions[nota_row].height = 48
+    ws.auto_filter.ref = f"A{header_row}:N{last}"
+    ws.freeze_panes = f"A{start}"
+    widths = [16, 8, 22, 13, 16, 13, 20, 15, 13, 15, 12, 16, 14, 11]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+    return tot
+
+
+def _escribir_resumen(
+    ws: Worksheet,
+    refs: list[tuple[str, int, float, int]],
+    comercio: str,
+    cuit: str,
+    periodo: str,
+    nros_comercio: str,
+    sufijo: str = " (locales sumados)",
 ) -> None:
-    ws["A1"] = comercio or "Liquidaciones de tarjetas"
-    ws["A1"].font = Font(name=_FONT, bold=True, size=14, color=COLOR_TITULO)
-    row = 2
-    hdr_n = [
-        "Total Liquidacion",
-        "BI 21%",
-        "IVA 21%",
-        "Perc. IVA",
-        "Perc. IIBB",
-        "Ret. IIBB",
-        "TOTAL",
-        "Neto a Cobrar",
-        "Dif",
-    ]
-    if naranja:
-        _titulo_seccion(ws, row, "TARJETA NARANJA")
-        row += 1
-        _headers(ws, row, hdr_n)
-        row += 1
-        first = row
-        for item in naranja:
-            ws.cell(row, 1, item.get("etiqueta") or item.get("archivo"))
-            ws.cell(row, 2, item["total"])
-            interes = float(item.get("interes") or 0)
-            arancel = float(item.get("arancel") or 0)
-            ws.cell(row, 3, f"={arancel}+{interes}" if interes else arancel)
-            ws.cell(row, 4, f"=+C{row}*0.21")
-            ws.cell(row, 5, f"=+C{row}*0.03" if float(item.get("perc_iva") or 0) else 0)
-            ws.cell(row, 6, f"=+C{row}*0.04" if float(item.get("perc_iibb") or 0) else 0)
-            ws.cell(row, 7, item.get("sirtac") or 0)
-            ws.cell(row, 8, item.get("neto") or 0)
-            ws.cell(row, 9, f"=+B{row}-SUM(C{row}:G{row})")
-            ws.cell(row, 10, f"=+H{row}-I{row}")
-            for c in range(2, 11):
-                _fmt(ws.cell(row, c))
-            row += 1
-        last = row - 1
-        ws.cell(row, 2, f"=SUM(B{first}:B{last})")
-        for col, letter in enumerate("CDEFGHIJ", 3):
-            ws.cell(row, col, f"=SUM({letter}{first}:{letter}{last})")
-        for c in range(2, 11):
-            _fmt(ws.cell(row, c))
-            ws.cell(row, c).font = _FONT_BOLD
-            ws.cell(row, c).fill = _FILL_TOT
-        row += 2
-
-    if fava:
-        _titulo_seccion(ws, row, "FAVACARD")
-        row += 1
-        _headers(ws, row, hdr_n)
-        row += 1
-        first = row
-        for item in fava:
-            ws.cell(row, 1, item.get("etiqueta") or item.get("archivo"))
-            ws.cell(row, 2, item["total"])
-            ws.cell(row, 3, f"={item['comision']}+{item['dto']}-{item['bonif']}")
-            ws.cell(row, 4, f"=+C{row}*0.21")
-            ws.cell(row, 5, item.get("perc_iva") or 0)
-            ws.cell(row, 6, f"=+C{row}*0.04")
-            ws.cell(row, 7, item.get("sirtac") or 0)
-            ws.cell(row, 8, item.get("neto") or 0)
-            ws.cell(row, 9, f"=+B{row}-SUM(C{row}:G{row})")
-            ws.cell(row, 10, f"=+H{row}-I{row}")
-            for c in range(2, 11):
-                _fmt(ws.cell(row, c))
-            row += 1
-        last = row - 1
-        ws.cell(row, 2, f"=SUM(B{first}:B{last})")
-        for col, letter in enumerate("CDEFGHIJ", 3):
-            ws.cell(row, col, f"=SUM({letter}{first}:{letter}{last})")
-        for c in range(2, 11):
-            _fmt(ws.cell(row, c))
-            ws.cell(row, c).font = _FONT_BOLD
-            ws.cell(row, c).fill = _FILL_TOT
-        row += 2
-
-    if cabal:
-        hdr_c = [
-            "Total Liquidacion",
-            "BI 21%",
-            "IVA 21%",
-            "BI 10,5%",
-            "IVA 10,5%",
-            "RET. IIBB",
-            "TOTAL",
-            "Neto a Cobrar",
-            "Dif",
-        ]
-        _titulo_seccion(ws, row, "CABAL SA")
-        row += 1
-        _headers(ws, row, hdr_c)
-        row += 1
-        first = row
-        for item in cabal:
-            ws.cell(row, 1, item.get("etiqueta") or item.get("nro"))
-            ws.cell(row, 2, item["total"])
-            ws.cell(row, 3, _bi_formula(float(item.get("arancel") or 0), float(item.get("cft") or 0)))
-            ws.cell(row, 4, f"=+C{row}*0.21")
-            ws.cell(row, 6, f"=+E{row}*0.105")
-            ws.cell(row, 7, item.get("sirtac") or 0)
-            ws.cell(row, 8, item.get("neto") or 0)
-            ws.cell(row, 9, f"=+B{row}-SUM(C{row}:G{row})")
-            ws.cell(row, 10, f"=+H{row}-I{row}")
-            for c in range(2, 11):
-                _fmt(ws.cell(row, c))
-            row += 1
-        last = row - 1
-        ws.cell(row, 2, f"=SUM(B{first}:B{last})")
-        for col, letter in enumerate("CDEFGH", 3):
-            ws.cell(row, col, f"=SUM({letter}{first}:{letter}{last})")
-        ws.cell(row, 9, f"=+B{row}-SUM(C{row}:G{row})")
-        ws.cell(row, 10, f"=+H{row}-I{row}")
-        for c in range(2, 11):
-            _fmt(ws.cell(row, c))
-            ws.cell(row, c).font = _FONT_BOLD
-            ws.cell(row, c).fill = _FILL_TOT
-        row += 2
-
-    if liqs:
-        hdr_nacion = [
-            "Total Liquidacion",
-            "BI 21%",
-            "IVA 21%",
-            "Perc. IVA",
-            "Perc. IIBB",
-            "Perc. CABA",
-            "Ret. IIBB",
-            "Neto a Cobrar",
-            "Dif",
-        ]
-        _titulo_seccion(ws, row, "BANCO NACION / FIRST DATA")
-        row += 1
-        _headers(ws, row, hdr_nacion)
-        row += 1
-        ws.cell(row, 2, round(sum(x.ventas for x in liqs), 2))
-        ws.cell(row, 3, round(sum(x.bi21 for x in liqs), 2))
-        ws.cell(row, 4, f"=+C{row}*0.21")
-        ws.cell(row, 5, round(sum(x.perc_iva for x in liqs), 2))
-        ws.cell(row, 6, round(sum(x.per_iibb_ba for x in liqs), 2))
-        ws.cell(row, 7, round(sum(x.perc_caba for x in liqs), 2))
-        ws.cell(row, 8, round(sum(x.ret_iibb for x in liqs), 2))
-        ws.cell(row, 9, round(sum(x.neto for x in liqs), 2))
-        ws.cell(row, 10, f"=+B{row}-SUM(C{row}:H{row})-I{row}")
-        for c in range(2, 11):
-            _fmt(ws.cell(row, c))
-            ws.cell(row, c).font = _FONT_BOLD
-
-    ws.column_dimensions["A"].width = 22
-    for i in range(2, 11):
-        ws.column_dimensions[get_column_letter(i)].width = 14
-    ws.freeze_panes = "A2"
-
-
-def _escribir_first_data(ws: Worksheet, liqs: list[LiqFD], comercio: str, periodo: str) -> None:
+    ws["A1"] = f"Liquidaciones de Tarjeta — {periodo}{sufijo}".strip()
+    ws["A1"].font = _FONT_TITLE
+    ws.merge_cells("A1:K1")
+    ws["A2"] = f"Comercio: {comercio or '—'}   |   CUIT: {cuit or '—'}"
+    ws["A2"].font = _FONT_SUB
     ws.merge_cells("A2:K2")
-    ws["A2"] = comercio or "FIRST DATA"
-    ws["A2"].font = _FONT_TTL
-    ws["A2"].fill = _FILL_TTL
-    ws.merge_cells("A3:L3")
-    ws["A3"] = f"FIRST DATA {periodo}".strip()
-    ws["A3"].font = _FONT_HDR
-    ws["A3"].fill = _FILL_HDR
+    ws["A3"] = nros_comercio or "First Data/Fiserv, CABAL, FAVA y Naranja."
+    ws["A3"].font = _FONT_SUB
+    ws.merge_cells("A3:K3")
+    ws.merge_cells("A4:K4")
+    ws["A4"] = (
+        "Notas: cada solapa suma las liquidaciones de los locales (columna Local). "
+        'Percepción IIBB (col. F) incluye "PER B.A.I.BR.DN.01/04" y análogas. '
+        "Retención IIBB SIRTAC (col. G) y Percepción IVA (col. H) van por separado. "
+        '"Diferencia" (col. K) compara Ventas Brutas contra el total declarado; debe dar 0.'
+    )
+    ws["A4"].font = _FONT_SUB
+    ws["A4"].alignment = Alignment(wrap_text=True, vertical="top")
+    ws.row_dimensions[4].height = 48
     hdr = [
-        "TOTAL",
-        "BI 21",
-        "IVA 21",
-        "BI 10,5%",
-        "IVA 10,5%",
-        "P IIBB",
-        "P IBB CABA",
-        "R IIBB",
-        "P IVA",
-        "NETO",
-        "Neto PDF",
-        "Dif",
-        "Nro Liq",
-        "Fecha",
-        "Archivo",
+        "Medio de pago",
+        "Cant. Liquidaciones",
+        "Ventas Brutas",
+        "Neto Gravado 21% (Arancel+Dto.Financ.)",
+        "IVA Crédito Fiscal 21%",
+        "Percepción IIBB",
+        "Retención IIBB SIRTAC",
+        "Percepción IVA",
+        "Importe Neto Acreditado",
+        "Total declarado (locales)",
+        "Diferencia",
     ]
     for i, h in enumerate(hdr, 1):
-        cell = ws.cell(4, i, h)
+        cell = ws.cell(6, i, h)
         cell.font = _FONT_HDR
         cell.fill = _FILL_HDR
-        cell.alignment = Alignment(wrap_text=True, horizontal="center")
+        cell.alignment = _WRAP
         cell.border = _THIN
-    start = 5
-    for i, liq in enumerate(liqs):
+    ws.row_dimensions[6].height = 52
+    start = 7
+    for i, (medio, tot_row, declarado, n_liq) in enumerate(refs):
         r = start + i
-        ws.cell(r, 1, liq.ventas)
-        ws.cell(r, 2, _bi_formula(liq.arancel, liq.arancel_cuotas, liq.dto_cont, liq.dto_cuota, liq.serv_int))
-        ws.cell(r, 3, f"=+B{r}*21%")
-        ws.cell(r, 5, f"=+D{r}*10.5%")
-        if liq.per_iibb_ba:
-            ws.cell(r, 6, liq.per_iibb_ba)
-        if liq.perc_caba:
-            ws.cell(r, 7, liq.perc_caba)
-        if liq.ret_iibb:
-            ws.cell(r, 8, liq.ret_iibb)
-        bits = [x for x in (liq.perc_iva_15, liq.perc_iva_30, liq.perc_iva_qr) if abs(x) > 0.001]
-        if len(bits) == 1:
-            ws.cell(r, 9, bits[0])
-        elif bits:
-            ws.cell(r, 9, "=" + "+".join(str(x) for x in bits))
-        ws.cell(r, 10, f"=+A{r}-SUM(B{r}:I{r})")
-        ws.cell(r, 11, liq.neto)
-        ws.cell(r, 12, f"=+K{r}-J{r}")
-        ws.cell(r, 13, liq.nro)
-        ws.cell(r, 14, liq.fecha)
-        ws.cell(r, 15, liq.archivo)
-        for c in range(1, 13):
-            _fmt(ws.cell(r, c))
-            if i % 2:
-                ws.cell(r, c).fill = _FILL_ZEBRA
-        for c in range(13, 16):
-            ws.cell(r, c).font = _FONT_BODY
-            ws.cell(r, c).border = _THIN
-    last = start + len(liqs) - 1
+        ws.cell(r, 1, medio)
+        quoted = f"'{medio}'"
+        ws.cell(r, 2, n_liq)
+        ws.cell(r, 3, f"={quoted}!F{tot_row}")
+        ws.cell(r, 4, f"={quoted}!G{tot_row}")
+        ws.cell(r, 5, f"={quoted}!H{tot_row}")
+        ws.cell(r, 6, f"={quoted}!I{tot_row}")
+        ws.cell(r, 7, f"={quoted}!J{tot_row}")
+        ws.cell(r, 8, f"={quoted}!K{tot_row}")
+        ws.cell(r, 9, f"={quoted}!L{tot_row}")
+        ws.cell(r, 10, declarado)
+        ws.cell(r, 11, f"=C{r}-J{r}")
+        for c in range(1, 12):
+            cell = ws.cell(r, c)
+            cell.font = _FONT_BODY
+            cell.border = _THIN
+            if c >= 2:
+                cell.number_format = _NUM if c >= 3 else "0"
+    last = start + len(refs) - 1
     tot = last + 1
-    for col, letter in enumerate("ABCDEFGHIJKL", 1):
-        if letter == "L":
-            ws[f"L{tot}"] = f"=+K{tot}-J{tot}"
-        else:
-            ws[f"{letter}{tot}"] = f"=SUM({letter}{start}:{letter}{last})"
-        _fmt(ws[f"{letter}{tot}"])
-        ws[f"{letter}{tot}"].font = _FONT_BOLD
-        ws[f"{letter}{tot}"].fill = _FILL_TOT
-    ws.auto_filter.ref = f"A4:O{last}"
-    ws.freeze_panes = "A5"
-    ws.row_dimensions[4].height = 30
-    for i, w in enumerate([12, 14, 12, 12, 12, 12, 12, 12, 12, 12, 12, 10, 12, 12, 36], 1):
-        ws.column_dimensions[get_column_letter(i)].width = w
-
-
-def _escribir_movimientos(ws: Worksheet, liqs: list[LiqFD]) -> list[tuple]:
-    for c, h in enumerate(HEADERS_MOV, 1):
-        cell = ws.cell(1, c, h)
-        cell.font = _FONT_HDR
-        cell.fill = _FILL_HDR
-        cell.alignment = Alignment(wrap_text=True, horizontal="center", vertical="center")
+    ws.cell(tot, 1, "TOTAL GENERAL")
+    for col, letter in enumerate("BCDEFGHIJK", 2):
+        ws.cell(tot, col, f"=SUM({letter}{start}:{letter}{last})")
+    for c in range(1, 12):
+        cell = ws.cell(tot, c)
+        cell.font = _FONT_BOLD
+        cell.fill = _FILL_TOT
         cell.border = _THIN
-    row = 2
-    control: list[tuple] = []
-    for liq in liqs:
-        for cup in liq.cupones:
-            ws.cell(row, 1, "VENTA")
-            ws.cell(row, 2, cup.ventas)
-            ws.cell(row, 4, -cup.arancel if cup.arancel else 0)
-            ws.cell(row, 21, liq.nro)
-            ws.cell(row, 22, liq.fecha)
-            ws.cell(row, 23, liq.archivo)
-            row += 1
-        ws.cell(row, 1, "LIQUIDACIÓN")
-        vals = {
-            2: liq.ventas_contado,
-            3: liq.ventas_cuotas,
-            4: -liq.arancel,
-            5: -liq.arancel_cuotas,
-            6: -liq.dto_cont,
-            7: -liq.dto_cuota,
-            8: -liq.iva_arancel_cuotas,
-            9: -liq.iva_dto_cuota,
-            10: -liq.iva_dto_cont,
-            11: -liq.iva_arancel,
-            12: -liq.perc_iva_15,
-            13: -liq.perc_iva_30,
-            14: -liq.sirtac,
-            15: -liq.per_iibb_ba,
-            16: -liq.perc_caba,
-            17: -liq.perc_iva_qr,
-            18: -liq.serv_int,
-            19: -liq.iva_serv_int,
-            20: liq.neto,
-            21: liq.nro,
-            22: liq.fecha,
-            23: liq.archivo,
-        }
-        for col, val in vals.items():
-            ws.cell(row, col, val)
-        ok = abs(liq.neto_calc - liq.neto) <= TOL
-        control.append(
-            (liq.nro, liq.ventas, -liq.deducciones, liq.neto_calc, liq.neto, "OK" if ok else "DIFF", liq.archivo)
-        )
-        row += 1
-    for r in ws.iter_rows(min_row=2, max_row=max(2, row - 1), min_col=2, max_col=20):
-        for cell in r:
-            if isinstance(cell.value, (int, float)):
-                _fmt(cell)
-    ws.auto_filter.ref = f"A1:W{max(1, row - 1)}"
-    ws.freeze_panes = "A2"
-    ws.row_dimensions[1].height = 32
-    for i in range(1, 24):
-        ws.column_dimensions[get_column_letter(i)].width = 16
-    ws.column_dimensions["W"].width = 36
-    return control
-
-
-def _escribir_control(ws: Worksheet, control: list[tuple]) -> None:
-    hdr = [
-        "Nro Liquidación",
-        "Ventas",
-        "Total Deducciones",
-        "Neto Calculado",
-        "Neto según PDF",
-        "Control",
-        "Archivo",
-    ]
-    for c, h in enumerate(hdr, 1):
-        cell = ws.cell(1, c, h)
-        cell.font = _FONT_HDR
-        cell.fill = _FILL_HDR
-        cell.border = _THIN
-    for i, fila in enumerate(control, 2):
-        for c, val in enumerate(fila, 1):
-            ws.cell(i, c, val)
-            if c in (2, 3, 4, 5):
-                _fmt(ws.cell(i, c))
-            else:
-                ws.cell(i, c).font = _FONT_BODY
-                ws.cell(i, c).border = _THIN
-    ws.auto_filter.ref = f"A1:G{len(control) + 1}"
-    ws.freeze_panes = "A2"
-    for i, w in enumerate([14, 14, 16, 16, 16, 12, 36], 1):
+        if c >= 3:
+            cell.number_format = _NUM
+    ws.freeze_panes = "A7"
+    widths = [18, 14, 17, 16, 14, 13, 15, 13, 16, 16, 12]
+    for i, w in enumerate(widths, 1):
         ws.column_dimensions[get_column_letter(i)].width = w
 
 
@@ -814,7 +872,7 @@ def _escribir_otros(ws: Worksheet, otros: list[dict]) -> None:
         for c, k in enumerate(cols, 1):
             ws.cell(i, c, d.get(k))
             if c >= 5:
-                _fmt(ws.cell(i, c))
+                _fmt_money(ws.cell(i, c))
     ws.auto_filter.ref = f"A1:K{len(otros) + 1}"
     ws.freeze_panes = "A2"
 
@@ -828,18 +886,49 @@ def generar_excel_estudio(
     otros: list[dict],
     comercio: str,
     periodo: str,
+    cuit: str = "",
+    nros_comercio: str = "",
 ) -> bytes:
+    filas = _filas_desde_datos(naranja, fava, cabal, liqs)
+    por_medio: dict[str, list[FilaLiq]] = {m: [] for m in MEDIOS_ORDEN}
+    for fila in filas:
+        por_medio.setdefault(fila.medio, []).append(fila)
+
     wb = Workbook()
-    ws_liq = wb.active
-    ws_liq.title = "LIQUIDACIONES"
-    _escribir_liquidaciones(ws_liq, naranja, fava, cabal, liqs, comercio)
-    if liqs:
-        ws_fd = wb.create_sheet("First Data")
-        _escribir_first_data(ws_fd, liqs, comercio, periodo)
-        ws_mov = wb.create_sheet("Movimientos")
-        control = _escribir_movimientos(ws_mov, liqs)
-        ws_ctrl = wb.create_sheet("Control")
-        _escribir_control(ws_ctrl, control)
+    ws_res = wb.active
+    ws_res.title = "Resumen"
+    refs: list[tuple[str, int, float, int]] = []
+    for medio in MEDIOS_ORDEN:
+        items = por_medio.get(medio) or []
+        if not items:
+            continue
+        items = sorted(items, key=_orden_fila)
+        ws = wb.create_sheet(medio)
+        tot_row = _escribir_hoja_medio(ws, medio, items, comercio, cuit, periodo)
+        vistos: dict[str, float] = {}
+        for it in items:
+            if it.archivo not in vistos:
+                vistos[it.archivo] = it.declarado
+        declarado = round(sum(vistos.values()), 2)
+        if medio in ("CABAL", "FAVA", "Naranja"):
+            declarado = round(sum(it.ventas for it in items), 2)
+        refs.append((medio, tot_row, declarado, len(items)))
+    extra = [m for m in por_medio if m not in MEDIOS_ORDEN and por_medio[m]]
+    for medio in extra:
+        items = por_medio[medio]
+        items = sorted(items, key=_orden_fila)
+        ws = wb.create_sheet(medio[:31])
+        tot_row = _escribir_hoja_medio(ws, medio, items, comercio, cuit, periodo)
+        declarado = round(sum(it.ventas for it in items), 2)
+        refs.append((ws.title, tot_row, declarado, len(items)))
+    locales = {f.local for f in filas if f.local}
+    if locales >= {"GUE", "JBJ"}:
+        sufijo = " (Güemes + Juan B. Justo sumados)"
+    elif locales:
+        sufijo = " (locales sumados)"
+    else:
+        sufijo = ""
+    _escribir_resumen(ws_res, refs, comercio, cuit, periodo, nros_comercio, sufijo)
     if otros:
         _escribir_otros(wb.create_sheet("Otros"), otros)
     buf = BytesIO()
@@ -847,23 +936,31 @@ def generar_excel_estudio(
     return buf.getvalue()
 
 
-def _comercio_periodo(texto: str, nombre: str) -> tuple[str, str]:
+def _meta_pdf(texto: str, nombre: str) -> tuple[str, str, str, str]:
     comercio = ""
-    m = re.search(r"GLOBAL RECIFE[^\n]*|RAZ[OÓ]N SOCIAL[:\s]+([^\n]+)", texto, re.I)
-    if m:
-        comercio = (m.group(0) if m.lastindex is None else m.group(1)).strip()[:80]
-    if "GLOBAL RECIFE" in texto.upper():
-        comercio = "GLOBAL RECIFE"
-    per = ""
-    m2 = re.search(r"PESOS\s+([A-ZÁÉÍÓÚ]+)\s+(\d{4})", texto, re.I)
+    if "GLOBAL RECIFE" in (texto or "").upper():
+        comercio = "GLOBAL RECIFE SA"
+    m_rs = re.search(r"RAZ[OÓ]N SOCIAL[:\s]+([^\n]+)", texto or "", re.I)
+    if m_rs and not comercio:
+        comercio = m_rs.group(1).strip()[:80]
+    cuit = ""
+    for m in RE_CUIT.finditer(texto or ""):
+        if not m.group(1).startswith("30-52221156") and not m.group(1).startswith("30-50001091"):
+            cuit = m.group(1)
+            break
+    periodo = ""
+    m2 = RE_TITULO_FD.search(texto or "")
     if m2:
-        mes = m2.group(1).title()
-        per = f"{mes} {m2.group(2)}"
+        periodo = f"{m2.group(2).title()} {m2.group(3)}"
     m3 = re.search(r"(20\d{2})(0[1-9]|1[0-2])", nombre)
-    if m3 and not per:
-        meses = "Ene Feb Mar Abr May Jun Jul Ago Sep Oct Nov Dic".split()
-        per = f"{meses[int(m3.group(2)) - 1]} {m3.group(1)}"
-    return comercio, per
+    if m3 and not periodo:
+        meses = "Enero Febrero Marzo Abril Mayo Junio Julio Agosto Septiembre Octubre Noviembre Diciembre".split()
+        periodo = f"{meses[int(m3.group(2)) - 1]} {m3.group(1)}"
+    nro = ""
+    m_n = RE_NRO_COM.search(texto or "")
+    if m_n:
+        nro = re.sub(r"\s+", "", m_n.group(1))
+    return comercio, cuit, periodo, nro
 
 
 def procesar_pdfs_tarjetas_estudio(archivos: list[tuple[str, bytes]]) -> ResultadoTarjetasEstudio:
@@ -879,6 +976,8 @@ def procesar_pdfs_tarjetas_estudio(archivos: list[tuple[str, bytes]]) -> Resulta
     advertencias: list[str] = []
     comercio = ""
     periodo = ""
+    cuit = ""
+    nros: list[str] = []
 
     with tempfile.TemporaryDirectory(prefix="liq_tarjetas_") as tmp:
         tmp_path = Path(tmp)
@@ -892,9 +991,12 @@ def procesar_pdfs_tarjetas_estudio(archivos: list[tuple[str, bytes]]) -> Resulta
                 advertencias.append(f"{safe}: no se pudo leer ({exc})")
                 continue
             kind = clasificar_pdf(safe, texto)
-            com, per = _comercio_periodo(texto, safe)
+            com, cuit_p, per, nro_c = _meta_pdf(texto, safe)
             comercio = comercio or com
             periodo = periodo or per
+            cuit = cuit or cuit_p
+            if nro_c and nro_c not in nros:
+                nros.append(nro_c)
             try:
                 if kind == "NARANJA":
                     naranja.append(parsear_naranja(dest, texto))
@@ -934,6 +1036,9 @@ def procesar_pdfs_tarjetas_estudio(archivos: list[tuple[str, bytes]]) -> Resulta
         if x.otras_det:
             advertencias.append(f"Liq {x.nro}: deducción no mapeada: {x.otras_det}")
 
+    nros_txt = ""
+    if nros:
+        nros_txt = "N° Comercio Fiserv/Nación: " + " y ".join(nros) + "."
     xlsx = generar_excel_estudio(
         naranja=naranja,
         fava=fava,
@@ -942,10 +1047,12 @@ def procesar_pdfs_tarjetas_estudio(archivos: list[tuple[str, bytes]]) -> Resulta
         otros=otros,
         comercio=comercio,
         periodo=periodo,
+        cuit=cuit,
+        nros_comercio=nros_txt,
     )
-    hojas = ["LIQUIDACIONES"]
-    if liqs:
-        hojas.extend(["First Data", "Movimientos", "Control"])
+    medios_presentes = {f.medio for f in _filas_desde_datos(naranja, fava, cabal, liqs)}
+    hojas = ["Resumen"] + [m for m in MEDIOS_ORDEN if m in medios_presentes]
+    hojas += [m for m in sorted(medios_presentes) if m not in MEDIOS_ORDEN]
     if otros:
         hojas.append("Otros")
     slug = re.sub(r"[^A-Za-z0-9]+", "_", (comercio or "Tarjetas"))[:40].strip("_")
