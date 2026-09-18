@@ -26,8 +26,8 @@
     --ec-radius-sm: 12px;
     --ec-radius-lg: 18px;
     --ec-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px rgba(15, 23, 42, 0.04);
-    --ec-font: Inter, "Segoe UI", system-ui, sans-serif;
-    --ec-display: Outfit, Inter, sans-serif;
+    --ec-font: Inter, "Segoe UI", "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", system-ui, sans-serif;
+    --ec-display: Outfit, Inter, "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
 }
 
 html, body, [data-testid="stAppViewContainer"], [data-testid="stHeader"],
@@ -296,10 +296,12 @@ div[data-testid="stToolbar"] a[href*="share.streamlit"] {
     justify-content: flex-start !important;
     gap: 0.7rem !important;
     margin: 0 0 1.15rem 0 !important;
-    padding: 0.15rem 0 0 0 !important;
-    border-bottom: 1px solid var(--ec-line) !important;
+    padding: 0.85rem 1.15rem 0.2rem 1.05rem !important;
+    border: 1px solid var(--ec-line) !important;
+    border-radius: var(--ec-radius) !important;
     overflow: visible !important;
-    background: transparent !important;
+    background: var(--ec-card) !important;
+    box-shadow: var(--ec-shadow);
 }
 .ec-pagehead-copy {
     flex: 1 1 auto !important;
@@ -355,6 +357,19 @@ div[data-testid="stToolbar"] a[href*="share.streamlit"] {
     color: var(--ec-ink) !important;
     line-height: 1.2 !important;
 }
+.ec-pagehead:not(:has(.ec-saludo-wrap)) .ec-pagehead-hola::before {
+    content: "👋";
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.1rem;
+    height: 2.1rem;
+    margin-right: 0.55rem;
+    border-radius: 999px;
+    background: var(--ec-accent-soft);
+    font-size: 1.05rem;
+    vertical-align: middle;
+}
 .ec-pagehead-kicker,
 .stMarkdown p.ec-pagehead-kicker {
     margin: 0 0 0.28rem 0 !important;
@@ -395,6 +410,23 @@ div[data-testid="stToolbar"] a[href*="share.streamlit"] {
     border: 0 !important;
     box-shadow: none !important;
     border-radius: 0 !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+/* Selector de sociedad: visible, sin CSS agresivo de BaseWeb */
+[data-testid="stSidebar"] [data-testid="stSelectbox"],
+[data-testid="stSidebar"] .st-key-sidebar_sociedad_id {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+/* Avisos: no recortar ⚠️ ni el resto de emojis */
+.main div[data-testid="stAlert"],
+.main [data-testid="stMarkdownContainer"] {
+    font-family: var(--ec-font) !important;
 }
 
 /* Chips Biblioteca/Menú: fijos arriba a la derecha (CSS only).

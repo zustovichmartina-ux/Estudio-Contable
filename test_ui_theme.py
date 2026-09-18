@@ -42,7 +42,15 @@ class TestSkinSoloCosmetico(unittest.TestCase):
         self.assertIn("_pantalla_login_oficina", self.app)
         self.assertIn("render_arca_module", self.app)
 
-    def test_radios_suaves_sin_teal(self) -> None:
+    def test_conserva_logo_emojis_y_sociedad(self) -> None:
+        self.assertIn("estudio-zona-guemes-wordmark-oscuro.png", self.app)
+        self.assertIn("sidebar.image", self.app)
+        self.assertIn("sidebar.selectbox", self.app)
+        self.assertIn("sidebar_sociedad_id", self.app)
+        self.assertIn("⚠️", self.app)
+        self.assertIn("Segoe UI Emoji", self.css)
+        self.assertIn("content: \"👋\"", self.css)
+        self.assertIn("st-key-sidebar_sociedad_id", self.css)
         self.assertIn("--ec-radius: 16px", self.css)
         self.assertIn("--ec-radius-sm: 12px", self.css)
         bajo = self.css.lower()
