@@ -42,6 +42,17 @@ from procesador import (
 )
 from ui_motor_conciliacion import _cargar_proveedores_desde_upload, _cargar_veps_excel
 
+
+class _UploadMemoria:
+    """Bytes del PDF guardados entre reruns de Streamlit."""
+
+    def __init__(self, name: str, data: bytes) -> None:
+        self.name = name
+        self._data = data
+
+    def getvalue(self) -> bytes:
+        return self._data
+
 _PASOS = (
     ("importar", "1 · Importar"),
     ("movimientos", "2 · Movimientos"),
@@ -400,6 +411,9 @@ def _view_importar(
             key=f"ae_xls_{sociedad_id}",
         )
     archivos = list(archivos_pdf or []) or list(archivos_xl or [])
+    cache_files = f"ae_files_bytes_{sociedad_id}"
+    if archivos:
+        st.session_state[cache_files] = [(a.name, a.getvalue()) for a in archivos]
 
     extras = st.expander("Padrón opcional (proveedores / VEP)", expanded=False)
     with extras:
@@ -427,12 +441,16 @@ def _view_importar(
         )
 
     if st.button("Leer extracto", type="primary", key=f"ae_run_{sociedad_id}"):
-        if not archivos:
+        pares = [(a.name, a.getvalue()) for a in archivos] if archivos else list(
+            st.session_state.get(cache_files) or []
+        )
+        if not pares:
             st.error("Subí un PDF o Excel.")
         else:
-            with st.spinner("Leyendo extracto (OCR si es escaneo; se reusa cache)…"):
+            fuentes = [_UploadMemoria(n, b) for n, b in pares]
+            with st.spinner("Leyendo extracto…"):
                 df, meta, errores = procesar_extractos_bancarios_pdfs(
-                    archivos, banco_hint=banco_elegido
+                    fuentes, banco_hint=banco_elegido
                 )
                 if errores:
                     st.warning(

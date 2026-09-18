@@ -30,7 +30,7 @@ from openpyxl.utils import get_column_letter
 from PIL import Image
 from rapidfuzz import fuzz, process
 
-from extracto_layout import lineas_desde_paginas, lineas_por_y, parsear_lineas
+from extracto_layout import elegir_mejor, lineas_desde_paginas, lineas_por_y, parsear_lineas
 
 BASE_DIR = Path(__file__).resolve().parent
 RUTA_RAIZ_CLIENTES = BASE_DIR / "clientes"
@@ -73,7 +73,7 @@ FILAS_PLANTILLA = {
 HOJA_DETALLE_MOVIMIENTOS = "Detalle Extracto"
 FILA_INICIO_DETALLE = 2  # Fila 1 = encabezados
 ANIO_MIN_EXTRACTO = 1990
-ANIO_MAX_EXTRACTO = date.today().year + 1
+ANIO_MAX_EXTRACTO = 2035
 
 TAX_REGISTRY: dict[str, dict] = {
     "IVA": {
@@ -5030,13 +5030,7 @@ _PALABRAS_CREDITO_EXT = (
 
 
 def _parse_fecha_extracto(txt: str) -> date | None:
-    txt = str(txt or "").strip()
-    for fmt in ("%d/%m/%y", "%d/%m/%Y"):
-        try:
-            return datetime.strptime(txt, fmt).date()
-        except ValueError:
-            continue
-    return None
+    return _parsear_fecha(str(txt or "").strip())
 
 
 def _parse_monto_pesos_ar(txt: str) -> float:
@@ -6715,6 +6709,32 @@ def _filas_desde_movs_layout(movs: list[dict], nombre: str, banco_slug: str) -> 
     return out
 
 
+def _lineas_pdfplumber(data: bytes) -> list[str]:
+    """Texto de pdfplumber: extract_text y, si viene vacío, palabras agrupadas por Y."""
+    out: list[str] = []
+    try:
+        with pdfplumber.open(io.BytesIO(data)) as pdf:
+            for page in pdf.pages:
+                txt = (page.extract_text() or "").strip()
+                if txt:
+                    out.extend(ln.strip() for ln in txt.splitlines() if ln.strip())
+                    continue
+                words = page.extract_words() or []
+                by_y: dict[int, list[tuple[float, str]]] = {}
+                for w in words:
+                    y = int(round(float(w.get("top") or 0) / 3.0) * 3)
+                    by_y.setdefault(y, []).append(
+                        (float(w.get("x0") or 0), str(w.get("text") or "").strip())
+                    )
+                for y in sorted(by_y):
+                    s = " ".join(t for _, t in sorted(by_y[y], key=lambda x: x[0]) if t).strip()
+                    if s:
+                        out.append(s)
+    except Exception:
+        return out
+    return out
+
+
 def _intentar_filas_layout_y(
     data: bytes,
     nombre: str,
@@ -6723,15 +6743,24 @@ def _intentar_filas_layout_y(
     chars_nativos: int | None = None,
 ) -> list[dict]:
     """Fallback MM-Studio: agrupar por Y (o líneas OCR) y tomar los 2 últimos números."""
-    lineas_nat, chars = lineas_por_y(data)
-    nativas = chars_nativos if chars_nativos is not None else chars
-    if nativas < 50:
-        lineas = lineas_desde_paginas(paginas or [])
+    lineas_nat, _chars = lineas_por_y(data)
+    lineas_pag = lineas_desde_paginas(paginas or [])
+    lineas_plumb = _lineas_pdfplumber(data)
+    candidatos: list[list[dict]] = []
+    vistos: set[int] = set()
+    for lineas in (lineas_nat, lineas_pag, lineas_plumb):
         if not lineas:
-            lineas = lineas_nat
-    else:
-        lineas = lineas_nat
-    movs = parsear_lineas(lineas)
+            continue
+        clave = hash(tuple(lineas[:40]))
+        if clave in vistos:
+            continue
+        vistos.add(clave)
+        parsed = parsear_lineas(lineas)
+        if parsed:
+            candidatos.append(parsed)
+    if not candidatos:
+        return []
+    movs = elegir_mejor(candidatos)
     if not movs:
         return []
     return _filas_desde_movs_layout(movs, nombre, banco_slug)
@@ -7278,18 +7307,35 @@ def _procesar_un_pdf_extracto(
                     row["Banco"] = display
 
         if not movs:
+            lineas_pl = _lineas_pdfplumber(data)
+            if lineas_pl:
+                movs_gen = _filas_desde_paginas_generico(
+                    [(1, "\n".join(lineas_pl))], nombre, banco_slug or "desconocido"
+                )
+                if movs_gen:
+                    movs = movs_gen
+                    meta_arch = _meta_basica_desde_texto("\n".join(lineas_pl[:30]))
+                    meta_base["parser"] = "pdfplumber_texto"
+                    meta_base["formato_id"] = "texto_generico"
+                    meta_base["formato"] = FORMATOS_EXTRACTO_LABEL.get("texto_generico") or ""
+
+        if not movs:
+            muestra = " ".join(
+                ln.strip() for ln in (texto_all or "").splitlines() if ln.strip()
+            )[:180]
             escaneo = chars_nativos < 50 and not _ocr_extracto_disponible()
-            if escaneo:
+            if escaneo and not muestra:
                 motivo = (
                     f"No se detectaron movimientos ({display}). "
-                    "Este PDF parece un escaneo y en la web no hay OCR. "
-                    "Subí el extracto digital del homebanking (no una foto ni un PDF escaneado)."
+                    "Este PDF no tiene texto (parece escaneo o imagen) y en la web no hay OCR. "
+                    "Descargá el extracto digital del homebanking (Archivo / Imprimir a PDF)."
                 )
             else:
                 motivo = (
                     f"No se detectaron movimientos ({display} · "
                     f"{meta_base.get('formato') or estrategia}). "
-                    "Confirmá el banco arriba e intentá de nuevo con el PDF del homebanking."
+                    "Confirmá el banco arriba. "
+                    + (f"Texto leído: {muestra}" if muestra else "El PDF no trajo texto usable.")
                 )
             return [], meta_base, {
                 "archivo": nombre,
@@ -7522,6 +7568,18 @@ def _paginas_texto_extracto_pdf(
                 paginas.append((i + 1, texto))
             else:
                 paginas.append((i + 1, ""))
+        if any(len(t) < 40 for _, t in paginas):
+            try:
+                with pdfplumber.open(io.BytesIO(data)) as pdf:
+                    for i, page in enumerate(pdf.pages):
+                        if i >= len(paginas) or len(paginas[i][1]) >= 40:
+                            continue
+                        t = (page.extract_text() or "").strip()
+                        if len(t) > len(paginas[i][1]):
+                            paginas[i] = (paginas[i][0], t)
+                            nativas_con_texto += 1
+            except Exception:
+                pass
         necesita_ocr = forzar_ocr or nativas_con_texto < max(1, doc.page_count // 3)
         if necesita_ocr and _ocr_extracto_disponible():
             cached = _leer_cache()

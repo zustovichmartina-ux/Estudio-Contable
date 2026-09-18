@@ -8,6 +8,7 @@ import fitz
 from procesador import (
     _corregir_filas_extracto_por_saldos,
     _elegir_monto_y_saldo_extracto,
+    _parsear_fecha,
     _procesar_un_pdf_extracto,
     _resolver_saldo_ocr,
     _slug_hint_extracto,
@@ -139,6 +140,10 @@ class TestHintBancoExtracto(unittest.TestCase):
         self.assertIsNone(err, msg=str(err))
         self.assertTrue(filas)
         self.assertEqual(meta.get("banco_slug"), "galicia")
+
+    def test_fecha_2026_es_valida(self):
+        self.assertEqual(_parsear_fecha("01/01/2026").year, 2026)
+        self.assertEqual(_parsear_fecha("15/01/26").year, 2026)
 
 
 if __name__ == "__main__":
