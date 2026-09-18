@@ -12883,7 +12883,7 @@ def _herramienta_extracto_fci() -> None:
 
 
 def _seccion_arca() -> None:
-    """ARCA top-level: solo encola jobs AFIP; worker local ejecuta."""
+    """ARCA: la web controla; otra máquina ejecuta AFIP."""
     render_arca_module()
 
 

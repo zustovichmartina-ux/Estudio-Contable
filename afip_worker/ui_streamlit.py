@@ -203,8 +203,10 @@ def _remote_health(remote: RemoteWorker) -> bool:
     ts = float(st.session_state.get("_arca_health_ts") or 0)
     if cached is not None and (now - ts) < _HEALTH_TTL_SEC:
         return bool(cached)
-    ok = remote.health()
+    info = remote.health_info()
+    ok = bool(info.get("ok"))
     st.session_state["_arca_health"] = ok
+    st.session_state["_arca_health_host"] = str(info.get("host") or "")
     st.session_state["_arca_health_ts"] = now
     return ok
 
@@ -238,22 +240,24 @@ def _cuit_rows(remote: RemoteWorker | None) -> list[dict[str, Any]]:
 def render_arca_module() -> None:
     """Módulo top-level ARCA: encolar + cola + registry (sin ejecutar AFIP)."""
     st.caption(
-        "Encolá acá. RECEPCION entra a AFIP sola con la sesión del estudio "
-        "y representa al cliente. Nadie más necesita permiso fiscal. "
-        "Cuando termina, te avisa. Las claves nunca van a Excel ni a esta web."
+        "Desde acá solo **controlás**: encolás y mirás la cola. "
+        "AFIP lo abre **otra máquina** (el ejecutor), con la sesión del estudio. "
+        "Las claves nunca van a Excel ni a esta web."
     )
     remote = _remote()
     if remote:
         if _remote_health(remote):
-            st.success("RECEPCION conectada — la cola corre sola.")
+            host = str(st.session_state.get("_arca_health_host") or "").strip()
+            donde = f" Ejecuta en **{host}**." if host else ""
+            st.success("Ejecutor conectado — la cola corre sola." + donde)
         else:
             st.error(
-                "No se llega a RECEPCION. Dejá abierto `iniciar_afip_worker.bat`. "
-                "Si recién arrancó, recargá en un minuto: la web busca la URL nueva sola."
+                "No se llega a la máquina ejecutor. Tiene que estar prendida "
+                "con `ejecutor_arca.bat`. Si recién arrancó, recargá en un minuto."
             )
     else:
         st.caption(
-            "Cola en esta PC. En la nube hace falta `AFIP_WORKER_TOKEN` en Secrets."
+            "Sin ejecutor en la nube: hace falta `AFIP_WORKER_TOKEN` en Secrets."
         )
 
     _watch_tareas()
@@ -418,7 +422,7 @@ def _render_encolar(remote: RemoteWorker | None) -> None:
         "Ruta destino (UNC)",
         placeholder=sugerida,
         key="arca_job_ruta",
-        help="Carpeta de red donde RECEPCION guarda los PDF. Si lo dejás vacío, usa la sugerida.",
+        help="Carpeta de red donde el ejecutor guarda los PDF. Si lo dejás vacío, usa la sugerida.",
     )
     params["ruta_destino"] = (ruta.strip() or sugerida).strip().strip('"').strip("'")
     if not ruta.strip():
@@ -444,10 +448,9 @@ def _render_encolar(remote: RemoteWorker | None) -> None:
                         plantilla_name=plantilla_name,
                     )
                     jid = str(job.get("id") or "")
-                    st.success(f"Encolado en RECEPCION: {jid}")
+                    st.success(f"Encolado: {jid}")
                     st.caption(
-                        "Lo toma sola. Mirá Cola: cuando termina, te avisa acá "
-                        "y en la PC de recepción."
+                        "Lo toma la máquina ejecutor. Mirá Cola: cuando termina, te avisa acá."
                     )
                 else:
                     ensure_cuit_registered(cuit, razon)
@@ -499,7 +502,7 @@ def _aviso_texto(job: dict[str, Any]) -> str:
     if status == "error":
         return f"Error: {cliente} — {accion}" + (f". {msg}" if msg else "")
     if status == "needs_auth":
-        return f"Falta 2FA: {cliente} — {accion}. Completalo en RECEPCION."
+        return f"Falta 2FA: {cliente} — {accion}. Completalo en el ejecutor."
     return f"{cliente} — {accion}"
 
 
@@ -612,7 +615,7 @@ def _render_cola_live() -> None:
     if needs:
         st.warning(
             f"**{len(needs)} trabajo(s) esperan 2FA.** "
-            "En RECEPCION abrí `iniciar_afip_sesion.bat`, completá el código "
+            "En el ejecutor abrí `iniciar_afip_sesion.bat`, completá el código "
             "y la cola sigue sola."
         )
         for j in needs:
@@ -628,7 +631,7 @@ def _render_cola_live() -> None:
 
 def _render_registry(remote: RemoteWorker | None) -> None:
     st.caption(
-        "Clientes conocidos. RECEPCION entra sola; no hace falta Pedir acceso "
+        "Clientes conocidos. El ejecutor entra sola; no hace falta Pedir acceso "
         "por cada CUIT. Solo si AFIP pide 2FA se frena la cola."
     )
     entries = _cuit_rows(remote)

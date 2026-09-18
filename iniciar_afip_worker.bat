@@ -1,5 +1,5 @@
 @echo off
-title AFIP worker - RECEPCION
+title AFIP worker - EJECUTOR ARCA
 REM Worker autonomo: cola + API + Chrome oculto. Se relanza si se cae.
 cd /d "%~dp0"
 set AFIP_CHROME_HEADED=0

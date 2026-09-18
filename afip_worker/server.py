@@ -6,6 +6,7 @@ import base64
 import hmac
 import json
 import logging
+import socket
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -58,14 +59,30 @@ class WorkerApiHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         path = urlparse(self.path).path.rstrip("/") or "/"
         if path == "/health":
-            status, body = _json_bytes({"ok": True, "service": "afip_worker"})
+            status, body = _json_bytes(
+                {
+                    "ok": True,
+                    "service": "afip_worker",
+                    "role": "executor",
+                    "host": socket.gethostname(),
+                }
+            )
             self._send(status, body)
             return
         if not self._authorized():
             self._send(*_json_bytes({"ok": False, "error": "unauthorized"}, 401))
             return
         if path == "/v1/status":
-            self._send(*_json_bytes({"ok": True, "service": "afip_worker"}))
+            self._send(
+                *_json_bytes(
+                    {
+                        "ok": True,
+                        "service": "afip_worker",
+                        "role": "executor",
+                        "host": socket.gethostname(),
+                    }
+                )
+            )
             return
         if path == "/v1/jobs":
             jobs = [j.to_dict() for j in list_jobs()]

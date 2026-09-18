@@ -40,8 +40,8 @@ class RemoteWorker:
             raise RemoteError(f"HTTP {exc.code}: {body or exc.reason}", exc.code) from exc
         except urllib.error.URLError as exc:
             raise RemoteError(
-                "No se llega al worker de RECEPCION. "
-                "¿Está abierto iniciar_afip_worker.bat? "
+                "No se llega a la máquina que ejecuta ARCA. "
+                "¿Está prendida y con ejecutor_arca.bat abierto? "
                 f"({exc.reason})"
             ) from exc
         if not raw:
@@ -54,6 +54,9 @@ class RemoteWorker:
         return parsed
 
     def health(self) -> bool:
+        return bool(self.health_info().get("ok"))
+
+    def health_info(self) -> dict[str, Any]:
         url = f"{self.base_url}/health"
         req = urllib.request.Request(
             url,
@@ -62,9 +65,18 @@ class RemoteWorker:
         )
         try:
             with urllib.request.urlopen(req, timeout=3) as resp:
-                return resp.status == 200
+                if int(getattr(resp, "status", 200) or 200) != 200:
+                    return {}
+                raw = resp.read().decode("utf-8", errors="replace")
         except Exception:
-            return False
+            return {}
+        if not raw:
+            return {"ok": True}
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            return {"ok": True}
+        return parsed if isinstance(parsed, dict) else {"ok": True}
 
     def list_jobs(self) -> list[dict[str, Any]]:
         return list(self._request("GET", "/v1/jobs").get("jobs") or [])
