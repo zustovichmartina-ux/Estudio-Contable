@@ -550,8 +550,38 @@ class TestExtractoComponente(unittest.TestCase):
         )
         self.assertEqual(out[0]["categoria"], "IIBB")
         self.assertEqual(out[0]["cuenta_codigo"], "11402")
-        self.assertEqual(out[1]["cuenta_codigo"], "99999")
+        self.assertEqual(out[1]["cuenta_codigo"], "11402")
         self.assertEqual(out[1]["categoria"], "IIBB")
+        self.assertEqual(out[1]["origen"], "sugerido")
+
+    def test_clasificacion_iibb_bancos_usa_la_cuenta_del_catalogo(self):
+        from ui_conciliacion_ae import _aplicar_filas_componente
+
+        movs = [
+            {
+                "_idx": 0,
+                "cuenta_codigo": "99999",
+                "categoria": "Movimientos a identificar",
+                "origen": "a_clasificar",
+            },
+            {
+                "_idx": 1,
+                "cuenta_codigo": "99999",
+                "categoria": "Movimientos a identificar",
+                "origen": "a_clasificar",
+            },
+        ]
+        out = _aplicar_filas_componente(
+            movs,
+            [
+                {"i": 0, "codigo": "99999", "clasif": "Retenciones IIBB bancos", "origen": "a_clasificar"},
+                {"i": 1, "codigo": "99999", "clasif": "Retenciones IIBB bancos", "origen": "a_clasificar"},
+            ],
+            None,
+            mapa_clasif={"Retenciones IIBB bancos": "11419"},
+        )
+        self.assertEqual(out[0]["cuenta_codigo"], "11419")
+        self.assertEqual(out[1]["cuenta_codigo"], "11419")
 
     def test_mapa_clasif_completa_99999(self):
         from ui_conciliacion_ae import _aplicar_mapa_clasif

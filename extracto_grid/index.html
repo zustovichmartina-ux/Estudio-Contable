@@ -139,12 +139,20 @@ function claveRepetida(m) {
   t = t.replace(/\s+/g, " ").replace(/\b\d{5,}\b/g, "").trim();
   return t;
 }
+function clasifUsaCuenta(n) {
+  return n && n !== "sin clasificar" && n.indexOf("identificar") < 0;
+}
 function cuentaDeClasif(nombre) {
   const n = normClasif(nombre);
-  if (!n || n === "sin clasificar" || n.indexOf("identificar") >= 0) return "";
+  if (!clasifUsaCuenta(n)) return "";
   const hit = CLASIFS.find((c) => normClasif(c.nombre) === n);
   const cod = hit ? String(hit.codigo || "") : "";
-  return (cod && cod !== "99999") ? cod : "";
+  if (cod && cod !== "99999") return cod;
+  for (let k = 0; k < FILAS.length; k++) {
+    const m = FILAS[k];
+    if (normClasif(m.clasif) === n && m.codigo && m.codigo !== "99999") return String(m.codigo);
+  }
+  return "";
 }
 function upsertClasif(nombre, codigo) {
   const nom = String(nombre || "").trim();
@@ -156,6 +164,36 @@ function upsertClasif(nombre, codigo) {
     return;
   }
   CLASIFS.push({ nombre: nom, codigo: (cod && cod !== "99999") ? cod : "" });
+}
+function pintarFilaCuenta(i, codigo, origen) {
+  FILAS[i].codigo = codigo;
+  FILAS[i].origen = origen;
+  const sel = document.querySelector('select[data-k="codigo"][data-i="' + i + '"]');
+  if (sel && sel.value !== String(codigo)) sel.value = String(codigo);
+  const tr = sel ? sel.closest("tr") : null;
+  if (tr) {
+    tr.classList.toggle("pend", origen === "a_clasificar");
+    const tag = tr.querySelector(".tag");
+    if (tag) {
+      tag.className = "tag " + origen;
+      tag.textContent = labelOrigen(origen);
+    }
+  }
+}
+function aplicarCuentaAClasif(nombre, codigo) {
+  const nom = String(nombre || "").trim();
+  const cod = String(codigo || "");
+  if (!clasifUsaCuenta(normClasif(nom)) || !cod || cod === "99999") return;
+  upsertClasif(nom, cod);
+  const n = normClasif(nom);
+  const origen = cod === "99999" ? "a_clasificar" : "sugerido";
+  FILAS.forEach((m, i) => {
+    if (normClasif(m.clasif) !== n) return;
+    const orig = (m.origen === "regla" && cod !== "99999") ? "regla" : origen;
+    pintarFilaCuenta(i, cod, orig);
+  });
+  chips();
+  persistLocal();
 }
 function optsHtml(sel) {
   return CUENTAS.map((c) => {
@@ -249,7 +287,14 @@ function bindUno(el) {
       }
       FILAS[i].clasif = el.value;
       FILAS[i]._editOtro = false;
-      persistLocal();
+      if (!clasifUsaCuenta(normClasif(el.value))) {
+        pintarFilaCuenta(i, "99999", "a_clasificar");
+        persistLocal();
+        return;
+      }
+      const cod = cuentaDeClasif(el.value);
+      if (cod) aplicarCuentaAClasif(el.value, cod);
+      else persistLocal();
       return;
     }
     if (k === "clasif_nuevo") {
@@ -259,6 +304,8 @@ function bindUno(el) {
       if (nom) {
         agregarOpcionClasif(nom);
         FILAS[i].clasif = nom;
+        const cod = cuentaDeClasif(nom);
+        if (cod) aplicarCuentaAClasif(nom, cod);
       }
       td.innerHTML = `<select data-i="${i}" data-k="clasif">${optsClasif(FILAS[i].clasif)}</select>`;
       bindUno(td.querySelector("select"));
@@ -267,6 +314,10 @@ function bindUno(el) {
     }
     if (k === "codigo") {
       FILAS[i].codigo = el.value;
+      if (clasifUsaCuenta(normClasif(FILAS[i].clasif)) && el.value !== "99999") {
+        aplicarCuentaAClasif(FILAS[i].clasif, el.value);
+        return;
+      }
       FILAS[i].origen = el.value === "99999" ? "a_clasificar" : (FILAS[i].origen === "regla" ? "regla" : "sugerido");
       const tr = el.closest("tr");
       if (tr) {

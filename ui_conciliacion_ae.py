@@ -181,8 +181,7 @@ def _aplicar_mapa_clasif(movs: list[dict], mapa: dict[str, str]) -> list[dict]:
     for m in out:
         nombre = str(m.get("categoria") or m.get("extracto_label") or "")
         cod = _codigo_de_clasif(nombre, mapa)
-        actual = str(m.get("cuenta_codigo") or "").strip()
-        if not cod or actual not in {"", "99999"}:
+        if not cod:
             continue
         m["cuenta_codigo"] = cod
         if str(m.get("origen") or "") == "a_clasificar":
@@ -214,10 +213,7 @@ def _clasifs_componente(sociedad_id: int, movs: list[dict]) -> list[dict]:
     cola = [n for n in nombres if not _clasif_tiene_cuenta(n)]
     cuerpo = [n for n in nombres if _clasif_tiene_cuenta(n)]
     cuerpo.sort(key=lambda x: x.lower())
-    return [{"nombre": n, "codigo": mapa.get(n) or ""} for n in cuerpo + cola]
-    if not d:
-        d = date.today()
-    return d.strftime("%m/%Y")
+    return [{"nombre": n, "codigo": _codigo_de_clasif(n, mapa)} for n in cuerpo + cola]
 
 
 def _periodo_mm_yyyy(d: date | None) -> str:
@@ -544,7 +540,8 @@ def _aplicar_filas_componente(
                 out[pos]["origen"] = "sugerido"
         else:
             out[pos]["origen"] = "a_clasificar"
-    return out
+    mapa = _mapa_desde_movimientos(out, mapa_clasif or {})
+    return _aplicar_mapa_clasif(out, mapa)
 
 
 def _html_tabla_asiento(rows: list[dict]) -> str:
@@ -815,7 +812,8 @@ def _paso_extracto(
     subtitulo = (
         f"{nombre_activo or ''} — {len(movs)} movimientos · {n_plan} cuentas del plan. "
         "Las que tienen regla quedan tomadas; el resto, sugeridas o a clasificar. "
-        "Cambiá la clasificación en la línea: la cuenta no se mueve. "
+        "Cada clasificación queda asociada a una cuenta Tango: si marcás "
+        "retenciones IIBB bancos y elegís 11419, todos esos movimientos van a esa cuenta. "
         "El asiento engloba después por clasificación."
     )
     if n_plan <= 0:
@@ -824,11 +822,11 @@ def _paso_extracto(
     out = _EXTRACTO_GRID(
         titulo=f"Extracto {banco} · {periodo}",
         subtitulo=subtitulo,
-        grid_id=f"ce_grid_{sociedad_id}_{token}_v3",
+        grid_id=f"ce_grid_{sociedad_id}_{token}_v4",
         filas=_filas_componente(movs),
         cuentas_json=json.dumps(_cuentas_componente(opciones), ensure_ascii=False),
         clasifs_json=json.dumps(_clasifs_componente(sociedad_id, movs), ensure_ascii=False),
-        key=f"ce_grid_{sociedad_id}_{token}_v3",
+        key=f"ce_grid_{sociedad_id}_{token}_v4",
         default={"action": "idle", "filas": []},
     )
     accion = str((out or {}).get("action") or "idle")
