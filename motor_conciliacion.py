@@ -11,6 +11,8 @@ from typing import Any, Iterable
 import pandas as pd
 
 from conceptos_bancos import (
+    _ALIAS_BANCO,
+    _banco_desde_texto,
     cargar_instructivo,
     clasificar_movimiento_instructivo,
     tipo_desde_cuenta,
@@ -634,6 +636,114 @@ def resumen_por_categoria(movimientos: list[dict]) -> pd.DataFrame:
         ]
     )
     return pd.concat([g, total], ignore_index=True)
+
+
+def origen_linea_extracto(mov: dict) -> str:
+    """regla = instructivo/seed; sugerido = sentido común; a_clasificar = sin cuenta."""
+    fuente = str(mov.get("fuente") or "")
+    categoria = str(mov.get("categoria") or "").lower()
+    codigo = str(mov.get("cuenta_codigo") or mov.get("cuenta_sugerida") or "").strip()
+    if "identificar" in categoria:
+        if codigo and codigo != "99999":
+            return "sugerido"
+        return "a_clasificar"
+    if fuente in {"conceptos_bancos", "regla_local"}:
+        return "regla"
+    if codigo and codigo not in {"", "99999"}:
+        return "sugerido"
+    return "a_clasificar"
+
+
+def cuenta_banco_del_plan(
+    plan_df: pd.DataFrame | None,
+    nombre_banco: str,
+) -> tuple[str, str]:
+    """Si hay una sola cuenta del banco en el plan, la usa; si hay varias, no adivina."""
+    if plan_df is None or getattr(plan_df, "empty", True) or not nombre_banco:
+        return "99999", str(nombre_banco or "Banco")
+
+    clave = _banco_desde_texto(nombre_banco)
+    aliases = list(_ALIAS_BANCO.get(clave, (clave,)))
+    col_cod = "codigo" if "codigo" in plan_df.columns else plan_df.columns[0]
+    col_desc = "descripcion" if "descripcion" in plan_df.columns else plan_df.columns[1]
+    hits: list[tuple[str, str]] = []
+    for _, row in plan_df.iterrows():
+        desc = str(row.get(col_desc) or "").strip()
+        dn = normalizar_texto(desc).lower()
+        if not any(a in dn for a in aliases):
+            continue
+        if not any(t in dn for t in ("banco", "bco", "cta", "cuenta", "cc ")):
+            continue
+        cod = str(row.get(col_cod) or "").strip()
+        if cod:
+            hits.append((cod, desc))
+    if len(hits) == 1:
+        return hits[0]
+    cte = [
+        h for h in hits
+        if "cte" in normalizar_texto(h[1]).lower()
+        or "corriente" in normalizar_texto(h[1]).lower()
+    ]
+    if len(cte) == 1:
+        return cte[0]
+    return "99999", str(nombre_banco or "Banco")
+
+
+def renglones_asiento_banco_mes(
+    movimientos: list[dict],
+    *,
+    codigo_banco: str,
+    descripcion_banco: str,
+    periodo: str = "",
+    fecha_str: str = "",
+) -> list[dict]:
+    """Agrupa el extracto por cuenta de contrapartida y cierra contra el banco."""
+    por_cuenta: dict[str, dict] = {}
+    banco_debe = 0.0
+    banco_haber = 0.0
+    for m in movimientos:
+        debito = float(money(m.get("debito")))
+        credito = float(money(m.get("credito")))
+        cod = str(m.get("cuenta_codigo") or m.get("cuenta_sugerida") or "99999").strip() or "99999"
+        desc = str(m.get("cuenta_plan") or m.get("categoria") or "").strip() or cod
+        slot = por_cuenta.setdefault(cod, {"debe": 0.0, "haber": 0.0, "desc": desc})
+        slot["desc"] = desc or slot["desc"]
+        if debito > 0.005:
+            slot["debe"] = round(slot["debe"] + debito, 2)
+            banco_haber = round(banco_haber + debito, 2)
+        if credito > 0.005:
+            slot["haber"] = round(slot["haber"] + credito, 2)
+            banco_debe = round(banco_debe + credito, 2)
+
+    rows: list[dict] = []
+
+    def _fila(codigo: str, descripcion: str, debe: float, haber: float) -> dict:
+        return {
+            "Período": periodo,
+            "Fecha": fecha_str,
+            "Código": codigo,
+            "Descripción": descripcion,
+            "Debe": round(float(debe or 0), 2),
+            "Haber": round(float(haber or 0), 2),
+            "Estado": "Ingresado",
+        }
+
+    for cod, slot in sorted(por_cuenta.items(), key=lambda kv: kv[0]):
+        neto = round(slot["debe"] - slot["haber"], 2)
+        if abs(neto) < 0.005:
+            continue
+        if neto > 0:
+            rows.append(_fila(cod, slot["desc"], neto, 0.0))
+        else:
+            rows.append(_fila(cod, slot["desc"], 0.0, abs(neto)))
+
+    neto_banco = round(banco_debe - banco_haber, 2)
+    if abs(neto_banco) >= 0.005:
+        if neto_banco > 0:
+            rows.append(_fila(codigo_banco, descripcion_banco, neto_banco, 0.0))
+        else:
+            rows.append(_fila(codigo_banco, descripcion_banco, 0.0, abs(neto_banco)))
+    return rows
 
 
 def movimientos_a_filas_grilla_tango(

@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import unittest
 
-from motor_conciliacion import bucket_ae, clasificar, correr_motor
+from motor_conciliacion import (
+    bucket_ae,
+    clasificar,
+    correr_motor,
+    origen_linea_extracto,
+    renglones_asiento_banco_mes,
+)
 
 
 class TestBucketAeUsaReglasWeb(unittest.TestCase):
@@ -73,6 +79,51 @@ class TestBucketAeUsaReglasWeb(unittest.TestCase):
         )
         self.assertEqual(out[0]["estado"], "PENDIENTE")
         self.assertEqual(bucket_ae(out[0]), "retencion")
+
+
+class TestAsientoExtractoAgrupaCuentas(unittest.TestCase):
+    def test_partida_doble_contra_banco(self):
+        rows = renglones_asiento_banco_mes(
+            [
+                {
+                    "debito": 100,
+                    "credito": 0,
+                    "cuenta_codigo": "52201",
+                    "cuenta_plan": "Gastos bancarios",
+                },
+                {
+                    "debito": 0,
+                    "credito": 50,
+                    "cuenta_codigo": "11301",
+                    "cuenta_plan": "Deudores",
+                },
+            ],
+            codigo_banco="11104",
+            descripcion_banco="Banco Galicia",
+            periodo="09/2026",
+            fecha_str="30/09/2026",
+        )
+        by_cod = {r["Código"]: r for r in rows}
+        self.assertEqual(by_cod["52201"]["Debe"], 100)
+        self.assertEqual(by_cod["11301"]["Haber"], 50)
+        self.assertEqual(by_cod["11104"]["Haber"], 50)
+        debe = sum(r["Debe"] for r in rows)
+        haber = sum(r["Haber"] for r in rows)
+        self.assertAlmostEqual(debe, haber, places=2)
+
+    def test_origen_sin_regla_es_a_clasificar(self):
+        self.assertEqual(
+            origen_linea_extracto(
+                {"fuente": "", "categoria": "Movimientos a identificar", "cuenta_codigo": "99999"}
+            ),
+            "a_clasificar",
+        )
+        self.assertEqual(
+            origen_linea_extracto(
+                {"fuente": "regla_local", "categoria": "Comis. y Gtos Bcarios.", "cuenta_codigo": "52201"}
+            ),
+            "regla",
+        )
 
 
 if __name__ == "__main__":
