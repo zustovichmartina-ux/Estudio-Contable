@@ -522,7 +522,7 @@ def _explicar_formula(hit: dict[str, str]) -> str:
     return "\n".join(lineas)
 
 
-_GROK_MODELOS = ("grok-4.6", "grok-4", "grok-3")
+_GROK_MODELOS = ("grok-4.6", "grok-4.5", "grok-4", "grok-3")
 _CLAUDE_MODELOS = ("claude-sonnet-5", "claude-sonnet-4-6", "claude-sonnet-4-5")
 _DATA_URL_IMG = re.compile(
     r"^data:(image/(?:jpeg|png|gif|webp));base64,(.+)$",
@@ -768,6 +768,10 @@ def _llamar_llm(
         partes.append({"type": "text", "text": texto})
         messages = [*messages[:-1], {"role": "user", "content": partes}]
     candidatos = [modelo]
+    if provider == "xai" or str(modelo).startswith("grok"):
+        for alt in _GROK_MODELOS:
+            if alt not in candidatos:
+                candidatos.append(alt)
     extras: list[dict[str, Any]] = [{"max_tokens": 4096}]
     if provider == "xai" or str(modelo).startswith("grok"):
         extras = [
