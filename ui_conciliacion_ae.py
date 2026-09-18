@@ -53,21 +53,21 @@ class _UploadMemoria:
 
 _CSS = """
 <style>
-.ce-top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin:0 0 12px 0;}
-.ce-title{font-size:1.35rem;font-weight:700;color:#1F4E79;margin:0;}
-.ce-sub{color:#5c6379;font-size:0.9rem;margin:2px 0 0 0;}
-.ce-chip{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;margin:8px 6px 0 0;}
+.ce-top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin:0 0 16px 0;}
+.ce-title{font-size:1.35rem;font-weight:700;color:#1F4E79;margin:0;letter-spacing:-0.02em;}
+.ce-sub{color:#5c6379;font-size:0.9rem;margin:4px 0 0 0;line-height:1.45;}
+.ce-chip{display:inline-block;font-size:11px;font-weight:600;padding:4px 10px;border-radius:999px;margin:10px 6px 0 0;}
 .ce-chip.regla{background:#e6f4ea;color:#137333;}
 .ce-chip.sugerido{background:#fff4e5;color:#b06000;}
 .ce-chip.a_clasificar{background:#fce8e6;color:#c5221f;}
-.ce-wrap{border:1px solid #e6eaf0;border-radius:10px;overflow:auto;max-height:420px;background:#fff;}
-.ce-table{width:100%;border-collapse:collapse;font-family:"Segoe UI",Calibri,sans-serif;}
-.ce-table th{background:#1F4E79;color:#fff;font-size:12px;font-weight:600;text-align:left;padding:10px;white-space:nowrap;}
-.ce-table td{padding:8px 10px;font-size:13px;border-bottom:1px solid #e6eaf0;}
+.ce-wrap{border:1px solid #e6eaf0;border-radius:22px;overflow:auto;max-height:420px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.04),0 10px 28px rgba(15,23,42,.06);}
+.ce-table{width:100%;border-collapse:collapse;font-family:Inter,"Segoe UI",Calibri,sans-serif;}
+.ce-table th{background:#1F4E79;color:#fff;font-size:12px;font-weight:600;text-align:left;padding:12px 12px;white-space:nowrap;}
+.ce-table td{padding:10px 12px;font-size:13px;border-bottom:1px solid #e6eaf0;}
 .ce-table tr:nth-child(even) td{background:#f7f9fc;}
 .ce-table tr.pend td{background:#fff6f5;}
 .ce-table .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
-div[data-testid="stCustomComponentV1"] iframe{border:0 !important;}
+div[data-testid="stCustomComponentV1"] iframe{border:0 !important;border-radius:22px !important;}
 </style>
 """
 
