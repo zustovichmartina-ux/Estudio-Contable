@@ -408,6 +408,30 @@ def _lado_debito_credito(
     return Decimal("0.00"), Decimal("0.00")
 
 
+_RE_SALDO_MOV = re.compile(
+    r"SALDO\s+(ANTERIOR|INICIAL|FINAL|TOTAL|DE CUENTA|EN CUENTA)|SALDO\s+AL\s+\d"
+)
+
+
+def es_fila_saldo_bancario(desc: str, tipo_fila: str = "") -> bool:
+    """Saldo anterior / inicial / final: no es movimiento a clasificar."""
+    tipo = str(tipo_fila or "").strip().lower()
+    if tipo in {"saldo inicial", "saldo final", "saldo anterior"}:
+        return True
+    n = re.sub(r"\bNAN\b", " ", normalizar_texto(desc))
+    n = re.sub(r"\s+", " ", n).strip()
+    if n in {"SALDO", "SALDO TOTAL", "SALDO DE CUENTA", "SALDO ANTERIOR"}:
+        return True
+    return bool(_RE_SALDO_MOV.search(n))
+
+
+def _limpiar_desc_extracto(desc: str) -> str:
+    t = str(desc or "").strip()
+    t = re.sub(r"\s+\bnan\b", "", t, flags=re.I)
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
+
 def df_extracto_a_filas(df: pd.DataFrame) -> list[dict]:
     """Normaliza DF unificado de procesador → filas del motor."""
     if df is None or df.empty:
@@ -415,9 +439,14 @@ def df_extracto_a_filas(df: pd.DataFrame) -> list[dict]:
     out: list[dict] = []
     for _, row in df.iterrows():
         desc = str(row.get("Descripcion") or row.get("Detalle") or row.get("Concepto unificado") or "")
-        detalle = str(row.get("Detalle") or "")
+        detalle = str(row.get("Detalle") or "").strip()
+        if detalle.lower() in {"nan", "none", "null"}:
+            detalle = ""
         if detalle and detalle not in desc:
             desc = f"{desc} {detalle}".strip()
+        desc = _limpiar_desc_extracto(desc)
+        if es_fila_saldo_bancario(desc, str(row.get("Tipo fila") or "")):
+            continue
         debito, credito = _lado_debito_credito(
             desc,
             money(row.get("Debito")),

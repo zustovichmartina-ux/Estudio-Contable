@@ -163,6 +163,40 @@ class TestSaldosYSignos(unittest.TestCase):
         )
         self.assertEqual(df_extracto_a_filas(df), [])
 
+    def test_saldo_anterior_y_final_se_omiten(self):
+        df = pd.DataFrame(
+            [
+                {
+                    "Fecha": "30/12/2025",
+                    "Descripcion": "SALDO ANTERIOR",
+                    "Detalle": "nan",
+                    "Debito": 0,
+                    "Credito": 1327591.30,
+                    "Saldo": 1327591.30,
+                },
+                {
+                    "Fecha": "02/01/2026",
+                    "Descripcion": "CR.DEBIN 31/12",
+                    "Detalle": "nan",
+                    "Debito": 0,
+                    "Credito": 5941.92,
+                    "Saldo": 1333533.22,
+                },
+                {
+                    "Fecha": "31/01/2026",
+                    "Descripcion": "SALDO FINAL",
+                    "Debito": 0,
+                    "Credito": 1333533.22,
+                    "Saldo": 1333533.22,
+                },
+            ]
+        )
+        filas = df_extracto_a_filas(df)
+        self.assertEqual(len(filas), 1)
+        self.assertIn("CR.DEBIN", filas[0]["descripcion"])
+        self.assertNotIn("nan", filas[0]["descripcion"].lower())
+        self.assertNotIn("Saldo", filas[0]["descripcion"])
+
 
 class TestPapelesMensuales(unittest.TestCase):
     def test_primer_mes_abre_con_extracto_y_cierre_formula(self):
@@ -497,6 +531,21 @@ class TestExtractoComponente(unittest.TestCase):
         self.assertEqual(out[0]["cuenta_codigo"], "11402")
         self.assertEqual(out[0]["origen"], "sugerido")
         self.assertEqual(out[1]["cuenta_codigo"], "42501")
+
+    def test_saca_saldo_anterior_de_la_grilla(self):
+        from ui_conciliacion_ae import _filas_componente, _sin_filas_saldo
+
+        movs = [
+            {"descripcion": "SALDO ANTERIOR nan", "credito": 100, "debito": 0, "saldo": 100, "_idx": 0},
+            {"descripcion": "CR.DEBIN nan", "credito": 5, "debito": 0, "saldo": 105, "_idx": 1},
+            {"descripcion": "SALDO FINAL", "credito": 0, "debito": 0, "saldo": 105, "_idx": 2},
+        ]
+        limpio = _sin_filas_saldo(movs)
+        self.assertEqual(len(limpio), 1)
+        self.assertEqual(limpio[0]["descripcion"], "CR.DEBIN")
+        filas = _filas_componente(movs)
+        self.assertEqual(len(filas), 1)
+        self.assertNotIn("saldo", filas[0])
 
 
 if __name__ == "__main__":

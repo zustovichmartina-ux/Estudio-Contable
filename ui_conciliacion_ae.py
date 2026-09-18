@@ -22,6 +22,7 @@ from motor_conciliacion import (
     cuenta_banco_del_plan,
     correr_motor,
     df_extracto_a_filas,
+    es_fila_saldo_bancario,
     money,
     origen_linea_extracto,
     renglones_asiento_banco_mes,
@@ -438,6 +439,21 @@ def _enriquecer(movs: list[dict], plan_df, mapa_clasif: dict[str, str] | None = 
     return _aplicar_mapa_clasif(out, mapa_clasif or {})
 
 
+def _sin_filas_saldo(movs: list[dict]) -> list[dict]:
+    """Saca saldo anterior / inicial / final y el 'nan' pegado al concepto."""
+    out: list[dict] = []
+    for m in movs:
+        desc = re.sub(r"\s+\bnan\b", "", str(m.get("descripcion") or ""), flags=re.I)
+        desc = re.sub(r"\s+", " ", desc).strip()
+        blob = f"{desc} {m.get('categoria') or ''} {m.get('extracto_label') or ''}"
+        if es_fila_saldo_bancario(blob):
+            continue
+        fila = dict(m)
+        fila["descripcion"] = desc
+        out.append(fila)
+    return out
+
+
 def _df_extracto(movs: list[dict], opciones: list[str]) -> pd.DataFrame:
     filas = []
     for i, m in enumerate(movs):
@@ -448,7 +464,6 @@ def _df_extracto(movs: list[dict], opciones: list[str]) -> pd.DataFrame:
                 "Descripción": str(m.get("descripcion") or ""),
                 "Débito": float(money(m.get("debito"))),
                 "Crédito": float(money(m.get("credito"))),
-                "Saldo": float(money(m.get("saldo"))),
                 "Clasificación": str(m.get("categoria") or m.get("extracto_label") or ""),
                 "Cuenta": _opcion_desde_codigo(str(m.get("cuenta_codigo") or "99999"), opciones),
                 "Origen": _label_origen(str(m.get("origen") or "")),
@@ -459,7 +474,7 @@ def _df_extracto(movs: list[dict], opciones: list[str]) -> pd.DataFrame:
 
 def _filas_componente(movs: list[dict]) -> list[dict]:
     filas = []
-    for i, m in enumerate(movs):
+    for i, m in enumerate(_sin_filas_saldo(movs)):
         filas.append(
             {
                 "i": int(m.get("_idx", i)),
@@ -467,7 +482,6 @@ def _filas_componente(movs: list[dict]) -> list[dict]:
                 "desc": str(m.get("descripcion") or ""),
                 "deb": float(money(m.get("debito"))),
                 "cred": float(money(m.get("credito"))),
-                "saldo": float(money(m.get("saldo"))),
                 "clasif": str(m.get("categoria") or m.get("extracto_label") or ""),
                 "codigo": str(m.get("cuenta_codigo") or "99999"),
                 "origen": str(m.get("origen") or "a_clasificar"),
@@ -733,6 +747,7 @@ def _paso_subir(
             st.error("Este archivo no se pudo leer como extracto.")
             return
         filas = df_extracto_a_filas(df)
+        filas = _sin_filas_saldo(filas)
         ok_saldo, msg_saldo = validar_saldos_corridos(filas)
         if not ok_saldo:
             st.warning(f"El saldo corrido no cierra del todo: {msg_saldo}. Igual se muestra para imputar.")
@@ -793,7 +808,9 @@ def _paso_extracto(
     nombre_activo: str | None,
 ) -> None:
     preview = st.session_state.get(preview_key) or {}
-    movs = list(preview.get("movimientos") or [])
+    movs = _sin_filas_saldo(list(preview.get("movimientos") or []))
+    preview["movimientos"] = movs
+    st.session_state[preview_key] = preview
     banco = str(preview.get("banco") or "")
     periodo = str(preview.get("periodo") or "")
     plan_df = _plan_df_sociedad(sociedad_id)
@@ -816,7 +833,7 @@ def _paso_extracto(
         filas=_filas_componente(movs),
         cuentas_json=json.dumps(_cuentas_componente(opciones), ensure_ascii=False),
         clasifs_json=json.dumps(_clasifs_componente(sociedad_id, movs), ensure_ascii=False),
-        key=f"ce_grid_{sociedad_id}_{token}",
+        key=f"ce_grid_{sociedad_id}_{token}_v2",
         default={"action": "idle", "filas": []},
     )
     accion = str((out or {}).get("action") or "idle")
@@ -853,7 +870,9 @@ def _paso_asiento(
     paso_key: str,
 ) -> None:
     preview = st.session_state.get(preview_key) or {}
-    movs = list(preview.get("movimientos") or [])
+    movs = _sin_filas_saldo(list(preview.get("movimientos") or []))
+    preview["movimientos"] = movs
+    st.session_state[preview_key] = preview
     banco = str(preview.get("banco") or banco_elegido or "Banco")
     periodo = str(preview.get("periodo") or _periodo_mm_yyyy(date.today()))
     plan_df = _plan_df_sociedad(sociedad_id)

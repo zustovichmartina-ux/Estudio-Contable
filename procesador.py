@@ -6501,7 +6501,7 @@ COLUMNAS_EXCEL_EXTRACTO_BANCO = [
 HOJAS_EXCEL_EXTRACTO_BANCO = ("Sheet1", "Resumen_Clasificacion")
 COLUMNAS_EXCEL_CONVERTIDOR = ("Fecha", "Concepto", "Débitos", "Créditos")
 _RE_FILA_SALDO_EXTRACTO = re.compile(
-    r"saldo\s*(inicial|final|total|de\s*cuenta|en\s*cuenta)|saldo\s+al\s+\d",
+    r"saldo\s*(anterior|inicial|final|total|de\s*cuenta|en\s*cuenta)|saldo\s+al\s+\d",
     re.I,
 )
 
@@ -8238,7 +8238,7 @@ def armar_tabla_dinamica_conceptos(df: pd.DataFrame) -> pd.DataFrame:
 def _es_fila_saldo_extracto(row: dict) -> bool:
     """Saldo inicial / final / total de cuenta: no va al convertidor."""
     tipo = str(row.get("Tipo fila") or "").strip().lower()
-    if tipo in {"saldo inicial", "saldo final"}:
+    if tipo in {"saldo inicial", "saldo final", "saldo anterior"}:
         return True
     blob = " ".join(
         str(row.get(k) or "")
@@ -8247,7 +8247,7 @@ def _es_fila_saldo_extracto(row: dict) -> bool:
     n = _normalizar_texto(blob)
     if not n:
         return False
-    if n in {"saldo", "saldo total", "saldo de cuenta"}:
+    if n in {"saldo", "saldo total", "saldo de cuenta", "saldo anterior"}:
         return True
     return bool(_RE_FILA_SALDO_EXTRACTO.search(n))
 

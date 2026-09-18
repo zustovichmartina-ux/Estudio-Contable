@@ -79,7 +79,6 @@
           <th>Descripción</th>
           <th class="num">Débito</th>
           <th class="num">Crédito</th>
-          <th class="num">Saldo</th>
           <th>Clasificación</th>
           <th>Cuenta Tango</th>
           <th>Origen</th>
@@ -234,7 +233,6 @@ function pintar() {
       <td>${esc(m.desc)}</td>
       <td class="num deb">${money(m.deb)}</td>
       <td class="num cred">${money(m.cred)}</td>
-      <td class="num">${money(m.saldo)}</td>
       <td>${celdaClasif(m, i)}</td>
       <td><select data-i="${i}" data-k="codigo">${optsHtml(m.codigo)}</select></td>
       <td><span class="tag ${esc(m.origen)}">${labelOrigen(m.origen)}</span></td>

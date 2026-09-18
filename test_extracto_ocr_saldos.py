@@ -234,6 +234,31 @@ class TestConvertidorSinSaldos(unittest.TestCase):
         self.assertEqual(len(out), 2)
         self.assertNotIn("Saldo", out.columns)
         self.assertFalse(out["Concepto"].str.contains("Saldo", case=False).any())
+        self.assertEqual(len(out), 2)
+
+        df_ant = pd.DataFrame(
+            [
+                {
+                    "Tipo fila": "Movimiento",
+                    "Fecha": "30/12/25",
+                    "Descripcion": "SALDO ANTERIOR",
+                    "Debito": None,
+                    "Credito": 1327591.30,
+                    "Saldo": 1327591.30,
+                },
+                {
+                    "Tipo fila": "Movimiento",
+                    "Fecha": "02/01/26",
+                    "Descripcion": "CR.DEBIN",
+                    "Debito": None,
+                    "Credito": 5941.92,
+                    "Saldo": 1333533.22,
+                },
+            ]
+        )
+        out_ant = df_extracto_convertidor_sin_saldos(df_ant)
+        self.assertEqual(len(out_ant), 1)
+        self.assertEqual(out_ant.iloc[0]["Concepto"], "CR.DEBIN")
 
         xlsx = exportar_extracto_bancario_excel(df, {"banco": "Santander"})
         wb = load_workbook(BytesIO(xlsx))
