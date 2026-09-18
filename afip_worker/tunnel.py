@@ -25,6 +25,10 @@ GITHUB_REPO = "zustovichmartina-ux/Estudio-Contable"
 GITHUB_RAW_TUNNEL_URL = (
     f"https://raw.githubusercontent.com/{GITHUB_REPO}/master/{TUNNEL_URL_REL}"
 )
+DISCOVERY_URLS = (
+    GITHUB_RAW_TUNNEL_URL,
+    f"https://cdn.jsdelivr.net/gh/{GITHUB_REPO}@master/{TUNNEL_URL_REL}",
+)
 
 
 def find_cloudflared() -> str | None:

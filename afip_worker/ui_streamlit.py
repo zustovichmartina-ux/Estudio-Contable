@@ -27,7 +27,7 @@ from afip_worker.registry import (
     list_cuits,
     mark_needs_admin,
 )
-from afip_worker.tunnel import GITHUB_RAW_TUNNEL_URL
+from afip_worker.tunnel import DISCOVERY_URLS
 
 
 _ACTION_LABELS = {
@@ -136,20 +136,30 @@ def _discovered_worker_url() -> str:
     ts = float(st.session_state.get("_arca_discovered_ts") or 0)
     if cached and (now - ts) < 60:
         return cached
-    req = urllib.request.Request(
-        GITHUB_RAW_TUNNEL_URL,
-        headers={"User-Agent": "EstudioContable-ARCA/1.0", "Accept": "text/plain"},
-        method="GET",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=8) as resp:
-            found = _parse_tunnel_url(resp.read().decode("utf-8", errors="replace"))
-    except Exception:
-        return cached
-    if found:
-        st.session_state["_arca_discovered_url"] = found
+    found_urls: list[str] = []
+    for src in DISCOVERY_URLS:
+        req = urllib.request.Request(
+            src,
+            headers={"User-Agent": "EstudioContable-ARCA/1.0", "Accept": "text/plain", "Cache-Control": "no-cache"},
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                found = _parse_tunnel_url(resp.read().decode("utf-8", errors="replace"))
+        except Exception:
+            continue
+        if found and found not in found_urls:
+            found_urls.append(found)
+    live = ""
+    for url in found_urls:
+        if RemoteWorker(url, "health").health():
+            live = url
+            break
+    chosen = live or (found_urls[0] if found_urls else cached)
+    if chosen:
+        st.session_state["_arca_discovered_url"] = chosen
         st.session_state["_arca_discovered_ts"] = now
-    return found
+    return chosen
 
 
 def _worker_url_candidates() -> list[str]:
