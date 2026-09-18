@@ -23,11 +23,11 @@ _CSS = """
 <style>
 div[data-testid="stChatMessage"] {
     background: var(--ec-card, #FFFFFF);
-    border: none;
-    border-radius: 16px;
-    padding: 0.55rem 0.7rem;
-    margin-bottom: 0.55rem;
-    box-shadow: none;
+    border: 1px solid var(--ec-line, #E2E8F0);
+    border-radius: 22px;
+    padding: 0.7rem 0.9rem;
+    margin-bottom: 0.65rem;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 22px rgba(15, 23, 42, 0.05);
     color: var(--ec-night, #0B0D10);
 }
 div[data-testid="stChatMessage"] p,
@@ -37,7 +37,7 @@ div[data-testid="stChatMessage"] span {
 }
 .tango-hero {
     text-align: left;
-    padding: 0.15rem 0 0.55rem;
+    padding: 0.15rem 0 0.7rem;
 }
 .tango-hero h1 {
     font-family: var(--ec-display, Outfit, sans-serif);
@@ -52,6 +52,7 @@ div[data-testid="stChatMessage"] span {
     color: var(--ec-muted, #64748B);
     font-size: 0.95rem;
     margin: 0;
+    line-height: 1.45;
 }
 .tango-sug-label {
     color: var(--ec-muted, #64748B);
@@ -59,15 +60,15 @@ div[data-testid="stChatMessage"] span {
     font-size: 0.7rem;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    margin: 0.2rem 0 0.45rem 0;
+    margin: 0.2rem 0 0.5rem 0;
     text-align: left;
 }
 [class*="st-key-tango_sug_box"],
 div.stMarkdown:has(.tango-sug-label) + div [data-testid="stVerticalBlockBorderWrapper"] {
     background: var(--ec-card, #FFFFFF) !important;
-    border: none !important;
-    border-radius: 16px !important;
-    box-shadow: none !important;
+    border: 1px solid var(--ec-line, #E2E8F0) !important;
+    border-radius: 22px !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 22px rgba(15, 23, 42, 0.05) !important;
 }
 [class*="st-key-tango_sug_box"] .stButton > button,
 [class*="st-key-tango_sug_box"] button[kind="secondary"],
@@ -75,12 +76,14 @@ div.stMarkdown:has(.tango-sug-label) + div [data-testid="stVerticalBlockBorderWr
 [class*="st-key-tango_sug_"] button[kind="secondary"] {
     background: transparent !important;
     color: var(--ec-night, #0B0D10) !important;
-    border: 1px solid rgba(11, 13, 16, 0.16) !important;
+    border: 1px solid rgba(11, 13, 16, 0.14) !important;
     font-weight: 500 !important;
     font-size: 0.85rem !important;
-    min-height: 2.35rem !important;
-    border-radius: 10px !important;
+    min-height: 2.45rem !important;
+    border-radius: 16px !important;
     box-shadow: none !important;
+    transition: background 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+                color 0.2s ease, border-color 0.2s ease, transform 0.2s ease !important;
 }
 [class*="st-key-tango_sug_box"] .stButton > button:hover,
 [class*="st-key-tango_sug_box"] button[kind="secondary"]:hover,
@@ -90,26 +93,27 @@ div.stMarkdown:has(.tango-sug-label) + div [data-testid="stVerticalBlockBorderWr
     color: #FFFFFF !important;
     border-color: var(--ec-lagoon, #2563EB) !important;
     opacity: 1 !important;
+    transform: translateY(-1px);
 }
 [data-testid="stBottomBlockContainer"] {
     background: #F4F6FA !important;
     padding-bottom: 0.85rem !important;
 }
 [data-testid="stChatInput"] {
-    background: #E8EAED !important;
-    border: 1px solid #CBD5E1 !important;
-    border-radius: 16px !important;
-    box-shadow: none !important;
+    background: #FFFFFF !important;
+    border: 1px solid #E2E8F0 !important;
+    border-radius: 24px !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 22px rgba(15, 23, 42, 0.05) !important;
     color: #0F172A !important;
 }
 [data-testid="stChatInput"] > div,
 [data-testid="stChatInput"] .stChatInputContainer,
 [data-testid="stChatInput"] [data-baseweb="base-input"],
 [data-testid="stChatInput"] [data-baseweb="textarea"] {
-    background: #E8EAED !important;
+    background: #FFFFFF !important;
     border: none !important;
     box-shadow: none !important;
-    border-radius: 16px !important;
+    border-radius: 24px !important;
     color: #0F172A !important;
 }
 [data-testid="stChatInput"] textarea,
@@ -133,13 +137,19 @@ div.stMarkdown:has(.tango-sug-label) + div [data-testid="stVerticalBlockBorderWr
     background: #2563EB !important;
     color: #FFFFFF !important;
     border: none !important;
-    border-radius: 10px !important;
+    border-radius: 16px !important;
+    transition: box-shadow 0.2s ease, transform 0.2s ease !important;
+}
+[data-testid="stChatInput"] button:hover {
+    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22) !important;
+    transform: translateY(-1px);
 }
 [data-testid="stChatInput"] [data-testid="stChatInputFileUploadMessage"],
 [data-testid="stChatInput"] [data-testid="stFileUploadDropzone"],
 [data-testid="stChatInput"] [class*="uploadedFile"] {
     color: #0F172A !important;
     background: #F8FAFC !important;
+    border-radius: 16px !important;
 }
 </style>
 """

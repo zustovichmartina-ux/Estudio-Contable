@@ -159,6 +159,7 @@ from completar_cuadro_bancario import (
     explorar_buzon_cuadros_bancarios,
 )
 from liquidaciones_tarjetas_estudio import procesar_pdfs_tarjetas_estudio
+from ui_theme import inyectar_tema
 
 BASE_DIR = Path(__file__).resolve().parent
 LOGO_ESTUDIO_PATH = BASE_DIR / "assets" / "estudio-zona-guemes-wordmark-oscuro.png"
@@ -192,597 +193,7 @@ def _es_entorno_cloud() -> bool:
         return True
     return False
 
-st.markdown(
-    """
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
-
-    :root {
-        --ec-night: #0B1220;
-        --ec-topbar: #0B1C33;
-        --ec-charcoal: #1E293B;
-        --ec-cream: #FFFFFF;
-        --ec-sand: #64748B;
-        --ec-lagoon: #2563EB;
-        --ec-sky: #2563EB;
-        --ec-amber: #2563EB;
-        --ec-navy: #0B1C33;
-        --ec-navy-soft: #3B82F6;
-        --ec-ink: #0F172A;
-        --ec-slate: #E2E8F0;
-        --ec-muted: #64748B;
-        --ec-line: #E2E8F0;
-        --ec-track: #F4F6FA;
-        --ec-bg: #F4F6FA;
-        --ec-card: #FFFFFF;
-        --ec-accent-soft: rgba(37, 99, 235, 0.12);
-        --ec-radius: 14px;
-        --ec-radius-sm: 10px;
-        --ec-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
-        --ec-font: Inter, "Segoe UI", system-ui, sans-serif;
-        --ec-display: Outfit, Inter, sans-serif;
-    }
-
-    html, body, [data-testid="stAppViewContainer"], [data-testid="stHeader"],
-    [data-testid="stSidebar"], .stMarkdown, .stButton, .stTextInput {
-        font-family: var(--ec-font) !important;
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-    }
-
-    .stApp {
-        background: var(--ec-bg) !important;
-        color: var(--ec-ink) !important;
-    }
-
-    [data-testid="stHeader"] {
-        background: var(--ec-topbar) !important;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    }
-    header[data-testid="stHeader"] {
-        background: var(--ec-topbar) !important;
-        height: 3.5rem !important;
-    }
-
-    [data-testid="stAppViewContainer"] > .main {
-        opacity: 1 !important;
-        background: var(--ec-bg) !important;
-    }
-
-    .main .block-container {
-        padding-top: 0.7rem !important;
-        padding-bottom: 2.4rem !important;
-        max-width: 1440px;
-        opacity: 1 !important;
-    }
-
-    /* Selectboxes: no CSS agresivo de BaseWeb (anti removeChild). */
-
-    .main .stMarkdown p,
-    .main [data-testid="stCaptionContainer"] {
-        font-size: 0.95rem !important;
-        color: var(--ec-ink) !important;
-        line-height: 1.5 !important;
-    }
-    .main h1 {
-        font-family: var(--ec-display) !important;
-        font-size: 1.7rem !important;
-        font-weight: 650 !important;
-        letter-spacing: -0.03em !important;
-        color: var(--ec-ink) !important;
-        margin-bottom: 0.25rem !important;
-    }
-    .main h2 {
-        font-size: 1.12rem !important;
-        font-weight: 650 !important;
-        color: var(--ec-ink) !important;
-    }
-    .main h3, .main h4 {
-        font-size: 1rem !important;
-        font-weight: 650 !important;
-        color: var(--ec-ink) !important;
-    }
-    .main small,
-    .main [data-testid="stCaptionContainer"] {
-        color: var(--ec-sand) !important;
-    }
-
-    [data-testid="stSidebar"] {
-        background: var(--ec-night) !important;
-        border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
-    }
-    [data-testid="stSidebar"] > div:first-child {
-        padding-top: 0.85rem;
-    }
-    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
-    [data-testid="stSidebar"] label,
-    [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {
-        font-size: 13px !important;
-        color: #F8FAFC !important;
-    }
-    .ec-side-label,
-    [data-testid="stSidebar"] .ec-side-label,
-    [data-testid="stSidebar"] p.ec-side-label {
-        margin: 0.85rem 0 0.35rem 0.15rem !important;
-        font-size: 0.68rem !important;
-        font-weight: 650 !important;
-        letter-spacing: 0.14em !important;
-        text-transform: uppercase !important;
-        color: #94A3B8 !important;
-    }
-
-    div[data-testid="stExpander"],
-    div[data-testid="stForm"],
-    div[data-testid="stAlert"],
-    div[data-testid="stMetric"],
-    .stDataFrame,
-    [data-testid="stFileUploader"] {
-        border-radius: var(--ec-radius-sm) !important;
-    }
-    .main div[data-testid="stExpander"] {
-        background: var(--ec-card) !important;
-        border: 1px solid var(--ec-line) !important;
-        box-shadow: var(--ec-shadow);
-    }
-
-    .main .stTextInput input,
-    .main .stNumberInput input,
-    .main .stTextArea textarea {
-        border-radius: var(--ec-radius-sm) !important;
-        border: 1px solid var(--ec-line) !important;
-        background: #FFFFFF !important;
-        color: var(--ec-ink) !important;
-        font-size: 0.95rem !important;
-        box-shadow: none !important;
-        min-height: 2.35rem !important;
-    }
-    .main .stTextInput input:focus,
-    .main .stNumberInput input:focus,
-    .main .stTextArea textarea:focus {
-        border-color: var(--ec-lagoon) !important;
-        box-shadow: 0 0 0 3px var(--ec-accent-soft) !important;
-    }
-
-    .stButton > button,
-    .stDownloadButton > button,
-    .stFormSubmitButton > button {
-        border-radius: 10px !important;
-        font-weight: 600 !important;
-        font-size: 0.9rem !important;
-        padding: 0.42rem 1rem !important;
-        min-height: 2.35rem !important;
-        transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease !important;
-        box-shadow: none !important;
-    }
-    .stButton > button[kind="primary"],
-    .stFormSubmitButton > button[kind="primary"],
-    .stDownloadButton > button {
-        background: var(--ec-lagoon) !important;
-        color: #FFFFFF !important;
-        border: 1px solid var(--ec-lagoon) !important;
-    }
-    .main .stButton > button[kind="secondary"] {
-        background: #FFFFFF !important;
-        color: var(--ec-ink) !important;
-        border: 1px solid var(--ec-line) !important;
-    }
-    .main .stButton > button[kind="secondary"]:hover {
-        background: #EEF2FF !important;
-        color: var(--ec-lagoon) !important;
-        border-color: #BFDBFE !important;
-        opacity: 1 !important;
-    }
-    .stButton > button:hover,
-    .stDownloadButton > button:hover,
-    .stFormSubmitButton > button:hover {
-        opacity: 0.94;
-    }
-
-    .main div[data-testid="stAlert"] {
-        border: 1px solid var(--ec-line) !important;
-        background: #FFFFFF !important;
-        box-shadow: var(--ec-shadow);
-        border-radius: var(--ec-radius-sm) !important;
-        color: var(--ec-ink) !important;
-    }
-
-    .main .stDataFrame,
-    .main [data-testid="stDataFrame"] {
-        border: 1px solid var(--ec-line) !important;
-        box-shadow: var(--ec-shadow);
-        overflow: hidden;
-        background: #FFFFFF !important;
-        border-radius: var(--ec-radius-sm) !important;
-    }
-    .main th, .main td {
-        font-size: 0.875rem !important;
-        color: var(--ec-ink) !important;
-    }
-
-    .main [data-testid="stFileUploader"] section {
-        border-radius: var(--ec-radius) !important;
-        border: 1px dashed #CBD5E1 !important;
-        background: #FFFFFF !important;
-    }
-    .main [data-testid="stFileUploader"] section:hover {
-        border-color: var(--ec-lagoon) !important;
-        background: #EFF6FF !important;
-    }
-
-    .main [data-testid="stMetric"] {
-        background: var(--ec-card);
-        border: 1px solid var(--ec-line);
-        border-radius: var(--ec-radius);
-        padding: 0.95rem 1.1rem;
-        box-shadow: var(--ec-shadow);
-    }
-    [data-testid="stMetricValue"] {
-        font-family: var(--ec-display) !important;
-        font-weight: 650 !important;
-        font-size: 1.55rem !important;
-        color: var(--ec-ink) !important;
-        letter-spacing: -0.03em !important;
-    }
-    [data-testid="stMetricLabel"] {
-        font-size: 11px !important;
-        font-weight: 650 !important;
-        color: var(--ec-sand) !important;
-        text-transform: uppercase !important;
-        letter-spacing: 0.08em !important;
-    }
-
-    .main hr {
-        border-color: var(--ec-line) !important;
-    }
-
-    .stProgress > div > div > div > div {
-        background: var(--ec-lagoon) !important;
-        border-radius: 4px !important;
-    }
-
-    ::-webkit-scrollbar { width: 8px; height: 8px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb {
-        background: rgba(100, 116, 139, 0.35);
-        border-radius: 8px;
-        border: 2px solid transparent;
-        background-clip: content-box;
-    }
-
-    #MainMenu { visibility: hidden; }
-    footer { visibility: hidden; }
-    header[data-testid="stHeader"] { height: 3.5rem !important; }
-
-    a { color: var(--ec-sky) !important; text-decoration: none !important; }
-    a:hover { text-decoration: underline !important; }
-
-    code, pre {
-        border-radius: 4px !important;
-        font-size: 13px !important;
-    }
-
-    /* Ocultar SOLO Deploy/Desplegar (File change / Recargar quedan) */
-    [data-testid="stAppDeployButton"],
-    [data-testid="stDeployButton"],
-    .stDeployButton,
-    div[data-testid="stToolbar"] a[href*="share.streamlit"] {
-        display: none !important;
-        visibility: hidden !important;
-        width: 0 !important;
-        height: 0 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        overflow: hidden !important;
-        pointer-events: none !important;
-    }
-
-    /* Cabecera de pantalla: en el flujo (no fixed). El overlay se recortaba. */
-    [data-testid="stMarkdownContainer"]:has(.ec-pagehead) {
-        overflow: visible !important;
-    }
-    [data-testid="stMarkdownContainer"] .ec-pagehead,
-    .ec-pagehead {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important;
-        align-items: flex-end !important;
-        justify-content: flex-start !important;
-        gap: 0.7rem !important;
-        margin: 0 0 1.15rem 0 !important;
-        padding: 0.15rem 0 0 0 !important;
-        border-bottom: 1px solid var(--ec-line) !important;
-        overflow: visible !important;
-        background: transparent !important;
-    }
-    .ec-pagehead-copy {
-        flex: 1 1 auto !important;
-        min-width: 0 !important;
-        padding: 0 0 0.7rem 0 !important;
-        background: transparent !important;
-    }
-    .ec-saludo-wrap {
-        position: relative !important;
-        flex: 0 0 7rem !important;
-        width: 7rem !important;
-        align-self: stretch !important;
-        min-height: 8.6rem !important;
-        overflow: visible !important;
-        clip-path: none !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        background: transparent !important;
-        border: 0 !important;
-        box-shadow: none !important;
-    }
-    .ec-saludo-avatar,
-    .stMarkdown img.ec-saludo-avatar,
-    [data-testid="stMarkdownContainer"] img.ec-saludo-avatar {
-        position: absolute !important;
-        left: 0 !important;
-        right: 0 !important;
-        top: 0 !important;
-        bottom: 0 !important;
-        transform: none !important;
-        width: 100% !important;
-        height: 100% !important;
-        max-width: 100% !important;
-        max-height: 100% !important;
-        object-fit: contain !important;
-        object-position: bottom center !important;
-        display: block !important;
-        border-radius: 0 !important;
-        background: transparent !important;
-        box-shadow: none !important;
-        border: 0 !important;
-        outline: none !important;
-        filter: none !important;
-    }
-    .ec-pagehead-hola,
-    .stMarkdown p.ec-pagehead-hola {
-        margin: 0 0 0.45rem 0 !important;
-        font-family: var(--ec-display) !important;
-        font-size: 1.55rem !important;
-        font-weight: 650 !important;
-        letter-spacing: -0.02em !important;
-        text-transform: none !important;
-        color: var(--ec-ink) !important;
-        line-height: 1.2 !important;
-    }
-    .ec-pagehead-kicker,
-    .stMarkdown p.ec-pagehead-kicker {
-        margin: 0 0 0.28rem 0 !important;
-        font-size: 0.72rem !important;
-        font-weight: 650 !important;
-        letter-spacing: 0.12em !important;
-        text-transform: uppercase !important;
-        color: var(--ec-lagoon) !important;
-        line-height: 1.2 !important;
-    }
-    .ec-pagehead-title,
-    .stMarkdown p.ec-pagehead-title {
-        margin: 0 !important;
-        font-family: var(--ec-display) !important;
-        font-size: 1.7rem !important;
-        font-weight: 650 !important;
-        letter-spacing: -0.03em !important;
-        color: var(--ec-ink) !important;
-        line-height: 1.15 !important;
-    }
-    .ec-pagehead-sub,
-    .stMarkdown p.ec-pagehead-sub {
-        margin: 0.35rem 0 0 0 !important;
-        font-size: 0.95rem !important;
-        color: var(--ec-sand) !important;
-        line-height: 1.4 !important;
-    }
-    .ec-brand {
-        padding: 0 0 0.85rem 0;
-        margin: 0 0 0.55rem 0;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    }
-    [data-testid="stSidebar"] .ec-brand img,
-    [data-testid="stSidebar"] [data-testid="stImage"],
-    [data-testid="stSidebar"] [data-testid="stImage"] > div,
-    [data-testid="stSidebar"] [data-testid="stImage"] img {
-        background: transparent !important;
-        border: 0 !important;
-        box-shadow: none !important;
-        border-radius: 0 !important;
-    }
-
-    /* Chips Biblioteca/Menú: fijos arriba a la derecha (CSS only).
-       No reparentar nodos con JS (insertBefore/appendChild): React de Streamlit
-       dispara NotFoundError removeChild. Tampoco absolute+size 0 en wrappers
-       (interceptaba clicks del nav segmented_control). */
-    div[data-testid="stHorizontalBlock"]:has(.st-key-ec_toolbar_bib):has(.st-key-ec_toolbar_menu) {
-        position: fixed !important;
-        top: 0 !important;
-        right: 2.6rem !important;
-        z-index: 999990 !important;
-        width: max-content !important;
-        max-width: none !important;
-        height: 3.5rem !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        gap: 0.5rem !important;
-        column-gap: 0.5rem !important;
-        row-gap: 0 !important;
-        align-items: center !important;
-        justify-content: flex-end !important;
-        background: transparent !important;
-        border: none !important;
-        box-shadow: none !important;
-        pointer-events: none;
-    }
-    div[data-testid="stHorizontalBlock"]:has(.st-key-ec_toolbar_bib):has(.st-key-ec_toolbar_menu)
-      > div[data-testid="stColumn"] {
-        width: auto !important;
-        flex: 0 0 auto !important;
-        min-width: 0 !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        pointer-events: auto;
-    }
-    /* Separación extra entre chips (Streamlit a veces comprime el gap de columns). */
-    div[data-testid="stHorizontalBlock"]:has(.st-key-ec_toolbar_bib):has(.st-key-ec_toolbar_menu)
-      > div[data-testid="stColumn"]:has(.st-key-ec_toolbar_menu) {
-        margin-left: 0.35rem !important;
-    }
-    /* Colapsar solo el alto reservado en el flujo (sin overlay absoluto).
-       overflow:visible para que los popovers fijos sigan clickeables. */
-    div[data-testid="stElementContainer"]:has(.st-key-ec_toolbar_bib),
-    div[data-testid="stElementContainer"]:has(.st-key-ec_toolbar_menu),
-    div[data-testid="element-container"]:has(.st-key-ec_toolbar_bib),
-    div[data-testid="element-container"]:has(.st-key-ec_toolbar_menu) {
-        margin-bottom: 0 !important;
-        padding-top: 0 !important;
-        padding-bottom: 0 !important;
-    }
-    .st-key-ec_toolbar_bib,
-    .st-key-ec_toolbar_menu {
-        width: auto !important;
-        margin: 0 !important;
-        pointer-events: auto;
-    }
-    .st-key-ec_toolbar_bib button,
-    .st-key-ec_toolbar_menu button,
-    .st-key-ec_toolbar_bib [data-testid="stPopoverButton"] button,
-    .st-key-ec_toolbar_menu [data-testid="stPopoverButton"] button {
-        display: inline-flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        box-sizing: border-box !important;
-        min-height: 2rem !important;
-        height: 2rem !important;
-        padding: 0 0.95rem !important;
-        font-size: 0.8125rem !important;
-        font-weight: 500 !important;
-        letter-spacing: 0.01em !important;
-        line-height: 1 !important;
-        border-radius: 999px !important;
-        background: var(--ec-charcoal) !important;
-        color: var(--ec-cream) !important;
-        border: 1px solid var(--ec-charcoal) !important;
-        box-shadow: none !important;
-        white-space: nowrap !important;
-        transition: background 0.12s ease, border-color 0.12s ease !important;
-    }
-    .st-key-ec_toolbar_bib button:hover,
-    .st-key-ec_toolbar_menu button:hover,
-    .st-key-ec_toolbar_bib [data-testid="stPopoverButton"] button:hover,
-    .st-key-ec_toolbar_menu [data-testid="stPopoverButton"] button:hover {
-        background: var(--ec-lagoon) !important;
-        border-color: var(--ec-lagoon) !important;
-        color: #FFFFFF !important;
-    }
-    /* Nav principal: en la sidebar, formato Samsara */
-    [data-testid="stSidebar"] .st-key-ventana_principal_v4 {
-        margin: 0.15rem 0 0.85rem 0 !important;
-    }
-    [data-testid="stSidebar"] .st-key-ventana_principal_v4 [data-testid="stRadio"],
-    [data-testid="stSidebar"] .st-key-ventana_principal_v4 [role="radiogroup"] {
-        display: flex !important;
-        flex-direction: column !important;
-        gap: 4px !important;
-        background: transparent !important;
-        border: none !important;
-    }
-    [data-testid="stSidebar"] .st-key-ventana_principal_v4 label,
-    [data-testid="stSidebar"] .st-key-ventana_principal_v4 [role="radiogroup"] label {
-        display: flex !important;
-        align-items: center !important;
-        border-radius: 10px !important;
-        padding: 0.45rem 0.75rem !important;
-        margin: 0 !important;
-        background: transparent !important;
-        color: rgba(244, 244, 245, 0.78) !important;
-        font-size: 0.875rem !important;
-        font-weight: 500 !important;
-        border: none !important;
-    }
-    [data-testid="stSidebar"] .st-key-ventana_principal_v4 label:hover {
-        background: var(--ec-charcoal) !important;
-        color: #FFFFFF !important;
-    }
-    [data-testid="stSidebar"] .st-key-ventana_principal_v4 label:has(input:checked),
-    [data-testid="stSidebar"] .st-key-ventana_principal_v4 label[data-checked="true"],
-    [data-testid="stSidebar"] .st-key-ventana_principal_v4 [aria-checked="true"] {
-        background: var(--ec-lagoon) !important;
-        color: #FFFFFF !important;
-        font-weight: 600 !important;
-    }
-    [data-testid="stSidebar"] .st-key-ventana_principal_v4 [data-baseweb="radio"] > div:first-child {
-        display: none !important;
-    }
-    .stTabs [data-baseweb="tab-list"] {
-        background: transparent !important;
-        border: none !important;
-        border-bottom: 1px solid var(--ec-line) !important;
-        border-radius: 0 !important;
-        padding: 0 !important;
-        gap: 4px !important;
-    }
-    .stTabs [data-baseweb="tab"] {
-        background: transparent !important;
-        border: none !important;
-        border-radius: 10px 10px 0 0 !important;
-        color: var(--ec-sand) !important;
-        font-size: 0.9rem !important;
-        font-weight: 550 !important;
-        padding: 0.4rem 0.9rem !important;
-    }
-    .stTabs [data-baseweb="tab"][aria-selected="true"] {
-        background: var(--ec-lagoon) !important;
-        color: #FFFFFF !important;
-    }
-    .stTabs [data-baseweb="tab-highlight"],
-    .stTabs [data-baseweb="tab-border"] {
-        display: none !important;
-    }
-    .main .block-container {
-        padding-top: 0.7rem !important;
-    }
-    .ec-hero {
-        margin: 0 0 1.15rem 0;
-        padding: 1.4rem 1.5rem;
-        border-radius: 16px;
-        background: linear-gradient(120deg, #0B1C33 0%, #1E3A8A 55%, #2563EB 100%);
-        color: #FFFFFF;
-    }
-    .ec-hero p.ec-hero-hola,
-    .stMarkdown p.ec-hero-hola {
-        font-family: var(--ec-display) !important;
-        font-size: 2rem !important;
-        font-weight: 650 !important;
-        color: #FFFFFF !important;
-        text-transform: none !important;
-        margin: 0 !important;
-        letter-spacing: -0.03em !important;
-        line-height: 1.15 !important;
-    }
-    .ec-hero p.ec-hero-sub,
-    .stMarkdown p.ec-hero-sub {
-        color: rgba(255, 255, 255, 0.9) !important;
-        margin: 0.45rem 0 0 0 !important;
-        font-size: 0.98rem !important;
-        text-transform: none !important;
-        line-height: 1.35 !important;
-    }
-    .ec-titulo {
-        margin: 0.05rem 0 0.85rem 0;
-        font-family: var(--ec-display);
-        font-size: 1.55rem;
-        font-weight: 650;
-        color: var(--ec-ink);
-        letter-spacing: -0.03em;
-        line-height: 1.15;
-        text-transform: none;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
+inyectar_tema()
 
 # No inyectar JS (components.html + MutationObserver / hideDeploy / scrub de
 # excepciones): mutar el DOM de Streamlit mientras React reconcilia provoca
@@ -895,7 +306,7 @@ _VENTANAS_PRINCIPALES = (
     "Tango",
     "ARCA",
 )
-# v4: radio vertical en sidebar (formato Samsara). v3 era segmented top.
+# v4: radio vertical en sidebar. v3 era segmented top.
 _VENTANA_KEY = "ventana_principal_v4"
 _VENTANA_KEY_LEGACY = "ventana_principal_activa"
 _VENTANA_KEY_V3 = "ventana_principal_v3"
@@ -972,7 +383,7 @@ def _migrar_ventana_principal_session() -> None:
 
 
 def _render_nav_ventanas_principales() -> str:
-    """Menú vertical en la sidebar (mismo formato que Samsara)."""
+    """Menú vertical en la sidebar."""
     _migrar_ventana_principal_session()
     opciones = list(_VENTANAS_PRINCIPALES)
     actual = str(st.session_state.get(_VENTANA_KEY, opciones[0]))
@@ -9930,12 +9341,13 @@ def _render_barra_fija_export_tango(
             z-index: 999980 !important;
             width: 100% !important;
             max-width: 100% !important;
-            background: #0B0D10 !important;
-            border-top: 1px solid #1C1E22 !important;
-            padding: 0.55rem 1.15rem 0.65rem 1.15rem !important;
+            background: var(--ec-topbar, #0B1C33) !important;
+            border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+            padding: 0.7rem 1.25rem 0.8rem 1.25rem !important;
             margin: 0 !important;
-            box-shadow: none !important;
+            box-shadow: 0 -8px 24px rgba(11, 28, 51, 0.18) !important;
             align-items: center !important;
+            border-radius: 22px 22px 0 0 !important;
         }}
         </style>
         <div class="ec-tango-sticky-spacer"></div>
@@ -11455,20 +10867,22 @@ def _herramienta_completar_cuadro_bancario() -> None:
         help="Se ignoran movimientos de otros años (p. ej. extractos trimestrales).",
     )
 
-    st.markdown("##### Buzón de carpeta")
-    ruta_buzon = st.text_input(
-        "Ruta de la carpeta del cliente",
-        key="cuadro_bancario_ruta_buzon_v1",
-        placeholder=r"\\TANGOSRV\Compartido\CLIENTES\TRUJILLO HERNAN\Ganancias Personas Fisicas\GANANCIAS 2025",
-        help="Pegá la carpeta (Copiar como ruta). Se buscan Excel y PDF en subcarpetas.",
-    )
-    col_explorar, _ = st.columns([1, 2])
-    with col_explorar:
-        explorar = st.button(
-            "Explorar carpeta",
-            key="cuadro_bancario_explorar_v1",
-            use_container_width=True,
+    with st.container(border=True):
+        st.markdown("##### Buzón de carpeta")
+        st.caption("Pegá la carpeta del cliente. El estudio busca el Excel y los PDF solos.")
+        ruta_buzon = st.text_input(
+            "Ruta de la carpeta del cliente",
+            key="cuadro_bancario_ruta_buzon_v1",
+            placeholder=r"\\TANGOSRV\Compartido\CLIENTES\TRUJILLO HERNAN\Ganancias Personas Fisicas\GANANCIAS 2025",
+            help="Pegá la carpeta (Copiar como ruta). Se buscan Excel y PDF en subcarpetas.",
         )
+        col_explorar, _ = st.columns([1, 2])
+        with col_explorar:
+            explorar = st.button(
+                "Explorar carpeta",
+                key="cuadro_bancario_explorar_v1",
+                use_container_width=True,
+            )
 
     if explorar:
         st.session_state.cuadro_bancario_resultado = None
@@ -13286,6 +12700,14 @@ def _cerrar_sesion_oficina() -> None:
 def _pantalla_login_oficina() -> None:
     """Pantalla de ingreso: cada persona de la oficina elige su usuario."""
     _render_titulo_estudio("login")
+    _, col_login, _ = st.columns([0.85, 1.4, 0.85])
+    with col_login:
+        with st.container(border=True):
+            _formulario_login_oficina()
+
+
+def _formulario_login_oficina() -> None:
+    """Campos de usuario / PIN (misma lógica, layout más aireado)."""
     if _es_entorno_cloud():
         st.caption("Cada uno elige su nombre. PIN del equipo: el que les pasó el estudio.")
         try:
