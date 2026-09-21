@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Login AFIP visible. Espera hasta que el usuario entre al portal. Sin apuro."""
+"""Login AFIP visible. Espera hasta que el usuario entre al portal y guarde la clave."""
 from __future__ import annotations
 
 import logging
@@ -36,11 +36,13 @@ def main() -> int:
         if n:
             print(f"Cerré el Chrome oculto del worker ({n}).")
         print("Se abre Chrome ADELANTE. No lo minimices.")
-        print("1) Revisá que el CUIT sea el de RECEPCION (estudio)")
+        print("1) Revisá que el CUIT sea el del ESTUDIO (no el del cliente)")
         print("2) Escribí la clave fiscal")
-        print("3) Si Chrome pregunta, tocá Guardar contraseña")
-        print("4) Completá el 2FA si aparece")
-        print("Cuando veas el portal (Mis servicios), esta ventana dice OK sola.")
+        print("3) Completá el 2FA si aparece")
+        print("4) Si Chrome pide Guardar contraseña, tocá Guardar")
+        print()
+        print("Cuando veas el portal (Mis servicios), esta ventana te pide Enter.")
+        print("NO cierres Chrome hasta guardar la clave y apretar Enter acá.")
         print("No hay tiempo límite. Ctrl+C si querés cancelar.")
         print()
 
@@ -63,14 +65,27 @@ def main() -> int:
             while True:
                 if _is_portal(page) and not _is_login(page):
                     print()
-                    print("OK — sesión lista. Ya podés cerrar esta ventana.")
-                    print("Después: pedí la descarga en la web ARCA (o avisame).")
-                    close_browser()
-                    return 0
+                    print("OK — portal detectado.")
+                    print("Si Chrome pide Guardar contraseña, hacelo AHORA.")
+                    print("Cuando la clave esté guardada, volvé a ESTA ventana y apretá Enter.")
+                    print("(Chrome se queda abierto hasta que apretes Enter.)")
+                    try:
+                        input()
+                    except EOFError:
+                        # Sin consola interactiva: dar tiempo a Guardar contraseña.
+                        print("Sin teclado: espero 45 s para que guardes la clave en Chrome...")
+                        time.sleep(45)
+                    print("Listo. Cerrando el Chrome del login; el perfil queda guardado.")
+                    break
                 time.sleep(2.0)
                 waited += 2
                 if waited % 20 == 0:
                     print(f"Sigo esperando el portal... ({waited}s) — entrá en Chrome.")
+
+        close_browser()
+        print()
+        print("Sesión lista. Después: ejecutor_arca.bat (no cerrar esa ventana).")
+        return 0
     except KeyboardInterrupt:
         print("\nCancelado.")
         return 1
