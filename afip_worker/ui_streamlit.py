@@ -176,9 +176,9 @@ def _worker_url_candidates() -> list[str]:
 
 
 def _remote() -> RemoteWorker | None:
-    token = _secret_str("AFIP_WORKER_TOKEN")
-    if not token:
-        return None
+    # Si no hay token en Secrets (o no se puede editar), igual intentamos:
+    # el ejecutor puede estar con AFIP_OPEN_BRIDGE=1.
+    token = _secret_str("AFIP_WORKER_TOKEN") or "open-bridge"
     urls = _worker_url_candidates()
     if not urls:
         return None
