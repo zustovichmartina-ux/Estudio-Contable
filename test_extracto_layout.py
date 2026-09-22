@@ -43,6 +43,19 @@ class TestExtractoLayout(unittest.TestCase):
         self.assertEqual(out["movimientos"][0]["origen_imputacion"], "fija")
         self.assertFalse(out["movimientos"][0]["editable"])
 
+    def test_omite_saldo_anterior_y_une_debin_con_detalle(self):
+        lineas = [
+            "01/08/26 SALDO ANTERIOR 34.154.678,27 34.154.678,27",
+            "02/08/26 CR.DEBIN 15.000,00 34.169.678,27",
+            "CLINICA DEL SOL 30717847810",
+        ]
+        movs = parse_lineas(lineas)
+        self.assertEqual(len(movs), 1)
+        self.assertIn("CR.DEBIN", movs[0]["descripcion"].upper())
+        self.assertIn("CLINICA", movs[0]["descripcion"].upper())
+        self.assertIn("30717847810", movs[0]["descripcion"])
+
 
 if __name__ == "__main__":
     unittest.main()
+

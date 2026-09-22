@@ -2767,6 +2767,24 @@ class _NoOpOcrReader:
         return []
 
 
+def _secuencia_ocr(valor) -> list:
+    """Lista Python desde RapidOCR (a veces ndarray: no usar `if array`)."""
+    if valor is None:
+        return []
+    if isinstance(valor, np.ndarray):
+        if valor.size == 0:
+            return []
+        return valor.tolist()
+    if isinstance(valor, (list, tuple)):
+        return list(valor)
+    if isinstance(valor, (str, bytes)):
+        return []
+    try:
+        return list(valor)
+    except TypeError:
+        return []
+
+
 class _RapidOcrAdapter:
     """Adapta RapidOCR (Cloud, sin torch) al contrato readtext de EasyOCR."""
 
@@ -2787,37 +2805,75 @@ class _RapidOcrAdapter:
                 bruto = self._engine(cand)
             except Exception:
                 continue
-            out = self._normalizar_resultado(bruto)
-            if out:
+            try:
+                out = self._normalizar_resultado(bruto)
+            except Exception:
+                continue
+            if len(out) > 0:
                 return out
         return []
+
+    def _zip_cajas_textos(self, boxes, txts, scores=None) -> list:
+        cajas = _secuencia_ocr(boxes)
+        textos = _secuencia_ocr(txts)
+        pts = _secuencia_ocr(scores)
+        out = []
+        for i, box in enumerate(cajas):
+            txt = textos[i] if i < len(textos) else ""
+            if isinstance(txt, bytes):
+                txt = txt.decode("utf-8", "replace")
+            txt = str(txt or "").strip()
+            if not txt:
+                continue
+            sc = 0.0
+            if i < len(pts):
+                try:
+                    sc = float(pts[i])
+                except (TypeError, ValueError):
+                    sc = 0.0
+            out.append((box, txt, sc))
+        return out
+
+    def _filas_listado(self, seq) -> list:
+        out = []
+        for item in seq:
+            if item is None:
+                continue
+            if isinstance(item, np.ndarray):
+                continue
+            if isinstance(item, (list, tuple)) and len(item) >= 2:
+                txt = item[1]
+                if isinstance(txt, (list, tuple, np.ndarray)) and not isinstance(txt, (str, bytes)):
+                    continue
+                try:
+                    sc = float(item[2]) if len(item) > 2 else 1.0
+                except (TypeError, ValueError):
+                    sc = 1.0
+                out.append((item[0], str(txt), sc))
+        return out
 
     def _normalizar_resultado(self, bruto):
         if bruto is None:
             return []
-        if isinstance(bruto, tuple):
-            filas = bruto[0]
-        else:
-            filas = getattr(bruto, "boxes", None)
-            if filas is None:
-                filas = bruto
-            else:
-                textos = list(getattr(bruto, "txts", []) or [])
-                scores = list(getattr(bruto, "scores", []) or [])
-                cajas = list(filas or [])
-                out = []
-                for i, box in enumerate(cajas):
-                    txt = textos[i] if i < len(textos) else ""
-                    sc = float(scores[i]) if i < len(scores) else 0.0
-                    out.append((box, txt, sc))
-                return out
-        out = []
-        for item in filas or []:
-            if item is None:
-                continue
-            if isinstance(item, (list, tuple)) and len(item) >= 2:
-                out.append((item[0], item[1], float(item[2]) if len(item) > 2 else 1.0))
-        return out
+        boxes = getattr(bruto, "boxes", None)
+        txts = getattr(bruto, "txts", None)
+        if boxes is not None and txts is not None:
+            return self._zip_cajas_textos(boxes, txts, getattr(bruto, "scores", None))
+        if isinstance(bruto, tuple) and bruto:
+            first = bruto[0]
+            seq = _secuencia_ocr(first)
+            if seq and isinstance(seq[0], (list, tuple)) and len(seq[0]) >= 2:
+                segundo = seq[0][1]
+                if isinstance(segundo, (str, bytes)) or segundo is None:
+                    return self._filas_listado(seq)
+            if len(bruto) >= 2:
+                return self._zip_cajas_textos(
+                    bruto[0],
+                    bruto[1],
+                    bruto[2] if len(bruto) > 2 else None,
+                )
+            return self._filas_listado(seq)
+        return self._filas_listado(_secuencia_ocr(bruto))
 
 
 def _es_entorno_cloud_ocr() -> bool:
@@ -3478,9 +3534,15 @@ def _extraer_movimientos_desde_texto(
             if fecha_movimiento_anterior is None:
                 i += 1
                 continue
+            if _es_fragmento_columna_extracto(linea) and not _montos_en_linea_extracto(linea):
+                i += 1
+                continue
             if not (
                 _es_concepto_transferencia_terceros(linea)
-                or _RE_CONCEPTO_MOV_EXT.match(linea)
+                or (
+                    _RE_CONCEPTO_MOV_EXT.match(linea)
+                    and not _es_fragmento_columna_extracto(linea)
+                )
                 or re.search(r"(?i)\b(pesos|\$)\b", linea)
                 or re.search(r"\d{1,3}(?:\.\d{3})*,\d{2}", linea)
             ):
@@ -3544,8 +3606,12 @@ def _extraer_movimientos_desde_texto(
                 comprobante = nums[0]
             descripcion = patron_fecha.sub("", texto_bloque)
             descripcion = patron_importe_dh.sub("", descripcion)
-            descripcion = re.sub(r"\b\d{5,12}\b", "", descripcion)
+            descripcion = re.sub(r"(?<!\d)\d{5,10}(?!\d)", "", descripcion)
             descripcion = re.sub(r"\s+", " ", descripcion).strip(" -|")
+            montos_blk = [x[0] for x in importes_tipados]
+            if _parece_saldo_apertura_extracto(descripcion, montos_blk):
+                i = j if j > i else i + 1
+                continue
             if debito > 0 or credito > 0:
                 movimientos.append(
                     MovimientoBanco(
@@ -3648,10 +3714,15 @@ def _extraer_movimientos_desde_texto(
 
         descripcion = patron_fecha.sub("", texto_bloque)
         descripcion = patron_importe_dh.sub("", descripcion)
-        descripcion = re.sub(r"\b\d{5,12}\b", "", descripcion)
+        descripcion = re.sub(r"(?<!\d)\d{5,10}(?!\d)", "", descripcion)
         descripcion = re.sub(r"\s+", " ", descripcion).strip(" -|")
         if texto_extra_descripcion:
             descripcion = (texto_extra_descripcion + descripcion).strip()
+
+        montos_blk = [x[0] for x in importes_tipados]
+        if _parece_saldo_apertura_extracto(descripcion, montos_blk):
+            i = j
+            continue
 
         if debito > 0 or credito > 0:
             movimientos.append(
@@ -3769,6 +3840,10 @@ def extraer_movimientos_galicia_tabla(
         descripcion = str(row.get("Descripción", "") or "").strip()
         credito_raw = _limpiar_monto(row.get("Crédito"))
         debito_raw = _limpiar_monto(row.get("Débito"))
+        saldo_preview = abs(_limpiar_monto(row.get("Saldo")))
+        montos_g = [x for x in (abs(credito_raw), abs(debito_raw), saldo_preview) if x]
+        if _parece_saldo_apertura_extracto(descripcion, montos_g):
+            continue
         # Galicia: egresos suelen venir como crédito NEGATIVO (resta = importe −)
         if credito_raw < 0 and abs(debito_raw) < 0.01:
             importe = round(credito_raw, 2)  # ya negativo
@@ -5501,12 +5576,65 @@ _RE_CONCEPTO_MOV_EXT = re.compile(
     r"impuesto|imp\b|retencion|retención|comision|comisión|iva\b|"
     r"pago\b|transferencia|transf\.?|trf\.?|cheque|compra\b|retiro\b|"
     r"debito\b|débito\b|credito\b|crédito\b|saldo inicial|mantenimiento|"
-    r"interes|interés|imp al\b|terceros|debin|echeq|e-cheq|acredit|"
+    r"interes|interés|imp al\b|terceros|"
+    r"(?:cr|db|credito|débito|debito)?\.?\s*debin|echeq|e-cheq|acredit|"
     r"deposito|depósito|extracci|cbu\b|cvu\b|banelco|link\b|qr\b|"
     r"deb\.?\s*aut|varios|cobro|ingreso|reintegro|devoluc"
     r")",
     re.IGNORECASE,
 )
+
+_TOKENS_FRAGMENTO_COLUMNA = {
+    "debin", "iva", "imp", "cbu", "cvu", "qr", "link", "varios",
+    "cobro", "ingreso", "pago", "cheque", "transf", "trf", "debito",
+    "credito", "débito", "crédito",
+}
+
+
+def _es_fragmento_columna_extracto(ln: str) -> bool:
+    """Una sola palabra de columna (DEBIN, IVA) sin importe ni contraparte."""
+    n = _normalizar_texto(ln)
+    if not n:
+        return True
+    if re.search(r"\d", n) or len(n) > 18:
+        return False
+    compacto = re.sub(r"[^a-z]", "", n)
+    if compacto in {"crdebin", "dbdebin", "debitodebin", "creditodebin"}:
+        return False
+    tokens = n.split()
+    return len(tokens) == 1 and tokens[0] in _TOKENS_FRAGMENTO_COLUMNA
+
+
+def _es_leyenda_saldo_extracto(desc: str) -> bool:
+    d = _normalizar_texto(desc)
+    if not d:
+        return False
+    return any(
+        k in d
+        for k in (
+            "saldo anterior",
+            "saldo inicial",
+            "saldo al inicio",
+            "saldo de apertura",
+            "s anterior",
+            "saldo final",
+            "saldo al cierre",
+            "saldo de cierre",
+        )
+    )
+
+
+def _parece_saldo_apertura_extracto(desc: str, montos: list[float]) -> bool:
+    """Saldo anterior/inicial, incluso si el PDF no trajo la leyenda."""
+    if _es_leyenda_saldo_extracto(desc):
+        return True
+    d = _normalizar_texto(desc)
+    if d in {"", "sin descripcion", "-", ".", "nan", "none"} and montos:
+        if len(montos) == 1:
+            return True
+        if len(montos) >= 2 and abs(abs(montos[0]) - abs(montos[-1])) < 0.05:
+            return True
+    return False
 
 # Variantes frecuentes de transferencias a/de terceros (Galicia, BBVA, Macro, etc.)
 _RE_TRANSF_TERCEROS = re.compile(
@@ -5562,11 +5690,13 @@ def _parece_inicio_movimiento_extracto(ln: str, *, con_fecha_previa: bool) -> bo
         return True
     if not con_fecha_previa:
         return False
+    if _es_fragmento_columna_extracto(ln) and not montos:
+        return False
     if re.fullmatch(r"\d{4,12}", ln.strip()):
         return True
     if re.match(r"^\d{4,12}\b", ln):
         return True
-    # Concepto conocido (impuestos, transf, debin, etc.)
+    # Concepto conocido (impuestos, transf, CR.DEBIN / DB.DEBIN, etc.)
     if _RE_CONCEPTO_MOV_EXT.match(ln) or _es_concepto_transferencia_terceros(ln):
         return True
     # Cualquier texto con al menos un importe (ingresos/egresos genéricos)
@@ -5575,10 +5705,13 @@ def _parece_inicio_movimiento_extracto(ln: str, *, con_fecha_previa: bool) -> bo
     # Dos importes aunque el concepto sea un nombre de tercero / razón social
     if len(montos) >= 2 and not _linea_solo_importes_extracto(ln):
         return True
-    # Razón social / descripción sin montos aún (montos en líneas siguientes)
+    # Razón social / descripción con sustancia (no una palabra de columna)
+    letras = re.sub(r"(?i)\bpesos\b|\$", "", ln)
     if (
         not _linea_solo_importes_extracto(ln)
-        and re.search(r"[A-Za-zÁÉÍÓÚáéíóúñÑ]{4,}", re.sub(r"(?i)\bpesos\b|\$", "", ln))
+        and not _es_fragmento_columna_extracto(ln)
+        and re.search(r"[A-Za-zÁÉÍÓÚáéíóúñÑ]{4,}", letras)
+        and (len(ln.strip()) >= 12 or len(ln.split()) >= 2)
         and not re.fullmatch(r"[\d\s./\-]+", ln)
         and "saldo" not in low
     ):
@@ -5602,7 +5735,7 @@ def _es_corte_nuevo_movimiento_extracto(l2: str, *, montos_actuales: list[float]
     if re.match(r"^\d{4,12}\b", l2) and montos_l2 and montos_actuales:
         return True
     # Concepto fuerte + importes y el actual ya tiene importes
-    if montos_actuales and montos_l2 and (
+    if montos_actuales and montos_l2 and not _es_fragmento_columna_extracto(l2) and (
         _RE_CONCEPTO_MOV_EXT.match(l2) or _es_concepto_transferencia_terceros(l2)
     ):
         return True
@@ -5897,6 +6030,7 @@ def _parsear_movimientos_santander_paginas(
                     and not re.fullmatch(r"\d{4,12}", desc_part)
                     and not _RE_FECHA_EXT.match(desc_part)
                     and not _linea_solo_importes_extracto(l2)
+                    and not _es_fragmento_columna_extracto(desc_part)
                 ):
                     bloque.append(desc_part)
             j += 1
@@ -5948,6 +6082,17 @@ def _parsear_movimientos_santander_paginas(
 
         fecha_txt = fecha.strftime("%d/%m/%Y")
         mes_clave = f"{fecha.year:04d}-{fecha.month:02d}"
+        # Sin leyenda: no inventar un movimiento "Sin descripción" con el saldo.
+        # Con leyenda (Saldo Inicial) se anota más abajo como Tipo fila especial.
+        if (
+            _parece_saldo_apertura_extracto(descripcion_full, montos)
+            and not _es_leyenda_saldo_extracto(descripcion_full or ln)
+        ):
+            if montos:
+                saldo_prev = montos[-1]
+            fecha_anterior = fecha
+            i = j if j > i else i + 1
+            continue
         base = {
             "Fecha": fecha_txt,
             "Mes": mes_clave,
@@ -6155,6 +6300,8 @@ def extraer_movimientos_provincia_tabla(
                         debito = _limpiar_monto(fila[i_deb]) if i_deb is not None and i_deb < len(fila) else 0.0
                         credito = _limpiar_monto(fila[i_cred]) if i_cred is not None and i_cred < len(fila) else 0.0
                         saldo = _limpiar_monto(fila[i_saldo]) if i_saldo is not None and i_saldo < len(fila) else 0.0
+                        if _parece_saldo_apertura_extracto(desc, [x for x in (debito, credito, saldo) if x]):
+                            continue
                         # Una sola columna de importe: clasificar por signo o keywords
                         if debito <= 0 and credito <= 0:
                             # Buscar montos en toda la fila
@@ -6258,7 +6405,10 @@ def _parsear_movimientos_provincia_paginas(
 
         texto_bloque = " ".join(bloque)
         dnorm = _normalizar_texto(texto_bloque)
-        if any(x in dnorm for x in ("saldo anterior", "saldo final", "saldo al inicio", "saldo al cierre", "saldo inicial")):
+        if _parece_saldo_apertura_extracto(texto_bloque, _montos_ar_libres(texto_bloque)) or any(
+            x in dnorm
+            for x in ("saldo anterior", "saldo final", "saldo al inicio", "saldo al cierre", "saldo inicial")
+        ):
             montos_s = _montos_ar_libres(texto_bloque)
             if montos_s:
                 saldo_prev = montos_s[-1]
@@ -6359,9 +6509,11 @@ def unir_pdfs_desde_pares(pares: list[tuple[str, bytes]]) -> bytes:
 def _bbox_xy(bbox) -> tuple[float, float]:
     """Esquina izq. y centro vertical de una caja EasyOCR/RapidOCR."""
     try:
+        if bbox is None:
+            return 0.0, 0.0
         if hasattr(bbox, "tolist"):
             bbox = bbox.tolist()
-        if not bbox:
+        if not isinstance(bbox, (list, tuple)) or len(bbox) == 0:
             return 0.0, 0.0
         if isinstance(bbox[0], (list, tuple)):
             xs = [float(p[0]) for p in bbox if p is not None and len(p) >= 2]
@@ -6420,7 +6572,7 @@ def _ocr_pagina_rapida(pagina_fitz, dpi: int = 160) -> list[str]:
             return []
     filas: dict[int, list[tuple[float, str]]] = {}
     for item in resultados or []:
-        if not item:
+        if item is None:
             continue
         if isinstance(item, (list, tuple)) and len(item) >= 2:
             bbox, texto = item[0], item[1]
@@ -6444,18 +6596,22 @@ def _n_montos_paginas(paginas: list[tuple[int, str]]) -> int:
 
 
 def _score_filas_extracto(movs: list[dict]) -> tuple[int, int, int]:
-    """(cadena de saldos, filas con importe, cantidad)."""
+    """(cadena de saldos, filas con descripción usable, filas con importe)."""
     if not movs:
         return (0, 0, 0)
     chain = 0
     with_monto = 0
+    buenas = 0
     prev: float | None = None
     for m in movs:
-        deb = float(m.get("Debito") or 0)
-        cred = float(m.get("Credito") or 0)
+        desc = re.sub(r"\s+", " ", str(m.get("Descripcion") or m.get("descripcion") or "")).strip()
+        if len(desc) >= 8 and desc.lower() not in {"sin descripción", "sin descripcion"}:
+            buenas += 1
+        deb = float(m.get("Debito") or m.get("debito") or 0)
+        cred = float(m.get("Credito") or m.get("credito") or 0)
         if abs(deb) + abs(cred) > 0.009:
             with_monto += 1
-        saldo = m.get("Saldo")
+        saldo = m.get("Saldo") if "Saldo" in m else m.get("saldo")
         if saldo is None or saldo == "":
             continue
         try:
@@ -6467,7 +6623,7 @@ def _score_filas_extracto(movs: list[dict]) -> tuple[int, int, int]:
             if abs(esperado - s) <= 0.05:
                 chain += 1
         prev = s
-    return (chain, with_monto, len(movs))
+    return (chain, buenas, with_monto)
 
 
 def _elegir_mejor_parseo_extracto(
@@ -6833,6 +6989,9 @@ def _anotar_fila_formato_banco(r: dict) -> dict:
         str(out.get("Descripcion") or ""),
         str(out.get("Detalle") or "") or None,
     )
+    if _es_fragmento_columna_extracto(desc) and det:
+        desc = re.sub(r"\s+", " ", f"{desc} {det}").strip()
+        det = None
     clas = clasificar_movimiento_extracto(desc, det or "", imp_f)
     out["Descripcion"] = desc
     out["Detalle"] = det or None
@@ -6881,9 +7040,23 @@ def _filas_desde_movs_layout(movs: list[dict], nombre: str, banco_slug: str) -> 
         fecha = _parse_fecha_extracto(str(m.get("fecha") or ""))
         if fecha is None:
             continue
+        desc = str(m.get("descripcion") or "").strip()
+        det = str(m.get("detalle") or "").strip()
+        if len(desc) < 12 and det:
+            desc = re.sub(r"\s+", " ", f"{desc} {det}").strip()
+            det = ""
+        montos_l = [
+            abs(float(m.get("debito") or 0)),
+            abs(float(m.get("credito") or 0)),
+        ]
+        if m.get("saldo") is not None:
+            montos_l.append(abs(float(m["saldo"])))
+        montos_l = [x for x in montos_l if x]
+        if _parece_saldo_apertura_extracto(f"{desc} {det}".strip(), montos_l):
+            continue
         mov = MovimientoBanco(
             fecha=fecha,
-            descripcion=str(m.get("descripcion") or ""),
+            descripcion=desc,
             comprobante="",
             debito=float(m.get("debito") or 0),
             credito=float(m.get("credito") or 0),
@@ -6893,8 +7066,8 @@ def _filas_desde_movs_layout(movs: list[dict], nombre: str, banco_slug: str) -> 
             archivo_origen=nombre,
         )
         fila = _movimiento_banco_a_fila_extracto(mov)
-        if m.get("detalle"):
-            fila["Detalle"] = m["detalle"]
+        if det:
+            fila["Detalle"] = det
         fila["Banco"] = display
         out.append(fila)
     return out
@@ -7147,6 +7320,11 @@ def _procesar_un_excel_extracto(nombre: str, data: bytes) -> tuple[list[dict], d
         saldo = None
         if "saldo" in colmap:
             saldo = _monto_celda_extracto(row.iloc[colmap["saldo"]])
+        montos_xl = [abs(float(monto))]
+        if saldo is not None:
+            montos_xl.append(abs(float(saldo)))
+        if _parece_saldo_apertura_extracto(f"{desc} {det}".strip(), montos_xl):
+            continue
         filas_brutas.append({
             "fecha": fecha,
             "descripcion": desc or "Sin descripción",
@@ -7851,7 +8029,10 @@ _PREFIJOS_CONCEPTO_EXTRACTO: tuple[str, ...] = tuple(
             "PAGO TARJETA VISA",
             "PAGO TARJETA MASTER",
             "PAGO TARJETA MASTERCARD",
+            "CR.DEBIN",
+            "DB.DEBIN",
             "DEBITO DEBIN",
+            "CREDITO DEBIN",
             "TRANSF. AFIP",
             "RESCATE FIMA",
             "SUSCRIPCION FIMA",
@@ -7986,6 +8167,9 @@ def _partir_solo_prefijo(raw_norm: str, det_in: str) -> tuple[str, str]:
     if not raw_norm:
         return "Sin descripción", det_in
     up = raw_norm.upper().strip()
+    # CR.DEBIN / DB.DEBIN / DEBIN + secuencia/CUIT: dejar el renglón entero
+    if re.match(r"^(?:CR\.?|DB\.?|CREDITO|DEBITO)?\s*DEBIN\b", up):
+        return raw_norm, det_in
 
     for pref in _PREFIJOS_CONCEPTO_EXTRACTO:
         if up.startswith(pref):
@@ -8141,6 +8325,8 @@ def clasificar_movimiento_extracto(
         return "IVA"
     if "interes" in low:
         return "Intereses"
+    if "debin" in low:
+        return "Deudores por ventas a identificar"
     return "Sin clasificar"
 
 
@@ -10227,13 +10413,67 @@ def descargar_excel_balance_url(url: str, *, timeout: int = 60) -> io.BytesIO:
     return buf
 
 
+_HOJAS_PLAN_NO_DATOS = {
+    "ayuda",
+    "_metadata",
+    "usa_auxiliares_contables",
+    "registracion_automatica",
+    "clase_cuenta_cod_clase_cuenta",
+    "tipo_cuenta",
+    "saldo_habitual",
+    "habilitado",
+    "afecta_ajuste_inflacion",
+    "afecta_comprobacion_ajuste",
+    "usa_unidad_adicional",
+    "afecta_conversion",
+    "leyendas",
+    "d_h",
+    "leyenda_defecto",
+}
+
+
+def plan_cuentas_tiene_filas(df: pd.DataFrame | None) -> bool:
+    """True si el plan tiene al menos una cuenta con código (no plantilla vacía)."""
+    if df is None or getattr(df, "empty", True):
+        return False
+    col = "codigo" if "codigo" in df.columns else df.columns[0]
+    serie = df[col].map(normalizar_codigo_cuenta_tango)
+    return bool(serie.astype(str).str.strip().replace({"nan": "", "none": ""}).ne("").any())
+
+
 def cargar_plan_cuentas(ruta: str | Path | None = None) -> pd.DataFrame:
     ruta_final = Path(ruta) if ruta else PLAN_CUENTAS_DEFAULT
     if ruta_final.suffix.lower() == ".csv":
-        df = pd.read_csv(ruta_final, dtype=str)
-    else:
-        df = pd.read_excel(ruta_final, sheet_name="Cuentas contables")
-    return _normalizar_plan_cuentas_df(df)
+        return _normalizar_plan_cuentas_df(pd.read_csv(ruta_final, dtype=str))
+
+    with pd.ExcelFile(ruta_final) as xl:
+        nombres = list(xl.sheet_names)
+        preferidas: list[str] = []
+        resto: list[str] = []
+        for n in nombres:
+            norm = _normalizar_nombre_solapa_balance(n)
+            if norm == "cuentas contables":
+                preferidas.append(n)
+            elif norm not in _HOJAS_PLAN_NO_DATOS:
+                resto.append(n)
+        ultimo_error: Exception | None = None
+        vacio: pd.DataFrame | None = None
+        for hoja in preferidas + resto:
+            try:
+                df = pd.read_excel(xl, sheet_name=hoja)
+                norm_df = _normalizar_plan_cuentas_df(df)
+            except Exception as exc:
+                ultimo_error = exc
+                continue
+            if plan_cuentas_tiene_filas(norm_df):
+                return norm_df
+            if vacio is None:
+                vacio = norm_df
+    if vacio is not None:
+        return vacio
+    if ultimo_error is not None:
+        raise ultimo_error
+    raise ValueError("El plan de cuentas debe tener columnas de código y descripción.")
 
 
 def cargar_movimientos_contables(archivo) -> list[MovimientoContable]:

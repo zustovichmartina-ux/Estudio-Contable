@@ -420,7 +420,15 @@ def es_fila_saldo_bancario(desc: str, tipo_fila: str = "") -> bool:
         return True
     n = re.sub(r"\bNAN\b", " ", normalizar_texto(desc))
     n = re.sub(r"\s+", " ", n).strip()
-    if n in {"SALDO", "SALDO TOTAL", "SALDO DE CUENTA", "SALDO ANTERIOR"}:
+    if n in {
+        "",
+        "SIN DESCRIPCION",
+        "SALDO",
+        "SALDO TOTAL",
+        "SALDO DE CUENTA",
+        "SALDO ANTERIOR",
+        "SALDO INICIAL",
+    }:
         return True
     return bool(_RE_SALDO_MOV.search(n))
 

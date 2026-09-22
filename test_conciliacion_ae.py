@@ -197,6 +197,29 @@ class TestSaldosYSignos(unittest.TestCase):
         self.assertNotIn("nan", filas[0]["descripcion"].lower())
         self.assertNotIn("Saldo", filas[0]["descripcion"])
 
+    def test_sin_descripcion_se_omite(self):
+        df = pd.DataFrame(
+            [
+                {
+                    "Fecha": "01/08/2026",
+                    "Descripcion": "Sin descripción",
+                    "Debito": 34154678.27,
+                    "Credito": 0,
+                    "Saldo": 34154678.27,
+                },
+                {
+                    "Fecha": "02/08/2026",
+                    "Descripcion": "CR.DEBIN CLINICA DEL SOL",
+                    "Debito": 0,
+                    "Credito": 15000,
+                    "Saldo": 34169678.27,
+                },
+            ]
+        )
+        filas = df_extracto_a_filas(df)
+        self.assertEqual(len(filas), 1)
+        self.assertIn("CR.DEBIN", filas[0]["descripcion"])
+
 
 class TestPapelesMensuales(unittest.TestCase):
     def test_primer_mes_abre_con_extracto_y_cierre_formula(self):
@@ -508,6 +531,57 @@ class TestExtractoComponente(unittest.TestCase):
         self.assertTrue(any(o.startswith("11104") for o in opts))
         self.assertTrue(any(o.startswith("52101") for o in opts))
         self.assertGreaterEqual(len(opts), 4)
+
+    def test_plan_vacio_solo_a_clasificar(self):
+        import pandas as pd
+        from ui_conciliacion_ae import _cuentas_componente, _opciones_plan
+
+        opts = _opciones_plan(pd.DataFrame({"codigo": [], "descripcion": []}))
+        self.assertEqual(opts, ["99999 — A clasificar"])
+        self.assertEqual(_cuentas_componente(opts), [{"codigo": "99999", "label": "99999 — A clasificar"}])
+
+    def test_cuentas_componente_trae_todo_el_plan(self):
+        import pandas as pd
+        from ui_conciliacion_ae import _cuentas_componente, _opciones_plan
+
+        plan = pd.DataFrame(
+            {
+                "codigo": [f"{11100 + i}" for i in range(25)],
+                "descripcion": [f"Cuenta {i}" for i in range(25)],
+            }
+        )
+        cuentas = _cuentas_componente(_opciones_plan(plan))
+        self.assertEqual(len(cuentas), 26)
+        self.assertTrue(any(c["codigo"] == "11104" for c in cuentas))
+        self.assertTrue(any(c["codigo"] == "11124" for c in cuentas))
+
+    def test_cargar_plan_excel_sin_solapa_tango(self):
+        import tempfile
+        from pathlib import Path
+
+        import pandas as pd
+        import procesador as proc
+
+        df = pd.DataFrame(
+            {"Código": ["11101", "52101"], "Descripción": ["Caja", "Gastos"]}
+        )
+        with tempfile.TemporaryDirectory() as td:
+            ruta = Path(td) / "plan.xlsx"
+            df.to_excel(ruta, sheet_name="Hoja1", index=False)
+            out = proc.cargar_plan_cuentas(ruta)
+            self.assertTrue(proc.plan_cuentas_tiene_filas(out))
+            self.assertEqual(list(out["codigo"]), ["11101", "52101"])
+
+    def test_plantilla_tango_vacia_no_tiene_cuentas(self):
+        from pathlib import Path
+
+        import procesador as proc
+
+        ruta = Path("data/planes_cuentas/plan_99000000015.xlsx")
+        if not ruta.is_file():
+            self.skipTest("sin plantilla gastro")
+        df = proc.cargar_plan_cuentas(ruta)
+        self.assertFalse(proc.plan_cuentas_tiene_filas(df))
 
     def test_movimientos_iguales_quedan_en_la_misma_cuenta(self):
         from ui_conciliacion_ae import _propagar_cuentas_repetidas

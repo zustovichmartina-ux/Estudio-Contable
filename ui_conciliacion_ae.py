@@ -37,6 +37,7 @@ from procesador import (
     generar_excel_tango_nativo,
     guardar_biblioteca_persistida,
     normalizar_codigo_cuenta_tango,
+    plan_cuentas_tiene_filas,
     procesar_extractos_bancarios_pdfs,
 )
 
@@ -258,23 +259,21 @@ def _col_en_plan(plan_df: pd.DataFrame | None, nombres: tuple[str, ...]) -> str 
 
 def _plan_df_sociedad(sociedad_id: int) -> pd.DataFrame | None:
     """Plan de cuentas de la sociedad activa (session o disco)."""
+    sid = int(sociedad_id)
+    df_sid = st.session_state.get(f"plan_cuentas_df_{sid}")
+    if plan_cuentas_tiene_filas(df_sid):
+        return df_sid
     df = st.session_state.get("plan_cuentas_df")
     cid = st.session_state.get("plan_cuentas_cliente_id")
-    if (
-        df is not None
-        and not getattr(df, "empty", True)
-        and (cid in (None, sociedad_id) or int(cid) == int(sociedad_id))
-    ):
-        return df
-    df2 = st.session_state.get(f"plan_cuentas_df_{int(sociedad_id)}")
-    if df2 is not None and not getattr(df2, "empty", True):
-        return df2
+    if plan_cuentas_tiene_filas(df) and cid is not None and int(cid) == sid:
+        if not bool(st.session_state.get("plan_cuentas_es_default", False)):
+            return df
     try:
-        cliente = db.obtener_cliente(int(sociedad_id))
+        cliente = db.obtener_cliente(sid)
     except Exception:
-        return df
+        return df_sid if plan_cuentas_tiene_filas(df_sid) else None
     if not cliente:
-        return df
+        return None
     candidatos: list[Path] = []
     raw = str(cliente.get("plan_cuentas_path") or "").strip()
     if raw:
@@ -284,26 +283,30 @@ def _plan_df_sociedad(sociedad_id: int) -> pd.DataFrame | None:
     if cuit:
         candidatos.append(base / f"plan_{cuit}.xlsx")
         candidatos.append(base / f"plan_{cuit}.csv")
-    candidatos.append(base / f"plan_id_{int(sociedad_id)}.xlsx")
+    candidatos.append(base / f"plan_id_{sid}.xlsx")
+    vistos: set[str] = set()
     for p in candidatos:
-        if not p.is_file():
+        key = str(p).lower()
+        if key in vistos or not p.is_file():
             continue
+        vistos.add(key)
         try:
             loaded = cargar_plan_cuentas(p)
         except Exception:
             continue
-        if loaded is None or getattr(loaded, "empty", True):
+        if not plan_cuentas_tiene_filas(loaded):
             continue
         st.session_state["plan_cuentas_df"] = loaded
-        st.session_state[f"plan_cuentas_df_{int(sociedad_id)}"] = loaded
-        st.session_state["plan_cuentas_cliente_id"] = int(sociedad_id)
+        st.session_state[f"plan_cuentas_df_{sid}"] = loaded
+        st.session_state["plan_cuentas_cliente_id"] = sid
+        st.session_state["plan_cuentas_es_default"] = False
         return loaded
-    return df
+    return None
 
 
 def _opciones_plan(plan_df: pd.DataFrame | None) -> list[str]:
     opts = ["99999 — A clasificar"]
-    if plan_df is None or getattr(plan_df, "empty", True):
+    if not plan_cuentas_tiene_filas(plan_df):
         return opts
     col_cod = _col_en_plan(plan_df, ("codigo", "código", "cuenta", "cod")) or plan_df.columns[0]
     col_desc = _col_en_plan(
@@ -319,8 +322,10 @@ def _opciones_plan(plan_df: pd.DataFrame | None) -> list[str]:
             continue
         vistos.add(cod)
         desc = str(row.get(col_desc) or "").strip() if col_desc is not None else ""
+        if desc.lower() in {"nan", "none"}:
+            desc = ""
         filas.append((cod, desc))
-    filas.sort(key=lambda x: x[0])
+    filas.sort(key=lambda x: (len(x[0]), x[0], x[1].lower()))
     for cod, desc in filas:
         opts.append(f"{cod} — {desc}" if desc else cod)
     return opts
@@ -811,16 +816,22 @@ def _paso_extracto(
         "Si el plan de esa sociedad usa otra, cambiala a mano en la línea."
     )
     if n_plan <= 0:
-        st.warning("No está el plan de cuentas de esta sociedad. Vinculalo y volvé a leer el extracto.")
+        st.warning(
+            "El Excel de esta sociedad no tiene cuentas (plantilla vacía de Tango). "
+            "Exportá el plan con todas las cuentas y volvé a cargarlo; el listado Cuenta Tango "
+            "tiene que mostrar el plan completo."
+        )
 
+    cuentas = _cuentas_componente(opciones)
     out = _EXTRACTO_GRID(
         titulo=f"Extracto {banco} · {periodo}",
         subtitulo=subtitulo,
-        grid_id=f"ce_grid_{sociedad_id}_{token}_v4",
+        grid_id=f"ce_grid_{sociedad_id}_{token}_v5",
         filas=_filas_componente(movs),
-        cuentas_json=json.dumps(_cuentas_componente(opciones), ensure_ascii=False),
+        cuentas=cuentas,
+        cuentas_json=json.dumps(cuentas, ensure_ascii=False),
         clasifs_json=json.dumps(_clasifs_componente(sociedad_id, movs), ensure_ascii=False),
-        key=f"ce_grid_{sociedad_id}_{token}_v4",
+        key=f"ce_grid_{sociedad_id}_{token}_v5",
         default={"action": "idle", "filas": []},
     )
     accion = str((out or {}).get("action") or "idle")
@@ -987,8 +998,16 @@ def render_conciliacion_ae(
     cuit_activo: str | None,
     nombre_activo: str | None,
     plan_vinculado: bool,
+    plan_cuentas_df=None,
 ) -> None:
     st.markdown(_CSS, unsafe_allow_html=True)
+    if plan_cuentas_tiene_filas(plan_cuentas_df):
+        st.session_state[f"plan_cuentas_df_{int(sociedad_id)}"] = plan_cuentas_df
+        cid = st.session_state.get("plan_cuentas_cliente_id")
+        if cid in (None, sociedad_id) or int(cid) == int(sociedad_id):
+            st.session_state["plan_cuentas_df"] = plan_cuentas_df
+            st.session_state["plan_cuentas_cliente_id"] = int(sociedad_id)
+            st.session_state["plan_cuentas_es_default"] = False
     periodo_key = f"ae_periodo_{sociedad_id}"
     preview_key = f"ae_preview_{sociedad_id}"
     paso_key = f"ce_paso_{sociedad_id}"

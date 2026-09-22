@@ -113,7 +113,6 @@ def parse_lineas(lineas: list[str]) -> list[dict[str, Any]]:
         credito = valor if valor >= 0 else 0.0
         debito = abs(valor) if valor < 0 else 0.0
         desc = RE_NUM.sub("", rest)
-        desc = re.sub(r"\b\d{6,}\b", "", desc)
         desc = re.sub(r"\s+", " ", desc).strip()
         extras: list[str] = []
         while i < len(lineas):
@@ -124,7 +123,26 @@ def parse_lineas(lineas: list[str]) -> list[dict[str, Any]]:
                 break
             extras.append(nxt)
             i += 1
-        det = " ".join(extras)
+        extra_txt = " ".join(extras)
+        extra_txt = re.sub(r"\s+", " ", RE_NUM.sub("", extra_txt)).strip()
+        if len(desc) < 14 and extra_txt:
+            desc = f"{desc} {extra_txt}".strip()
+            det = ""
+        else:
+            det = extra_txt
+        blob = f"{desc} {det}".lower()
+        if any(
+            k in blob
+            for k in (
+                "saldo anterior",
+                "saldo inicial",
+                "saldo al inicio",
+                "saldo de apertura",
+                "saldo final",
+                "saldo al cierre",
+            )
+        ):
+            continue
         if len(desc) < 3 or (credito < 0.005 and debito < 0.005):
             continue
         if desc.lower() == "total":
@@ -132,8 +150,8 @@ def parse_lineas(lineas: list[str]) -> list[dict[str, Any]]:
         movs.append(
             {
                 "fecha": mf.group(1),
-                "descripcion": desc[:120],
-                "detalle": det[:160],
+                "descripcion": desc[:240],
+                "detalle": det[:240],
                 "credito": round(credito, 2),
                 "debito": round(debito, 2),
                 "monto": round(credito - debito, 2),
@@ -174,6 +192,19 @@ def parse_bloques(lineas: list[str]) -> list[dict[str, Any]]:
             continue
         valor, saldo = montos[0], abs(montos[1])
         desc = " ".join(extras).strip()
+        desc = re.sub(r"\s+", " ", RE_NUM.sub("", desc)).strip()
+        blob = desc.lower()
+        if any(
+            k in blob
+            for k in (
+                "saldo anterior",
+                "saldo inicial",
+                "saldo al inicio",
+                "saldo de apertura",
+                "saldo final",
+            )
+        ):
+            continue
         if len(desc) < 3:
             continue
         credito = valor if valor >= 0 else 0.0
@@ -181,7 +212,7 @@ def parse_bloques(lineas: list[str]) -> list[dict[str, Any]]:
         movs.append(
             {
                 "fecha": mf.group(1),
-                "descripcion": desc[:120],
+                "descripcion": desc[:240],
                 "detalle": "",
                 "credito": round(credito, 2),
                 "debito": round(debito, 2),
