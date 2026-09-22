@@ -140,6 +140,7 @@ from procesador import (
 from capa_revision import gate_asiento
 from monotributo_proyeccion import cargar_topes_categorias, proyectar_monotributo
 from ui_tango_bot import render_tango_bot
+from ui_version_web import render_aviso_version
 from motor_fci_fifo import (
     cuadro_cobertura_meses,
     label_mes,
@@ -12907,6 +12908,7 @@ def main() -> None:
 
 def _main() -> None:
     _init_session_state()
+    render_aviso_version()
 
     # Gate de login: sin usuario de oficina no se entra a la app
     if not st.session_state.get("usuario_oficina"):

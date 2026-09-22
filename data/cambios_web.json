@@ -1,0 +1,14 @@
+{
+  "version": "2026-09-22-extractos",
+  "cambios": [
+    {
+      "id": "2026-09-22-extractos",
+      "fecha": "22/09/2026",
+      "titulo": "Extractos bancarios",
+      "items": [
+        "Los PDF escaneados de Santander se leen otra vez en la web de la nube (el OCR se cortaba en cada página).",
+        "Si hay una versión nueva, la web te avisa para actualizar y te muestra qué cambió."
+      ]
+    }
+  ]
+}
