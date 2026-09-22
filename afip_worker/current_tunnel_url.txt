@@ -1,1 +1,1 @@
-https://marilyn-duo-booking-leu.trycloudflare.com
+https://api.trycloudflare.com
