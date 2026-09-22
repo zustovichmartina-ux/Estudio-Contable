@@ -444,13 +444,16 @@ class TestAsientoExtractoAgrupaCuentas(unittest.TestCase):
             periodo="09/2026",
             fecha_str="30/09/2026",
         )
-        by_cod = {r["Código"]: r for r in rows}
-        self.assertEqual(by_cod["52201"]["Debe"], 100)
+        self.assertEqual(rows[0]["Código"], "11104")
+        self.assertEqual(rows[0]["Debe"], 50)
+        self.assertEqual(rows[-1]["Código"], "11104")
+        self.assertEqual(rows[-1]["Haber"], 100)
+        by_cod = {r["Código"]: r for r in rows if r["Código"] != "11104"}
         self.assertEqual(by_cod["11301"]["Haber"], 50)
-        self.assertEqual(by_cod["11104"]["Haber"], 50)
-        debe = sum(r["Debe"] for r in rows)
-        haber = sum(r["Haber"] for r in rows)
-        self.assertAlmostEqual(debe, haber, places=2)
+        self.assertEqual(by_cod["52201"]["Debe"], 100)
+        self.assertAlmostEqual(
+            sum(r["Debe"] for r in rows), sum(r["Haber"] for r in rows), places=2
+        )
 
     def test_engloba_por_clasificacion_y_toma_la_cuenta_del_grupo(self):
         rows = renglones_asiento_banco_mes(
@@ -479,10 +482,12 @@ class TestAsientoExtractoAgrupaCuentas(unittest.TestCase):
             periodo="01/2026",
             fecha_str="31/01/2026",
         )
-        by_desc = {r["Descripción"]: r for r in rows}
+        by_desc = {r["Descripción"]: r for r in rows if r["Código"] != "11104"}
         self.assertEqual(by_desc["Impuesto a los débitos"]["Debe"], 30)
         self.assertEqual(by_desc["Impuesto a los débitos"]["Código"], "11408")
         self.assertEqual(by_desc["Transferencias recibidas"]["Haber"], 50)
+        self.assertEqual(rows[0]["Debe"], 50)
+        self.assertEqual(rows[-1]["Haber"], 30)
 
     def test_origen_sin_regla_es_a_clasificar(self):
         self.assertEqual(
@@ -762,16 +767,36 @@ class TestExtractoComponente(unittest.TestCase):
         self.assertEqual(len(filas), 1)
         self.assertIn("haberes", filas[0]["descripcion"].lower())
 
-    def test_asiento_banco_va_primero_y_cierra(self):
+    def test_asiento_banco_ingresos_debe_gastos_haber(self):
         rows = renglones_asiento_banco_mes(
             [
-                {"debito": 100, "credito": 0, "cuenta_codigo": "42501", "categoria": "Gastos Bancarios"},
+                {
+                    "debito": 0,
+                    "credito": 80,
+                    "cuenta_codigo": "11301",
+                    "cuenta_plan": "Deudores por Ventas",
+                    "categoria": "Transferencias recibidas",
+                },
+                {
+                    "debito": 30,
+                    "credito": 0,
+                    "cuenta_codigo": "42501",
+                    "cuenta_plan": "Gastos Bancarios",
+                    "categoria": "Gastos Bancarios",
+                },
             ],
             codigo_banco="11103",
             descripcion_banco="Banco Santander Cta Cte",
         )
-        self.assertEqual(rows[0]["Código"], "11103")
-        self.assertAlmostEqual(sum(r["Debe"] for r in rows), sum(r["Haber"] for r in rows), places=2)
+        self.assertEqual(
+            [(r["Código"], r["Debe"], r["Haber"]) for r in rows],
+            [
+                ("11103", 80.0, 0.0),
+                ("11301", 0.0, 80.0),
+                ("42501", 30.0, 0.0),
+                ("11103", 0.0, 30.0),
+            ],
+        )
 
     def test_mapa_no_pisa_cuenta_ya_asignada(self):
         from ui_conciliacion_ae import _aplicar_mapa_clasif

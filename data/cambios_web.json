@@ -8,7 +8,7 @@
       "items": [
         "Ley 25.413 (débito y crédito) y retenciones IIBB se imputan solas a su cuenta.",
         "El pie del extracto con totales de impuestos ya no entra (no duplica movimientos).",
-        "En la grilla lo igual se agrupa; lo que cambiás a mano no se pisa. El asiento va como en Tango: banco, cuentas y totales abajo."
+        "El asiento va en dos bloques: ingresos (banco al debe / deudores al haber) y gastos (cuentas al debe / banco al haber)."
       ]
     },
     {

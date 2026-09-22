@@ -925,7 +925,11 @@ def renglones_asiento_banco_mes(
     periodo: str = "",
     fecha_str: str = "",
 ) -> list[dict]:
-    """Agrupa el extracto por clasificación y cierra contra el banco."""
+    """Asiento en dos bloques, como en Tango:
+
+    1) Ingresos: Banco al Debe y contrapartidas (deudores) al Haber.
+    2) Gastos: cuentas al Debe y Banco al Haber con el total.
+    """
     por_clasif: dict[str, dict] = {}
     banco_debe = 0.0
     banco_haber = 0.0
@@ -934,11 +938,12 @@ def renglones_asiento_banco_mes(
         credito = float(money(m.get("credito")))
         clasif = _clave_englobar_asiento(m)
         cod = str(m.get("cuenta_codigo") or m.get("cuenta_sugerida") or "99999").strip() or "99999"
-        desc = clasif or str(m.get("cuenta_plan") or "").strip() or cod
+        desc = str(m.get("cuenta_plan") or "").strip() or clasif or cod
         slot = por_clasif.setdefault(
             clasif, {"debe": 0.0, "haber": 0.0, "desc": desc, "codigos": []}
         )
-        slot["desc"] = desc or slot["desc"]
+        if desc:
+            slot["desc"] = desc
         slot["codigos"].append(cod)
         if debito > 0.005:
             slot["debe"] = round(slot["debe"] + debito, 2)
@@ -960,22 +965,41 @@ def renglones_asiento_banco_mes(
             "Estado": "Ingresado",
         }
 
-    neto_banco = round(banco_debe - banco_haber, 2)
-    if abs(neto_banco) >= 0.005:
-        if neto_banco > 0:
-            rows.append(_fila(codigo_banco, descripcion_banco, neto_banco, 0.0))
-        else:
-            rows.append(_fila(codigo_banco, descripcion_banco, 0.0, abs(neto_banco)))
+    def _englobar_lado(campo: str) -> list[tuple[str, str, float]]:
+        por_cta: dict[str, dict] = {}
+        for slot in por_clasif.values():
+            monto = float(slot.get(campo) or 0)
+            if monto <= 0.005:
+                continue
+            cod = _cuenta_mayoritaria(slot["codigos"])
+            item = por_cta.setdefault(cod, {"desc": slot["desc"], "monto": 0.0})
+            if slot["desc"]:
+                item["desc"] = slot["desc"]
+            item["monto"] = round(item["monto"] + monto, 2)
+        return [(cod, v["desc"], v["monto"]) for cod, v in por_cta.items()]
 
-    for clasif, slot in sorted(por_clasif.items(), key=lambda kv: kv[0].lower()):
-        neto = round(slot["debe"] - slot["haber"], 2)
-        if abs(neto) < 0.005:
-            continue
-        cod = _cuenta_mayoritaria(slot["codigos"])
-        if neto > 0:
-            rows.append(_fila(cod, slot["desc"], neto, 0.0))
-        else:
-            rows.append(_fila(cod, slot["desc"], 0.0, abs(neto)))
+    ingresos = _englobar_lado("haber")
+    gastos = _englobar_lado("debe")
+
+    def _orden_ingreso(item: tuple[str, str, float]) -> tuple[int, str]:
+        cod = item[0]
+        if cod.startswith("113"):
+            return (0, cod)
+        if cod.startswith("11"):
+            return (1, cod)
+        return (2, cod)
+
+    ingresos.sort(key=_orden_ingreso)
+    gastos.sort(key=lambda it: (it[0], it[1].lower()))
+
+    if banco_debe > 0.005:
+        rows.append(_fila(codigo_banco, descripcion_banco, banco_debe, 0.0))
+    for cod, desc, monto in ingresos:
+        rows.append(_fila(cod, desc, 0.0, monto))
+    for cod, desc, monto in gastos:
+        rows.append(_fila(cod, desc, monto, 0.0))
+    if banco_haber > 0.005:
+        rows.append(_fila(codigo_banco, descripcion_banco, 0.0, banco_haber))
     return rows
 
 
