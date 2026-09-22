@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from capa_revision import resolver_codigo_plan
 from excel_formato_estudio import guardar_informe_excel
 
 # Códigos del plan típico del estudio. En el extracto se pueden cambiar a mano
@@ -14,6 +15,7 @@ MAPA_CLASIF_ESTUDIO: dict[str, str] = {
     "Pago ARBA": "21404",
     "SIRCREB": "11421",
     "IIBB": "11418",
+    "Retención bancaria": "11419",
     "Retenciones IIBB bancos": "11419",
     "Ingresos brutos Tucuman": "11404",
     "Impuestos a los débitos y créditos": "42506",
@@ -50,7 +52,7 @@ CUENTA_TIPICA_ESTUDIO: dict[str, str] = {
     "11404": "Percepción Ingresos Brutos PBA",
     "11410": "Retenciones IVA",
     "11418": "Retenciones Imp. sobre los Ing Brutos",
-    "11419": "Reten. Bancarias Imp. sobre los Ing Brutos",
+    "11419": "Retenciones ingresos brutos banco",
     "11421": "Reten. Bancarias Sircreb Ing Brutos",
     "21101": "Proveedores",
     "21202": "Tarjeta a pagar",
@@ -59,12 +61,63 @@ CUENTA_TIPICA_ESTUDIO: dict[str, str] = {
     "21405": "AFIP - IVA a pagar",
     "21705": "Cheques Emitidos Pendientes de Debito",
     "42501": "Gastos y Comisiones Bancarias",
-    "42506": "Impuesto a los Débitos",
+    "42506": "Impuesto a los débitos y créditos a cuenta de ganancias",
     "42508": "Intereses Bancarios",
     "42512": "Gastos de Sellado",
 }
 
 NOTA_MANUAL = "Si el plan de esa sociedad usa otra, cambiala en el extracto"
+
+# Busca estas leyendas en el plan de ESA sociedad (no inventar código).
+TEXTOS_CUENTA_CLASIF: dict[str, tuple[str, ...]] = {
+    "Impuestos a los débitos y créditos": (
+        "Impuesto a los débitos y créditos a cuenta de ganancias",
+        "Impuesto al débito a cuenta de ganancias",
+        "débitos y créditos a cuenta de ganancias",
+        "debito a cuenta de ganancias",
+    ),
+    "Retención bancaria": (
+        "Retenciones ingresos brutos banco",
+        "Reten. Bancarias Imp. sobre los Ing Brutos",
+        "Reten. Bancarias Imp. sobre los IIBB",
+        "Retenciones Imp. sobre los Ing Brutos",
+    ),
+    "Retenciones IIBB bancos": (
+        "Retenciones ingresos brutos banco",
+        "Reten. Bancarias Imp. sobre los Ing Brutos",
+        "Reten. Bancarias Imp. sobre los IIBB",
+    ),
+}
+
+
+def resolver_cuenta_clasif_estudio(
+    nombre: str,
+    plan_df: pd.DataFrame | None,
+) -> tuple[str, str]:
+    """Cuenta del plan del cliente para una clasificación fija del estudio."""
+    nom = str(nombre or "").strip()
+    if not nom:
+        return "99999", nom
+    hint = MAPA_CLASIF_ESTUDIO.get(nom, "")
+    textos = (nom,) + TEXTOS_CUENTA_CLASIF.get(nom, ())
+    mejor_cod = "99999"
+    mejor_desc = nom
+    mejor = 0.0
+    for texto in textos:
+        cod, desc, score = resolver_codigo_plan(
+            texto, plan_df, hints={texto: hint} if hint else None, score_min=70.0
+        )
+        if score > mejor and str(cod).strip() not in {"", "99999"}:
+            mejor = score
+            mejor_cod = str(cod).strip()
+            mejor_desc = desc or nom
+            if score >= 99.0:
+                return mejor_cod, mejor_desc
+    if mejor_cod != "99999":
+        return mejor_cod, mejor_desc
+    if hint:
+        return hint, CUENTA_TIPICA_ESTUDIO.get(hint, nom)
+    return "99999", nom
 
 
 def df_catalogo_clasif() -> pd.DataFrame:

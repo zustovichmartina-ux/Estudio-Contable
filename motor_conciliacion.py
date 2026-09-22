@@ -190,6 +190,8 @@ _LABEL_EXTRACTO_A_VISTA = {
     "sircreb": "retencion",
     "ingresos brutos tucuman": "retencion",
     "impuestos a los debitos y creditos": "retencion",
+    "retencion bancaria": "retencion",
+    "retenciones iibb bancos": "retencion",
     "impuesto a los sellos": "retencion",
     "percepcion iva": "retencion",
     "iva": "retencion",
@@ -433,6 +435,28 @@ def es_fila_saldo_bancario(desc: str, tipo_fila: str = "") -> bool:
     return bool(_RE_SALDO_MOV.search(n))
 
 
+def es_fila_resumen_impositivo(desc: str) -> bool:
+    """Pie del extracto (totales de impuestos): duplica movimientos ya leídos."""
+    n = normalizar_texto(desc)
+    return any(
+        k in n
+        for k in (
+            "DETALLE IMPOSITIVO",
+            "TIPO DE IMPUESTO",
+            "TOTALES DE RETENCION",
+            "TOTALES MENSUALES DE RETENCION",
+            "PUEDEN SER MODIFICADOS POR DEVOLUCIONES",
+            "CREDITO FISCAL DISCRIMINADO",
+            "SALDO TOTAL DETALLE",
+            "ITF-LEY25413",
+            "ITF-LEY 25413",
+            "CONCEPTO VALOR TIPO",
+            "S/DEC. 380",
+            "S/DEC 380",
+        )
+    )
+
+
 def _limpiar_desc_extracto(desc: str) -> str:
     t = str(desc or "").strip()
     t = re.sub(r"\s+\bnan\b", "", t, flags=re.I)
@@ -454,6 +478,8 @@ def df_extracto_a_filas(df: pd.DataFrame) -> list[dict]:
             desc = f"{desc} {detalle}".strip()
         desc = _limpiar_desc_extracto(desc)
         if es_fila_saldo_bancario(desc, str(row.get("Tipo fila") or "")):
+            continue
+        if es_fila_resumen_impositivo(desc):
             continue
         debito, credito = _lado_debito_credito(
             desc,
@@ -826,6 +852,8 @@ def resumen_por_categoria(movimientos: list[dict]) -> pd.DataFrame:
 
 def origen_linea_extracto(mov: dict) -> str:
     """regla = instructivo/seed; sugerido = sentido común; a_clasificar = sin cuenta."""
+    if str(mov.get("origen") or "") == "manual":
+        return "manual"
     fuente = str(mov.get("fuente") or "")
     categoria = str(mov.get("categoria") or "").lower()
     codigo = str(mov.get("cuenta_codigo") or mov.get("cuenta_sugerida") or "").strip()
@@ -932,6 +960,13 @@ def renglones_asiento_banco_mes(
             "Estado": "Ingresado",
         }
 
+    neto_banco = round(banco_debe - banco_haber, 2)
+    if abs(neto_banco) >= 0.005:
+        if neto_banco > 0:
+            rows.append(_fila(codigo_banco, descripcion_banco, neto_banco, 0.0))
+        else:
+            rows.append(_fila(codigo_banco, descripcion_banco, 0.0, abs(neto_banco)))
+
     for clasif, slot in sorted(por_clasif.items(), key=lambda kv: kv[0].lower()):
         neto = round(slot["debe"] - slot["haber"], 2)
         if abs(neto) < 0.005:
@@ -941,13 +976,6 @@ def renglones_asiento_banco_mes(
             rows.append(_fila(cod, slot["desc"], neto, 0.0))
         else:
             rows.append(_fila(cod, slot["desc"], 0.0, abs(neto)))
-
-    neto_banco = round(banco_debe - banco_haber, 2)
-    if abs(neto_banco) >= 0.005:
-        if neto_banco > 0:
-            rows.append(_fila(codigo_banco, descripcion_banco, neto_banco, 0.0))
-        else:
-            rows.append(_fila(codigo_banco, descripcion_banco, 0.0, abs(neto_banco)))
     return rows
 
 

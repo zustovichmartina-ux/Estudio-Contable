@@ -1,8 +1,9 @@
 {
-  "Pago ARBA": "21404",
-  "SIRCREB": "11421",
-  "IIBB": "11418",
-  "Retenciones IIBB bancos": "11419",
+    "Pago ARBA": "21404",
+    "SIRCREB": "11421",
+    "IIBB": "11418",
+    "Retención bancaria": "11419",
+    "Retenciones IIBB bancos": "11419",
   "Ingresos brutos Tucuman": "11404",
   "Impuestos a los débitos y créditos": "42506",
   "Impuesto a los sellos": "42512",

@@ -1,6 +1,16 @@
 {
-  "version": "2026-09-22-plan-cuentas",
+  "version": "2026-09-22-asiento-extracto",
   "cambios": [
+    {
+      "id": "2026-09-22-asiento-extracto",
+      "fecha": "22/09/2026",
+      "titulo": "Conciliación bancaria",
+      "items": [
+        "Ley 25.413 (débito y crédito) y retenciones IIBB se imputan solas a su cuenta.",
+        "El pie del extracto con totales de impuestos ya no entra (no duplica movimientos).",
+        "En la grilla lo igual se agrupa; lo que cambiás a mano no se pisa. El asiento va como en Tango: banco, cuentas y totales abajo."
+      ]
+    },
     {
       "id": "2026-09-22-plan-cuentas",
       "fecha": "22/09/2026",
@@ -8,15 +18,6 @@
       "items": [
         "El plan de Tango queda guardado en la sociedad: no hay que volver a cargarlo cada vez que entras.",
         "La plantilla vacía de Tango ya no cuenta como plan (hay que exportar las cuentas reales una sola vez)."
-      ]
-    },
-    {
-      "id": "2026-09-22-extractos",
-      "fecha": "22/09/2026",
-      "titulo": "Extractos bancarios",
-      "items": [
-        "Los PDF escaneados de Santander se leen otra vez en la web de la nube (el OCR se cortaba en cada página).",
-        "Si hay una versión nueva, la web te avisa para actualizar y te muestra qué cambió."
       ]
     }
   ]

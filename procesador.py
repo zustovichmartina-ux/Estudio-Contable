@@ -5903,9 +5903,12 @@ def _parsear_movimientos_santander_paginas(
                     "cambio de comisiones",
                     "totales de retencion",
                     "totales de retención",
+                    "totales mensuales de retencion",
                     "tasas de acuerdos",
                     "concepto valor tipo",
                     "los precios no incluyen iva",
+                    "tipo de impuesto",
+                    "itf-ley25413",
                 )
             ):
                 break
@@ -8216,6 +8219,57 @@ def _partir_solo_prefijo(raw_norm: str, det_in: str) -> tuple[str, str]:
     return raw_norm, det_in
 
 
+def _es_resumen_impositivo_extracto(texto: str) -> bool:
+    """Totales del pie del PDF (detalle impositivo): no son movimientos."""
+    low = _normalizar_texto(texto)
+    if not low:
+        return False
+    return any(
+        k in low
+        for k in (
+            "detalle impositivo",
+            "tipo de impuesto",
+            "totales de retencion",
+            "totales de retencion",
+            "totales mensuales de retencion",
+            "pueden ser modificados por devoluciones",
+            "credito fiscal discriminado",
+            "saldo total detalle",
+            "itf-ley25413",
+            "itf-ley 25413",
+            "concepto valor tipo",
+            "s/dec. 380",
+            "s/dec 380",
+        )
+    )
+
+
+def _es_movimiento_ley_25413(low: str) -> bool:
+    if _es_resumen_impositivo_extracto(low):
+        return False
+    if not any(k in low for k in ("25413", "25.413", "25 413")):
+        return False
+    if "debito automatico" in low or "deb. automatico" in low:
+        return False
+    if "pago haberes" in low or "transferencia" in low or "pago de servicio" in low:
+        return False
+    return True
+
+
+def _es_retencion_bancaria_iibb(low: str) -> bool:
+    if _es_resumen_impositivo_extracto(low):
+        return False
+    ret = any(k in low for k in ("retencion", "ret.", "rete ", "reten "))
+    iibb = any(k in low for k in ("iibb", "ing bruto", "arba", "sircreb", "alicuota"))
+    if not (ret and iibb):
+        return False
+    if "vep" in low or "pago mis cuentas" in low:
+        return False
+    if "pago" in low and "retencion" not in low and "ret." not in low:
+        return False
+    return True
+
+
 def clasificar_movimiento_extracto(
     descripcion: str,
     detalle: str = "",
@@ -8226,14 +8280,16 @@ def clasificar_movimiento_extracto(
     low = _normalizar_texto(texto)
     imp = float(importe or 0)
 
-    if "arba" in low:
-        return "Pago ARBA"
+    if _es_movimiento_ley_25413(low):
+        return "Impuestos a los débitos y créditos"
+    if _es_retencion_bancaria_iibb(low):
+        return "Retención bancaria"
     if "sircreb" in low:
         return "SIRCREB"
+    if "arba" in low:
+        return "Pago ARBA"
     if "tucuman" in low and ("ing" in low and "bruto" in low):
         return "Ingresos brutos Tucuman"
-    if re.search(r"imp\.?\s*(deb|cre)\.?\s*ley\s*25\.?413", low) or "ley 25413" in low or "ley 25.413" in low:
-        return "Impuestos a los débitos y créditos"
     if "impuesto de sellos" in low or "imp. sellos" in low:
         return "Impuesto a los sellos"
     if "percep" in low and "iva" in low:

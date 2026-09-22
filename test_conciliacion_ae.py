@@ -723,6 +723,65 @@ class TestExtractoComponente(unittest.TestCase):
         self.assertEqual(len(filas), 1)
         self.assertNotIn("saldo", filas[0])
 
+    def test_ley_25413_debito_y_credito_misma_clasif(self):
+        from procesador import clasificar_movimiento_extracto
+
+        self.assertEqual(
+            clasificar_movimiento_extracto("IMPUESTO LEY 25.413 credito 0,6%"),
+            "Impuestos a los débitos y créditos",
+        )
+        self.assertEqual(
+            clasificar_movimiento_extracto("IMPUESTO LEY 25.413 debito 0,6%"),
+            "Impuestos a los débitos y créditos",
+        )
+
+    def test_retencion_arba_es_retencion_bancaria(self):
+        from procesador import clasificar_movimiento_extracto
+
+        self.assertEqual(
+            clasificar_movimiento_extracto("Retencion arba alicuota u Resp: 30717847810"),
+            "Retención bancaria",
+        )
+
+    def test_resumen_impositivo_no_entra_al_extracto(self):
+        from motor_conciliacion import df_extracto_a_filas
+
+        df = pd.DataFrame(
+            [
+                {"Fecha": "01/06/2026", "Descripcion": "Pago haberes", "Debito": 100, "Credito": 0, "Saldo": 0},
+                {
+                    "Fecha": "30/06/2026",
+                    "Descripcion": "Los totales mensuales de Retención Impuesto Ley 25.413 mencionados pueden ser modificados",
+                    "Debito": 500,
+                    "Credito": 0,
+                    "Saldo": 0,
+                },
+            ]
+        )
+        filas = df_extracto_a_filas(df)
+        self.assertEqual(len(filas), 1)
+        self.assertIn("haberes", filas[0]["descripcion"].lower())
+
+    def test_asiento_banco_va_primero_y_cierra(self):
+        rows = renglones_asiento_banco_mes(
+            [
+                {"debito": 100, "credito": 0, "cuenta_codigo": "42501", "categoria": "Gastos Bancarios"},
+            ],
+            codigo_banco="11103",
+            descripcion_banco="Banco Santander Cta Cte",
+        )
+        self.assertEqual(rows[0]["Código"], "11103")
+        self.assertAlmostEqual(sum(r["Debe"] for r in rows), sum(r["Haber"] for r in rows), places=2)
+
+    def test_mapa_no_pisa_cuenta_ya_asignada(self):
+        from ui_conciliacion_ae import _aplicar_mapa_clasif
+
+        movs = [
+            {"categoria": "IIBB", "cuenta_codigo": "11499", "origen": "manual"},
+        ]
+        out = _aplicar_mapa_clasif(movs, {"IIBB": "11402"})
+        self.assertEqual(out[0]["cuenta_codigo"], "11499")
+
 
 if __name__ == "__main__":
     unittest.main()

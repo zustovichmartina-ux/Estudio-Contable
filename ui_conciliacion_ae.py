@@ -16,13 +16,14 @@ import streamlit.components.v1 as components
 
 import database as db
 from capa_revision import gate_asiento, resolver_codigo_plan
-from clasif_cuentas_extracto import MAPA_CLASIF_ESTUDIO
+from clasif_cuentas_extracto import MAPA_CLASIF_ESTUDIO, resolver_cuenta_clasif_estudio
 from conceptos_bancos import CACHE_PATH, cargar_instructivo
 from motor_conciliacion import (
     CATEGORIA_A_CUENTA_HINT,
     cuenta_banco_del_plan,
     correr_motor,
     df_extracto_a_filas,
+    es_fila_resumen_impositivo,
     es_fila_saldo_bancario,
     money,
     origen_linea_extracto,
@@ -68,7 +69,7 @@ _CSS = """
 .ce-table td{padding:8px 10px;font-size:13px;border-bottom:1px solid #e6eaf0;}
 .ce-table tr:nth-child(even) td{background:#f7f9fc;}
 .ce-table tr.pend td{background:#fff6f5;}
-.ce-table .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.ce-table tfoot td{padding:10px;font-size:13px;border-top:2px solid #1F4E79;background:#f2f6fb;}
 div[data-testid="stCustomComponentV1"] iframe{border:0 !important;}
 </style>
 """
@@ -180,6 +181,9 @@ def _aplicar_mapa_clasif(movs: list[dict], mapa: dict[str, str]) -> list[dict]:
         cod = _codigo_de_clasif(nombre, mapa)
         if not cod:
             continue
+        actual = str(m.get("cuenta_codigo") or "").strip()
+        if actual not in {"", "99999"}:
+            continue
         m["cuenta_codigo"] = cod
         if str(m.get("origen") or "") == "a_clasificar":
             m["origen"] = "sugerido"
@@ -245,6 +249,7 @@ def _label_origen(origen: str) -> str:
         "regla": "Regla",
         "sugerido": "Sugerido",
         "a_clasificar": "A clasificar",
+        "manual": "Manual",
     }.get(origen, origen or "A clasificar")
 
 
@@ -423,6 +428,21 @@ def _enriquecer(movs: list[dict], plan_df, mapa_clasif: dict[str, str] | None = 
             importe=cred - deb,
         )
         fila["extracto_label"] = label
+        if label in {
+            "Impuestos a los débitos y créditos",
+            "Retención bancaria",
+            "Retenciones IIBB bancos",
+        }:
+            fila["fuente"] = "regla_local"
+            codigo, desc_plan = resolver_cuenta_clasif_estudio(label, plan_df)
+            fila["categoria"] = label
+            fila["cuenta_codigo"] = codigo if codigo != "99999" else "99999"
+            fila["cuenta_plan"] = desc_plan or label
+            fila["origen"] = origen_linea_extracto(fila)
+            fila["monto"] = round(cred - deb, 2)
+            fila["_idx"] = i
+            out.append(fila)
+            continue
         categoria = str(m.get("categoria") or "")
         codigo, desc_plan, score = resolver_codigo_plan(
             categoria if categoria and "identificar" not in categoria.lower() else label,
@@ -459,7 +479,7 @@ def _sin_filas_saldo(movs: list[dict]) -> list[dict]:
         desc = re.sub(r"\s+\bnan\b", "", str(m.get("descripcion") or ""), flags=re.I)
         desc = re.sub(r"\s+", " ", desc).strip()
         blob = f"{desc} {m.get('categoria') or ''} {m.get('extracto_label') or ''}"
-        if es_fila_saldo_bancario(blob):
+        if es_fila_saldo_bancario(blob) or es_fila_resumen_impositivo(blob):
             continue
         fila = dict(m)
         fila["descripcion"] = desc
@@ -551,7 +571,7 @@ def _aplicar_filas_componente(
             out[pos]["cuenta_plan"] = desc_por_cod[codigo]
         elif clasif:
             out[pos]["cuenta_plan"] = clasif
-        if origen in {"regla", "sugerido", "a_clasificar"}:
+        if origen in {"regla", "sugerido", "a_clasificar", "manual"}:
             out[pos]["origen"] = origen
         elif codigo != "99999":
             if str(out[pos].get("origen") or "") == "a_clasificar":
@@ -566,11 +586,15 @@ def _html_tabla_asiento(rows: list[dict]) -> str:
     if not rows:
         return "<p class='ce-sub'>Sin renglones.</p>"
     body = []
+    debe_t = 0.0
+    haber_t = 0.0
     for r in rows:
         cod = str(r.get("Código") or "")
         cls = "pend" if cod == "99999" else ""
         debe = float(r.get("Debe") or 0)
         haber = float(r.get("Haber") or 0)
+        debe_t += debe
+        haber_t += haber
         body.append(
             "<tr class='"
             + cls
@@ -586,10 +610,15 @@ def _html_tabla_asiento(rows: list[dict]) -> str:
         )
     return (
         "<div class='ce-wrap'><table class='ce-table'><thead>"
-        "<tr><th>Código</th><th>Descripción</th><th class='num'>Debe</th>"
-        "<th class='num'>Haber</th></tr></thead><tbody>"
+        "<tr><th>Código de cuenta</th><th>Descripción de cuenta</th>"
+        "<th class='num'>Debe</th><th class='num'>Haber</th></tr></thead><tbody>"
         + "".join(body)
-        + "</tbody></table></div>"
+        + "</tbody><tfoot><tr><td></td><td><strong>Total</strong></td>"
+        "<td class='num'><strong>"
+        + html.escape(_fmt_money(debe_t))
+        + "</strong></td><td class='num'><strong>"
+        + html.escape(_fmt_money(haber_t))
+        + "</strong></td></tr></tfoot></table></div>"
     )
 
 
@@ -829,9 +858,8 @@ def _paso_extracto(
     n_plan = max(0, len(opciones) - 1)
     subtitulo = (
         f"{nombre_activo or ''} — {len(movs)} movimientos · {n_plan} cuentas del plan. "
-        "Las que tienen regla quedan tomadas; el resto, sugeridas o a clasificar. "
-        "Cada clasificación queda asociada a una cuenta Tango (igual en todas las sociedades). "
-        "Si el plan de esa sociedad usa otra, cambiala a mano en la línea."
+        "Lo igual se agrupa solo (Ley 25.413 y retenciones IIBB van a su cuenta). "
+        "Si cambiás una línea, queda así; el asiento agrupa por cuenta contra el banco."
     )
     if n_plan <= 0:
         st.warning(
@@ -844,12 +872,12 @@ def _paso_extracto(
     out = _EXTRACTO_GRID(
         titulo=f"Extracto {banco} · {periodo}",
         subtitulo=subtitulo,
-        grid_id=f"ce_grid_{sociedad_id}_{token}_v5",
+        grid_id=f"ce_grid_{sociedad_id}_{token}_v6",
         filas=_filas_componente(movs),
         cuentas=cuentas,
         cuentas_json=json.dumps(cuentas, ensure_ascii=False),
         clasifs_json=json.dumps(_clasifs_componente(sociedad_id, movs), ensure_ascii=False),
-        key=f"ce_grid_{sociedad_id}_{token}_v5",
+        key=f"ce_grid_{sociedad_id}_{token}_v6",
         default={"action": "idle", "filas": []},
     )
     accion = str((out or {}).get("action") or "idle")
