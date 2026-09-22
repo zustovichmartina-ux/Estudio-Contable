@@ -1,1 +1,1 @@
-https://log-orders-passes-pets.trycloudflare.com
+https://api.trycloudflare.com
