@@ -1,6 +1,15 @@
 {
-  "version": "2026-09-22-extractos",
+  "version": "2026-09-22-plan-cuentas",
   "cambios": [
+    {
+      "id": "2026-09-22-plan-cuentas",
+      "fecha": "22/09/2026",
+      "titulo": "Plan de cuentas",
+      "items": [
+        "El plan de Tango queda guardado en la sociedad: no hay que volver a cargarlo cada vez que entras.",
+        "La plantilla vacía de Tango ya no cuenta como plan (hay que exportar las cuentas reales una sola vez)."
+      ]
+    },
     {
       "id": "2026-09-22-extractos",
       "fecha": "22/09/2026",

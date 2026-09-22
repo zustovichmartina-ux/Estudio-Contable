@@ -6,9 +6,13 @@ Generar: python -c "from cryptography.fernet import Fernet; print(Fernet.generat
 
 from __future__ import annotations
 
+import base64
+import json
 import os
 import re
 import tempfile
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Optional
 
@@ -178,6 +182,63 @@ def guardar_upload_cifrado(
     safe = re.sub(r"[^a-zA-Z0-9._-]+", "_", Path(nombre_original).name)[:80] or "archivo.bin"
     dest = directorio_seguro(usuario, categoria) / f"{safe}{ENC_SUFFIX}"
     return escribir_cifrado(dest, archivo_bytes)
+
+
+GITHUB_REPO_DEFAULT = "zustovichmartina-ux/Estudio-Contable"
+
+
+def publicar_plan_csv_en_github(cuit: str, csv_text: str) -> bool:
+    """Graba el CSV del plan en GitHub para que Cloud lo tenga después de un reboot."""
+    texto = str(csv_text or "").strip()
+    if not texto or texto.count("\n") < 1:
+        return False
+    token = _leer_secreto("GITHUB_TOKEN") or _leer_secreto("GH_TOKEN")
+    if not token:
+        return False
+    repo = (_leer_secreto("GITHUB_REPO") or GITHUB_REPO_DEFAULT).strip()
+    cuit_n = re.sub(r"\D", "", str(cuit or "")) or "sin_cuit"
+    rel = f"data/planes_cuentas/plan_{cuit_n}.csv"
+    api = f"https://api.github.com/repos/{repo}/contents/{rel}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "EstudioContable-Planes/1.0",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    cuerpo = texto if texto.endswith("\n") else texto + "\n"
+    b64 = base64.b64encode(cuerpo.encode("utf-8")).decode("ascii")
+    sha = ""
+    try:
+        req = urllib.request.Request(api, headers=headers, method="GET")
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        sha = str(data.get("sha") or "")
+        existing_b64 = str(data.get("content") or "").replace("\n", "")
+        if existing_b64 and existing_b64 == b64:
+            return True
+    except urllib.error.HTTPError as exc:
+        if int(getattr(exc, "code", 0) or 0) != 404:
+            return False
+    except Exception:
+        return False
+    payload: dict[str, str] = {
+        "message": f"Guardar plan de cuentas {cuit_n}",
+        "content": b64,
+        "branch": "master",
+    }
+    if sha:
+        payload["sha"] = sha
+    put = urllib.request.Request(
+        api,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={**headers, "Content-Type": "application/json"},
+        method="PUT",
+    )
+    try:
+        with urllib.request.urlopen(put, timeout=30) as resp:
+            return 200 <= int(getattr(resp, "status", 200) or 200) < 300
+    except Exception:
+        return False
 
 
 def estado_cifrado_ui() -> dict:

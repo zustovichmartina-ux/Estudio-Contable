@@ -10441,6 +10441,20 @@ def plan_cuentas_tiene_filas(df: pd.DataFrame | None) -> bool:
     return bool(serie.astype(str).str.strip().replace({"nan": "", "none": ""}).ne("").any())
 
 
+def serializar_plan_cuentas(df: pd.DataFrame) -> str:
+    cols = [c for c in ("codigo", "descripcion", "imputable") if c in df.columns]
+    if not cols:
+        cols = list(df.columns)
+    return df[cols].to_csv(index=False)
+
+
+def plan_cuentas_desde_csv(texto: str) -> pd.DataFrame:
+    raw = str(texto or "").strip()
+    if not raw:
+        return pd.DataFrame()
+    return _normalizar_plan_cuentas_df(pd.read_csv(io.StringIO(raw), dtype=str))
+
+
 def cargar_plan_cuentas(ruta: str | Path | None = None) -> pd.DataFrame:
     ruta_final = Path(ruta) if ruta else PLAN_CUENTAS_DEFAULT
     if ruta_final.suffix.lower() == ".csv":

@@ -37,6 +37,7 @@ from procesador import (
     generar_excel_tango_nativo,
     guardar_biblioteca_persistida,
     normalizar_codigo_cuenta_tango,
+    plan_cuentas_desde_csv,
     plan_cuentas_tiene_filas,
     procesar_extractos_bancarios_pdfs,
 )
@@ -274,6 +275,23 @@ def _plan_df_sociedad(sociedad_id: int) -> pd.DataFrame | None:
         return df_sid if plan_cuentas_tiene_filas(df_sid) else None
     if not cliente:
         return None
+    csv_txt = str(cliente.get("plan_cuentas_csv") or "").strip()
+    if not csv_txt:
+        try:
+            csv_txt = db.plan_cuentas_csv_cliente(sid)
+        except Exception:
+            csv_txt = ""
+    if csv_txt:
+        try:
+            loaded_csv = plan_cuentas_desde_csv(csv_txt)
+        except Exception:
+            loaded_csv = None
+        if plan_cuentas_tiene_filas(loaded_csv):
+            st.session_state["plan_cuentas_df"] = loaded_csv
+            st.session_state[f"plan_cuentas_df_{sid}"] = loaded_csv
+            st.session_state["plan_cuentas_cliente_id"] = sid
+            st.session_state["plan_cuentas_es_default"] = False
+            return loaded_csv
     candidatos: list[Path] = []
     raw = str(cliente.get("plan_cuentas_path") or "").strip()
     if raw:

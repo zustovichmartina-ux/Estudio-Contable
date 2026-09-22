@@ -583,6 +583,34 @@ class TestExtractoComponente(unittest.TestCase):
         df = proc.cargar_plan_cuentas(ruta)
         self.assertFalse(proc.plan_cuentas_tiene_filas(df))
 
+    def test_plan_en_sqlite_se_recupera_sin_excel(self):
+        import tempfile
+        from pathlib import Path
+
+        import pandas as pd
+
+        import database as db
+        from procesador import plan_cuentas_desde_csv, plan_cuentas_tiene_filas, serializar_plan_cuentas
+
+        orig = db.DB_PATH
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
+            db.DB_PATH = Path(td) / "plan.db"
+            try:
+                db.inicializar_bd()
+                cid = db.crear_cliente(
+                    "TEST PLAN CSV", "30999999991", "Persona Jurídica", mes_cierre_balance=12
+                )
+                df = pd.DataFrame(
+                    {"codigo": ["11101"], "descripcion": ["Caja"], "imputable": ["S"]}
+                )
+                db.guardar_plan_cuentas_csv(cid, serializar_plan_cuentas(df))
+                raw = db.plan_cuentas_csv_cliente(cid)
+                out = plan_cuentas_desde_csv(raw)
+                self.assertTrue(plan_cuentas_tiene_filas(out))
+                self.assertEqual(str(out.iloc[0]["codigo"]), "11101")
+            finally:
+                db.DB_PATH = orig
+
     def test_movimientos_iguales_quedan_en_la_misma_cuenta(self):
         from ui_conciliacion_ae import _propagar_cuentas_repetidas
 

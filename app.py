@@ -86,6 +86,9 @@ from procesador import (
     cargar_compras_tango,
     cargar_movimientos_contables,
     cargar_plan_cuentas,
+    plan_cuentas_tiene_filas,
+    serializar_plan_cuentas,
+    plan_cuentas_desde_csv,
     leer_dataframe_balance_solapa,
     leer_datos_balance_por_ficha,
     listar_solapas_excel,
@@ -141,6 +144,7 @@ from capa_revision import gate_asiento
 from monotributo_proyeccion import cargar_topes_categorias, proyectar_monotributo
 from ui_tango_bot import render_tango_bot
 from ui_version_web import render_aviso_version
+from seguridad_datos import publicar_plan_csv_en_github
 from motor_fci_fifo import (
     cuadro_cobertura_meses,
     label_mes,
@@ -2177,6 +2181,27 @@ def _guardar_plan_cliente_en_disco(
     Si no hay DATA_ENCRYPTION_KEY, guarda plaintext en data/planes_cuentas (mejor que fallar).
     """
     cuit = re.sub(r"\D", "", str(cuit or "")) or str(cuit or "sin_cuit")
+    tmp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
+            tmp.write(archivo_bytes)
+            tmp_path = Path(tmp.name)
+        df_check = cargar_plan_cuentas(tmp_path)
+    except Exception as exc:
+        if tmp_path is not None:
+            tmp_path.unlink(missing_ok=True)
+        raise ValueError(
+            "No se pudo leer el plan de cuentas. "
+            "Tiene que ser el Excel de Tango con la solapa de cuentas (código y descripción)."
+        ) from exc
+    if tmp_path is not None:
+        tmp_path.unlink(missing_ok=True)
+    if not plan_cuentas_tiene_filas(df_check):
+        raise ValueError(
+            "Este Excel no tiene cuentas contables. "
+            "En Tango exportá el plan con todas las cuentas "
+            "(no la plantilla vacía de Apertura | Excel) y volvé a subirlo."
+        )
 
     # Cloud: preferir cifrado; si no hay clave, plaintext durable en data/planes_cuentas
     if _es_entorno_cloud():
@@ -2227,6 +2252,7 @@ def _guardar_plan_cliente_en_disco(
                         "rows": len(df),
                     },
                 )
+                _persistir_plan_csv_cliente(cliente_id, cuit, df)
                 return enc
             except Exception as exc_cif:
                 _dbg_log(
@@ -2255,6 +2281,7 @@ def _guardar_plan_cliente_en_disco(
             "saved_xlsx_cloud_plaintext_fallback",
             {"cuit": cuit, "cliente_id": cliente_id, "path": str(ruta_xlsx), "rows": len(df)},
         )
+        _persistir_plan_csv_cliente(cliente_id, cuit, df)
         return ruta_xlsx
 
     ruta_xlsx = _ruta_plan_xlsx(cuit)
@@ -2300,7 +2327,28 @@ def _guardar_plan_cliente_en_disco(
             "rows": len(df),
         },
     )
+    _persistir_plan_csv_cliente(cliente_id, cuit, df)
     return ruta_xlsx
+
+
+def _persistir_plan_csv_cliente(
+    cliente_id: int | None,
+    cuit: str,
+    df: pd.DataFrame,
+) -> None:
+    """Deja el plan en SQLite y, en Cloud, también en GitHub para el próximo reboot."""
+    if not plan_cuentas_tiene_filas(df):
+        return
+    texto = serializar_plan_cuentas(df)
+    if cliente_id is not None:
+        try:
+            db.guardar_plan_cuentas_csv(int(cliente_id), texto)
+        except Exception:
+            pass
+    try:
+        publicar_plan_csv_en_github(cuit, texto)
+    except Exception:
+        pass
 
 
 def _clave_plan_propio_confirmado(cliente_id: int) -> str:
@@ -2313,6 +2361,13 @@ def _confirmar_plan_propio_en_session(
     df: pd.DataFrame | None = None,
 ) -> None:
     """Marca en session que esta sociedad tiene plan propio (verde inmediato post-upload)."""
+    if not plan_cuentas_tiene_filas(df):
+        st.session_state.pop(_clave_plan_propio_confirmado(cliente_id), None)
+        return
+    try:
+        db.guardar_plan_cuentas_csv(int(cliente_id), serializar_plan_cuentas(df))
+    except Exception:
+        pass
     st.session_state[_clave_plan_propio_confirmado(cliente_id)] = True
     st.session_state[f"plan_propio_ruta_{int(cliente_id)}"] = str(ruta)
     if df is not None and len(df) > 0:
@@ -2372,7 +2427,8 @@ def _cargar_plan_cuentas_cliente(
     ruta_resuelta: Path | None = None
     for candidata in _rutas_plan_candidatas(cliente):
         if candidata.exists() and not _es_plan_generico_default(candidata):
-            # Preferir primera candidata no-genérica; propio se prioriza abajo
+            if not _plan_en_disco_tiene_cuentas(candidata):
+                continue
             if ruta_resuelta is None:
                 ruta_resuelta = candidata
             if _es_plan_propio_cliente(cuit, candidata, cliente_id=cliente_id):
@@ -2399,7 +2455,7 @@ def _cargar_plan_cuentas_cliente(
         for candidata in _rutas_plan_candidatas(cliente):
             if candidata.exists() and _es_plan_propio_cliente(
                 cuit, candidata, cliente_id=cliente_id
-            ):
+            ) and _plan_en_disco_tiene_cuentas(candidata):
                 propio_hallado = candidata
                 break
         if propio_hallado is not None:
@@ -2414,6 +2470,18 @@ def _cargar_plan_cuentas_cliente(
             if not ruta_resuelta.is_file():
                 ruta_resuelta = Path(PLAN_CUENTAS_DEFAULT)
             using_default = True
+
+    if using_default:
+        csv_txt = str(cliente.get("plan_cuentas_csv") or "").strip()
+        if not csv_txt:
+            csv_txt = db.plan_cuentas_csv_cliente(cliente_id)
+        df_csv = plan_cuentas_desde_csv(csv_txt) if csv_txt else None
+        if plan_cuentas_tiene_filas(df_csv):
+            dest = DATA_PLANES_DIR / f"plan_{re.sub(r'\D', '', cuit) or 'sin_cuit'}.csv"
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(csv_txt, encoding="utf-8")
+            ruta_resuelta = dest
+            using_default = False
 
     # Si en esta sesión ya se subió plan propio, no degradar a default
     if using_default and st.session_state.get(_clave_plan_propio_confirmado(cliente_id)):
@@ -7780,6 +7848,11 @@ def _mensaje_plan_no_vinculado(cliente: dict | None = None) -> str:
             "Volvé a subirlo en Gestión de Clientes (CUIT "
             f"`{cuit}`)."
         )
+    if ruta_bd and ruta_bd.exists() and not _plan_en_disco_tiene_cuentas(ruta_bd):
+        return (
+            f"⚠️ El Excel de **{cli.get('nombre')}** está vacío (plantilla de Tango sin cuentas). "
+            "Exportá el plan con todas las cuentas y volvé a subirlo para que salgan en Cuenta Tango."
+        )
     return (
         f"⚠️ **{cli.get('nombre')}** no tiene Plan de Cuentas propio. "
         "Subí el Excel de Tango en Gestión de Clientes o con el cargador del módulo."
@@ -7787,68 +7860,112 @@ def _mensaje_plan_no_vinculado(cliente: dict | None = None) -> str:
 
 
 def _limpiar_plan_bd_si_archivo_ausente(cliente: dict) -> dict:
-    """Limpia path fantasma o plan_default en BD (evita falso 'vinculado')."""
+    """Si el Excel no está, reescribe el CSV guardado en la base. No borra el plan."""
     raw = (cliente.get("plan_cuentas_path") or "").strip()
-    if not raw:
+    ruta = _path_plan_bd(raw) if raw else None
+    csv_txt = str(cliente.get("plan_cuentas_csv") or "").strip()
+    if not csv_txt and cliente.get("id") is not None:
+        csv_txt = db.plan_cuentas_csv_cliente(int(cliente["id"]))
+    archivo_ok = bool(
+        ruta and ruta.exists() and not _es_plan_generico_default(ruta)
+        and _plan_en_disco_tiene_cuentas(ruta)
+    )
+    if archivo_ok:
         return cliente
-    ruta = _path_plan_bd(raw) or Path(raw)
-    cuit = str(cliente.get("cuit", "")).strip()
-    # Ausente en disco, o genérico/default: no es vínculo real de la sociedad
-    debe_limpiar = (not ruta.exists()) or _es_plan_generico_default(ruta)
-    if not debe_limpiar:
-        return cliente
+    if csv_txt.count("\n") >= 1 and plan_cuentas_tiene_filas(plan_cuentas_desde_csv(csv_txt)):
+        cuit = re.sub(r"\D", "", str(cliente.get("cuit") or "")) or "sin_cuit"
+        dest = DATA_PLANES_DIR / f"plan_{cuit}.csv"
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(csv_txt, encoding="utf-8")
+            db.actualizar_cliente(
+                int(cliente["id"]),
+                cliente["nombre"],
+                cliente["cuit"],
+                cliente["tipo_persona"],
+                str(dest),
+                cliente.get("mes_cierre_balance", 12),
+            )
+        except Exception:
+            return {**cliente, "plan_cuentas_path": str(dest), "plan_cuentas_csv": csv_txt}
+        frescos = db.obtener_cliente(int(cliente["id"]))
+        return frescos or {**cliente, "plan_cuentas_path": str(dest), "plan_cuentas_csv": csv_txt}
+    return cliente
+
+
+def _plan_en_disco_tiene_cuentas(ruta: Path | None) -> bool:
+    """True si el archivo existe, no es el genérico y tiene al menos una cuenta."""
+    if ruta is None:
+        return False
+    ruta = Path(ruta)
+    if not ruta.exists() or _es_plan_generico_default(ruta):
+        return False
     try:
-        db.actualizar_cliente(
-            int(cliente["id"]),
-            cliente["nombre"],
-            cliente["cuit"],
-            cliente["tipo_persona"],
-            None,
-            cliente.get("mes_cierre_balance", 12),
-        )
-        st.session_state.pop(_clave_plan_propio_confirmado(int(cliente["id"])), None)
-        st.session_state.pop(f"plan_propio_ruta_{int(cliente['id'])}", None)
-        _dbg_log("P", "_limpiar_plan_bd_si_archivo_ausente", "cleared_stale_path", {
-            "cliente_id": cliente.get("id"),
-            "cuit": cuit,
-            "old": raw,
-            "reason": "missing" if not ruta.exists() else "generic_default",
-        })
+        mtime = float(ruta.stat().st_mtime)
+    except OSError:
+        return False
+    cache_key = f"_plan_tiene_cuentas_{str(ruta).lower()}_{mtime}"
+    cached = st.session_state.get(cache_key)
+    if isinstance(cached, bool):
+        return cached
+    ok = False
+    try:
+        if ruta.suffix.lower() == ".csv":
+            with ruta.open("r", encoding="utf-8", errors="replace") as fh:
+                n = 0
+                for line in fh:
+                    if line.strip():
+                        n += 1
+                        if n > 1:
+                            ok = True
+                            break
+        else:
+            ok = plan_cuentas_tiene_filas(_cargar_df_desde_ruta_plan(ruta))
     except Exception:
-        pass
-    frescos = db.obtener_cliente(int(cliente["id"]))
-    return frescos or {**cliente, "plan_cuentas_path": None}
+        ok = False
+    st.session_state[cache_key] = ok
+    return ok
 
 
 def _plan_existe_para_cliente(cliente: dict) -> bool:
-    """True solo si hay plan propio de ESA sociedad (no plan_default ni genérico)."""
+    """True solo si hay plan propio de ESA sociedad con cuentas (no plantilla vacía)."""
     cliente_id = cliente.get("id")
     if cliente_id is not None and st.session_state.get(
         _clave_plan_propio_confirmado(int(cliente_id))
     ):
         ruta_ss = st.session_state.get(f"plan_propio_ruta_{int(cliente_id)}")
         p_ss = _path_plan_bd(ruta_ss) if ruta_ss else None
-        if p_ss and p_ss.exists() and not _es_plan_generico_default(p_ss):
+        if _plan_en_disco_tiene_cuentas(p_ss):
             return True
-        # Sesión confirma upload aunque el path efímero se haya movido: DF en memoria
         plan_df = st.session_state.get("plan_cuentas_df")
         if (
-            plan_df is not None
-            and len(plan_df) > 0
+            plan_cuentas_tiene_filas(plan_df)
             and st.session_state.get("plan_cuentas_cliente_id") == cliente_id
             and not bool(st.session_state.get("plan_cuentas_es_default", False))
         ):
             return True
 
     cliente = _limpiar_plan_bd_si_archivo_ausente(cliente)
+    csv_txt = str(cliente.get("plan_cuentas_csv") or "").strip()
+    if not csv_txt and cliente_id is not None:
+        try:
+            csv_txt = db.plan_cuentas_csv_cliente(int(cliente_id))
+        except Exception:
+            csv_txt = ""
+    if csv_txt:
+        try:
+            if plan_cuentas_tiene_filas(plan_cuentas_desde_csv(csv_txt)):
+                return True
+        except Exception:
+            pass
     cuit = str(cliente.get("cuit", "")).strip()
     if not cuit and cliente_id is None:
         return False
     bd_path = _path_plan_bd(cliente.get("plan_cuentas_path"))
-    if bd_path and bd_path.exists() and not _es_plan_generico_default(bd_path):
+    if _plan_en_disco_tiene_cuentas(bd_path):
         return True
     return any(
-        p.exists()
+        _plan_en_disco_tiene_cuentas(p)
         and _es_plan_propio_cliente(
             cuit, p, cliente_id=int(cliente_id) if cliente_id is not None else None
         )
@@ -7872,10 +7989,9 @@ def _sociedad_tiene_plan_vinculado_por_session() -> bool:
                 and st.session_state.get("plan_cuentas_cliente_id") == sociedad_id
             ):
                 return True
-        # Aún sin DF: si el archivo sigue en disco, alcanza
         ruta_ss = st.session_state.get(f"plan_propio_ruta_{int(sociedad_id)}")
         p_ss = _path_plan_bd(ruta_ss) if ruta_ss else None
-        if p_ss and p_ss.exists() and not _es_plan_generico_default(p_ss):
+        if _plan_en_disco_tiene_cuentas(p_ss):
             return True
     if not cuit:
         # CUIT vacío no bloquea si hay plan por cliente_id en disco/BD
@@ -10680,8 +10796,15 @@ def _seccion_conciliacion_bancaria_balance() -> None:
         plan_vinculado = _sociedad_tiene_plan_vinculado_por_session()
         cuit_activo = st.session_state.cuit_activo
         nombre_activo = st.session_state.nombre_activo
+        plan_df = st.session_state.get("plan_cuentas_df")
+        if st.session_state.get("plan_cuentas_cliente_id") != sociedad_id:
+            plan_df = st.session_state.get(f"plan_cuentas_df_{int(sociedad_id)}")
+        if not plan_cuentas_tiene_filas(plan_df) or bool(
+            st.session_state.get("plan_cuentas_es_default", False)
+        ):
+            plan_vinculado = False
 
-        if not plan_vinculado and not en_extracto:
+        if not plan_vinculado:
             st.error(_mensaje_plan_no_vinculado())
             _widget_subir_plan_inline(
                 sociedad_id, st.session_state.get("cuit_activo"), key_suffix="conc"
@@ -10693,6 +10816,7 @@ def _seccion_conciliacion_bancaria_balance() -> None:
             cuit_activo=cuit_activo,
             nombre_activo=nombre_activo,
             plan_vinculado=bool(plan_vinculado),
+            plan_cuentas_df=plan_df if plan_cuentas_tiene_filas(plan_df) else None,
         )
 
 def _seccion_devengamientos_iibb(

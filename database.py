@@ -172,6 +172,10 @@ def inicializar_bd() -> None:
             conn.execute("ALTER TABLE clientes ADD COLUMN mes_cierre_balance INTEGER")
         except sqlite3.OperationalError:
             pass
+        try:
+            conn.execute("ALTER TABLE clientes ADD COLUMN plan_cuentas_csv TEXT")
+        except sqlite3.OperationalError:
+            pass
 
         conn.execute(
             """
@@ -664,18 +668,105 @@ def actualizar_cliente(
         conn.commit()
 
 
+def guardar_plan_cuentas_csv(cliente_id: int, csv_text: str) -> None:
+    """Guarda las cuentas del plan en SQLite (sobrevive si el Excel se pierde)."""
+    texto = str(csv_text or "").strip()
+    if not texto:
+        return
+    with obtener_conexion() as conn:
+        conn.execute(
+            "UPDATE clientes SET plan_cuentas_csv = ? WHERE id = ?",
+            (texto, int(cliente_id)),
+        )
+        conn.commit()
+
+
+def plan_cuentas_csv_cliente(cliente_id: int) -> str:
+    with obtener_conexion() as conn:
+        fila = conn.execute(
+            "SELECT plan_cuentas_csv FROM clientes WHERE id = ?",
+            (int(cliente_id),),
+        ).fetchone()
+    if not fila:
+        return ""
+    return str(fila["plan_cuentas_csv"] or "").strip()
+
+
+def _plan_archivo_con_cuentas(ruta: Path | None) -> bool:
+    """True si el archivo tiene al menos una cuenta (no plantilla Tango vacía)."""
+    if ruta is None:
+        return False
+    ruta = Path(ruta)
+    if not ruta.is_file():
+        return False
+    nombre = ruta.name.lower()
+    if nombre in ("plan_default.xlsx", "plan_default.xls") or "cuentas contables (4)" in nombre:
+        return False
+    suf = ruta.suffix.lower()
+    if suf == ".csv":
+        try:
+            lineas = [ln for ln in ruta.read_text(encoding="utf-8").splitlines() if ln.strip()]
+        except OSError:
+            return False
+        return len(lineas) >= 2
+    if suf in {".xlsx", ".xls"}:
+        try:
+            with pd.ExcelFile(ruta) as xl:
+                for hoja in xl.sheet_names:
+                    df = pd.read_excel(xl, sheet_name=hoja, dtype=str)
+                    if df is None or df.empty:
+                        continue
+                    nonempty = df.dropna(how="all")
+                    if nonempty.empty:
+                        continue
+                    col0 = nonempty.iloc[:, 0].astype(str).str.strip()
+                    col0 = col0[
+                        ~col0.str.lower().isin({"", "nan", "none", "codigo", "código", "cuenta"})
+                    ]
+                    if bool(col0.ne("").any()):
+                        return True
+        except Exception:
+            return False
+        return False
+    return False
+
+
+def _texto_plan_csv_disco(cuit: str, plan_path: str | None = None) -> str:
+    candidatos: list[Path] = []
+    if plan_path and str(plan_path).lower().endswith(".csv"):
+        candidatos.append(Path(plan_path))
+    candidatos.append(DATA_PLANES_DIR / f"plan_{cuit}.csv")
+    vistos: set[str] = set()
+    for cand in candidatos:
+        key = str(cand).lower()
+        if key in vistos:
+            continue
+        vistos.add(key)
+        if not cand.is_file():
+            continue
+        try:
+            texto = cand.read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        if texto.count("\n") >= 1:
+            return texto
+    return ""
+
+
 def _resolver_plan_path_catalogo(item: dict, cuit: str) -> str | None:
-    """Ruta de plan propio para catálogo. No usa plan_default (eso no es vínculo real)."""
+    """Ruta de plan propio para catálogo. No usa plan_default ni plantillas vacías."""
     explicit = str(item.get("plan_cuentas") or item.get("plan_cuentas_path") or "").strip()
     if explicit:
         cand = Path(explicit)
         if not cand.is_absolute():
             cand = BASE_DIR / cand
-        if cand.is_file() and cand.name.lower() not in ("plan_default.xlsx", "plan_default.xls"):
-            if "cuentas contables (4)" not in cand.name.lower():
-                return str(cand)
+        if _plan_archivo_con_cuentas(cand):
+            return str(cand)
+    propio_csv = DATA_PLANES_DIR / f"plan_{cuit}.csv"
+    if _plan_archivo_con_cuentas(propio_csv):
+        return str(propio_csv)
     propio = DATA_PLANES_DIR / f"plan_{cuit}.xlsx"
-    if propio.is_file():
+    if _plan_archivo_con_cuentas(propio):
         return str(propio)
     return None
 
@@ -688,7 +779,7 @@ def sincronizar_clientes_catalogo(catalogo: list[dict]) -> dict[str, int]:
         existentes = {
             re.sub(r"\D", "", str(row["cuit"])): dict(row)
             for row in conn.execute(
-                "SELECT id, cuit, plan_cuentas_path FROM clientes"
+                "SELECT id, cuit, plan_cuentas_path, plan_cuentas_csv FROM clientes"
             ).fetchall()
         }
         for item in catalogo:
@@ -714,15 +805,34 @@ def sincronizar_clientes_catalogo(catalogo: list[dict]) -> dict[str, int]:
             if tipo_persona in ("Persona Física", "Monotributista"):
                 mes_cierre = 12
             plan_path = _resolver_plan_path_catalogo(item, cuit)
+            csv_txt = _texto_plan_csv_disco(cuit, plan_path)
             if cuit in existentes:
-                # En Cloud/repo: si hay plan propio y la BD apunta a un path inexistente, actualizar.
+                # En Cloud/repo: si hay plan propio y la BD apunta a un path vacío/inexistente, actualizar.
                 row = existentes[cuit]
                 actual = Path(str(row.get("plan_cuentas_path") or ""))
-                propio = DATA_PLANES_DIR / f"plan_{cuit}.xlsx"
-                if propio.is_file() and (not actual.is_file()):
+                csv_bd = str(row.get("plan_cuentas_csv") or "").strip()
+                if plan_path and (
+                    not _plan_archivo_con_cuentas(actual) or not csv_bd
+                ):
+                    if csv_txt and not csv_bd:
+                        conn.execute(
+                            """
+                            UPDATE clientes
+                            SET plan_cuentas_path = ?, plan_cuentas_csv = ?
+                            WHERE id = ?
+                            """,
+                            (plan_path, csv_txt, row["id"]),
+                        )
+                    else:
+                        conn.execute(
+                            "UPDATE clientes SET plan_cuentas_path = ? WHERE id = ?",
+                            (plan_path, row["id"]),
+                        )
+                    stats["planes_vinculados"] += 1
+                elif csv_txt and not csv_bd:
                     conn.execute(
-                        "UPDATE clientes SET plan_cuentas_path = ? WHERE id = ?",
-                        (str(propio), row["id"]),
+                        "UPDATE clientes SET plan_cuentas_csv = ? WHERE id = ?",
+                        (csv_txt, row["id"]),
                     )
                     stats["planes_vinculados"] += 1
                 stats["omitidos"] += 1
@@ -730,12 +840,18 @@ def sincronizar_clientes_catalogo(catalogo: list[dict]) -> dict[str, int]:
             try:
                 conn.execute(
                     """
-                    INSERT INTO clientes (nombre, cuit, tipo_persona, plan_cuentas_path, mes_cierre_balance)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO clientes (
+                        nombre, cuit, tipo_persona, plan_cuentas_path, mes_cierre_balance, plan_cuentas_csv
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?)
                     """,
-                    (nombre, cuit, tipo_persona, plan_path, mes_cierre),
+                    (nombre, cuit, tipo_persona, plan_path, mes_cierre, csv_txt or None),
                 )
-                existentes[cuit] = {"cuit": cuit, "plan_cuentas_path": plan_path}
+                existentes[cuit] = {
+                    "cuit": cuit,
+                    "plan_cuentas_path": plan_path,
+                    "plan_cuentas_csv": csv_txt,
+                }
                 stats["insertados"] += 1
             except sqlite3.IntegrityError:
                 stats["omitidos"] += 1
