@@ -1,1 +1,1 @@
-https://granny-loop-showcase-void.trycloudflare.com
+https://api.trycloudflare.com
