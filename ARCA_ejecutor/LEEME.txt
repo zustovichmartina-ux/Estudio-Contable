@@ -1,0 +1,18 @@
+# ARCA ejecutor — paquete para la PC ociosa (NO RECEPCION)
+#
+# Destino habitual:
+#   \\TANGOSRV\Compartido\CLIENTES\1-Guadi y Marti\ARCA_ejecutor
+#   o Desktop\ARCA_ejecutor
+#
+# Desde el repo Estudio Contable (en una PC Windows con acceso a la red):
+#   powershell -ExecutionPolicy Bypass -File scripts\pack_arca_ejecutor.ps1
+#   powershell -ExecutionPolicy Bypass -File scripts\pack_arca_ejecutor.ps1 -Dest "$env:USERPROFILE\Desktop\ARCA_ejecutor"
+#
+# En la PC ociosa (DESKTOP-UTAE36T):
+#   1) instalar_todo.bat          (una vez)
+#   2) Copiar jobs\.worker_token  (el mismo de Streamlit Secrets; no regenerar)
+#   3) iniciar_afip_sesion.bat    (guardar 1 clave del estudio; Enter al final)
+#   4) ejecutor_arca.bat          (dejar abierto; PC prendida)
+#
+# En RECEPCION: control_arca.bat / web. Tiene que decir el hostname del ejecutor.
+# No correr ejecutor_arca.bat en las dos PCs a la vez.
