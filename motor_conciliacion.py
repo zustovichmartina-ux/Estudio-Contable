@@ -344,6 +344,25 @@ def extraer_nombre_proveedor(descripcion: str) -> str:
     return str(descripcion or "").strip()
 
 
+_RE_CUIT = re.compile(r"\b(\d{2}-?\d{8}-?\d{1})\b")
+
+
+def extraer_cuit_proveedor(descripcion: str) -> str:
+    """CUIT del destinatario si la descripción lo trae (formato Tango/bancos:
+    TRF INMED PROVEED / Nombre / CUIT / Banco, o el CUIT suelto en el texto)."""
+    partes = [p.strip() for p in str(descripcion or "").split("/")]
+    if len(partes) >= 3:
+        d = re.sub(r"\D", "", partes[2])
+        if len(d) == 11:
+            return d
+    m = _RE_CUIT.search(str(descripcion or ""))
+    if m:
+        d = re.sub(r"\D", "", m.group(1))
+        if len(d) == 11:
+            return d
+    return ""
+
+
 def extraer_numero_vep(descripcion: str) -> str:
     m = RE_VEP.search(str(descripcion or ""))
     return m.group(1) if m else ""
@@ -546,38 +565,48 @@ def match_proveedor_1a1(
     mov: dict,
     pendientes: list[dict],
 ) -> dict | None:
-    """Mejor factura pendiente: importe ±1, fecha ok, fuzzy ≥55."""
+    """Mejor factura pendiente: primero por CUIT exacto (si el banco lo trae en
+    la descripción), si no por importe ±1, fecha ok, fuzzy ≥55."""
     importe = money(mov.get("debito") or mov.get("importe"))
     if importe <= 0:
         return None
     fecha_pago = mov.get("fecha")
     if isinstance(fecha_pago, str):
         fecha_pago = _parse_fecha(fecha_pago)
-    nombre = extraer_nombre_proveedor(str(mov.get("descripcion") or ""))
+    desc = str(mov.get("descripcion") or "")
+    nombre = extraer_nombre_proveedor(desc)
+    cuit_pago = extraer_cuit_proveedor(desc)
+    libres = [f for f in pendientes if not f.get("usado")]
+    candidatos = libres
+    por_cuit = False
+    if cuit_pago:
+        con_cuit = [f for f in libres if re.sub(r"\D", "", str(f.get("cuit") or "")) == cuit_pago]
+        if con_cuit:
+            candidatos = con_cuit
+            por_cuit = True
     mejor = None
     mejor_score = -1.0
-    for f in pendientes:
-        if f.get("usado"):
-            continue
+    for f in candidatos:
         imp_f = money(f.get("importe"))
         if abs(imp_f - importe) > TOL_IMPORTE:
             continue
         fecha_f = _fecha_factura(f)
         if fecha_pago and fecha_f and fecha_f > fecha_pago + timedelta(days=2):
             continue
-        score = _fuzzy_ratio(nombre, str(f.get("razon_social") or ""))
+        score = 100.0 if por_cuit else _fuzzy_ratio(nombre, str(f.get("razon_social") or ""))
         if score > mejor_score:
             mejor_score = score
             mejor = f
     if mejor is None or mejor_score < SIMILITUD_MIN:
         return None
+    etiqueta = "CUIT" if por_cuit else "similitud"
     return {
         "factura": mejor,
         "facturas": [mejor],
         "similitud": mejor_score,
         "detalle": (
             f"{mejor.get('razon_social')} | {mejor.get('tipo_comp') or ''} "
-            f"{mejor.get('num_comp') or ''} | similitud {mejor_score:.0f}%"
+            f"{mejor.get('num_comp') or ''} | {etiqueta} {mejor_score:.0f}%"
         ),
     }
 
@@ -596,12 +625,15 @@ def match_proveedor_1n(
     fecha_pago = mov.get("fecha")
     if isinstance(fecha_pago, str):
         fecha_pago = _parse_fecha(fecha_pago)
-    nombre = extraer_nombre_proveedor(str(mov.get("descripcion") or ""))
+    desc = str(mov.get("descripcion") or "")
+    nombre = extraer_nombre_proveedor(desc)
+    cuit_pago = extraer_cuit_proveedor(desc)
     candidatos: list[tuple[float, dict]] = []
     for f in pendientes:
         if f.get("usado"):
             continue
-        score = _fuzzy_ratio(nombre, str(f.get("razon_social") or f.get("proveedor") or ""))
+        mismo_cuit = bool(cuit_pago) and re.sub(r"\D", "", str(f.get("cuit") or "")) == cuit_pago
+        score = 100.0 if mismo_cuit else _fuzzy_ratio(nombre, str(f.get("razon_social") or f.get("proveedor") or ""))
         if score < SIMILITUD_MIN:
             continue
         fecha_f = _fecha_factura(f)
