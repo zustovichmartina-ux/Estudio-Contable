@@ -284,7 +284,7 @@ function bindUno(el) {
     const i = Number(el.getAttribute("data-i"));
     const k = el.getAttribute("data-k");
     const grupo = String(el.getAttribute("data-idxs") || i).split(",").map((x) => Number(x)).filter((n) => FILAS[n]);
-    const dest = grupo.length ? grupo : [i];
+    let dest = grupo.length ? grupo : [i];
     if (!FILAS[i]) return;
     if (k === "clasif") {
       if (el.value === OTRO) {
@@ -333,12 +333,23 @@ function bindUno(el) {
       return;
     }
     if (k === "codigo") {
+      const clasifRef = FILAS[i].clasif;
       dest.forEach((j) => {
         FILAS[j].codigo = el.value;
         FILAS[j].origen = el.value === "99999" ? "a_clasificar" : "manual";
       });
-      if (clasifUsaCuenta(normClasif(FILAS[i].clasif)) && el.value !== "99999") {
-        upsertClasif(FILAS[i].clasif, el.value);
+      if (clasifUsaCuenta(normClasif(clasifRef)) && el.value !== "99999") {
+        upsertClasif(clasifRef, el.value);
+        const otros = FILAS
+          .map((f, idx) => idx)
+          .filter((idx) => dest.indexOf(idx) < 0 && normClasif(FILAS[idx].clasif) === normClasif(clasifRef) && String(FILAS[idx].codigo || "") !== String(el.value));
+        if (otros.length && window.confirm("¿Aplicar esta cuenta también a los otros " + otros.length + " movimientos con la misma clasificación (" + clasifRef + ")?")) {
+          otros.forEach((j) => {
+            FILAS[j].codigo = el.value;
+            FILAS[j].origen = "manual";
+          });
+          dest = dest.concat(otros);
+        }
       }
       dest.forEach((j) => pintarFilaCuenta(j, FILAS[j].codigo, FILAS[j].origen));
       chips();
