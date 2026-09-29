@@ -522,9 +522,20 @@ def _enriquecer(
             fila["categoria"] = categoria if identificado else (label or categoria)
             fila["origen"] = "sugerido" if fuente not in {"conceptos_bancos", "regla_local"} else "regla"
         else:
-            fila["cuenta_codigo"] = "99999"
-            fila["cuenta_plan"] = desc_plan or label or categoria or "A clasificar"
-            fila["origen"] = "a_clasificar"
+            cuenta_dv, desc_dv = "", ""
+            if cred > 0.005 and cred > deb:
+                cuenta_dv, desc_dv, _score_dv = resolver_codigo_plan(
+                    "Deudores por Ventas", plan_df, hints=CATEGORIA_A_CUENTA_HINT
+                )
+            if cuenta_dv and cuenta_dv != "99999":
+                fila["cuenta_codigo"] = cuenta_dv
+                fila["cuenta_plan"] = desc_dv or "Deudores por Ventas"
+                fila["categoria"] = "Deudores por Ventas"
+                fila["origen"] = "sugerido"
+            else:
+                fila["cuenta_codigo"] = "99999"
+                fila["cuenta_plan"] = desc_plan or label or categoria or "A clasificar"
+                fila["origen"] = "a_clasificar"
         fila["origen"] = origen_linea_extracto(fila)
         fila["monto"] = round(cred - deb, 2)
         fila["_idx"] = i
