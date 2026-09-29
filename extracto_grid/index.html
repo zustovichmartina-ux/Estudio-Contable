@@ -202,8 +202,9 @@ function aplicarCuentaAClasif(nombre, codigo) {
   chips();
   persistLocal();
 }
-function optsHtml(sel) {
-  return CUENTAS.map((c) => {
+function optsHtml(sel, opciones) {
+  const lista = (opciones && opciones.length) ? opciones : CUENTAS;
+  return lista.map((c) => {
     const cod = String(c.codigo || "");
     const lab = c.label || (cod + " — ");
     return `<option value="${esc(cod)}" ${cod === String(sel) ? "selected" : ""}>${esc(lab)}</option>`;
@@ -397,7 +398,7 @@ function pintar() {
       <td class="num deb">${money(g.deb)}</td>
       <td class="num cred">${money(g.cred)}</td>
       <td>${celdaClasif(m, i, idxsAttr)}</td>
-      <td><select data-i="${i}" data-idxs="${idxsAttr}" data-k="codigo">${optsHtml(m.codigo)}</select></td>
+      <td><select data-i="${i}" data-idxs="${idxsAttr}" data-k="codigo">${optsHtml(m.codigo, m.opciones_codigo)}</select></td>
       <td><span class="tag ${esc(m.origen)}">${labelOrigen(m.origen)}</span></td>
     </tr>`;
   }).join("");
