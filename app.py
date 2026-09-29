@@ -5575,7 +5575,8 @@ def _resolver_fuente_balance(
     sociedad_id: int | None,
 ) -> tuple[BytesIO | None, str, str]:
     """
-    Prioridad: buffer servidor local (UNC) > uploader de contingencia.
+    Prioridad: buffer servidor local (UNC) > archivo subido ahora > último Balance
+    guardado en base para esta sociedad (evita tener que resubirlo cada vez).
     Retorna (buffer, origen, etiqueta).
     """
     servidor = _buffer_balance_servidor_sociedad(sociedad_id)
@@ -5587,7 +5588,26 @@ def _resolver_fuente_balance(
 
     if archivo_uploader is not None:
         buf = _planilla_a_bytesio(archivo_uploader)
-        return buf, "upload", getattr(archivo_uploader, "name", "balance.xlsx")
+        nombre = getattr(archivo_uploader, "name", "balance.xlsx")
+        if sociedad_id is not None:
+            try:
+                db.guardar_balance_devengamiento(int(sociedad_id), nombre, buf.getvalue())
+            except Exception:
+                pass
+        return buf, "upload", nombre
+
+    if sociedad_id is not None:
+        try:
+            guardado = db.balance_devengamiento_cliente(int(sociedad_id))
+        except Exception:
+            guardado = None
+        if guardado:
+            buf = BytesIO(guardado["contenido"])
+            buf.name = guardado["nombre"]
+            etiqueta = guardado["nombre"]
+            if guardado.get("actualizado"):
+                etiqueta += f" (guardado {guardado['actualizado']})"
+            return buf, "guardado", etiqueta
 
     return None, "", ""
 
@@ -10212,6 +10232,11 @@ def _seccion_devengamientos_impuesto(
         elif origen_planilla == "upload":
             st.caption(
                 f"📁 Balance cargado en memoria: `{etiqueta_planilla}` — solapa **{solapa_activa}**."
+            )
+        elif origen_planilla == "guardado":
+            st.caption(
+                f"💾 Usando el último Balance guardado para esta sociedad: `{etiqueta_planilla}` "
+                f"— solapa **{solapa_activa}**. Subí uno nuevo solo si cambió."
             )
 
     periodo_mensual: str | None = None
