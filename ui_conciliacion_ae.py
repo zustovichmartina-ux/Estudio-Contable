@@ -42,6 +42,7 @@ from procesador import (
     plan_cuentas_tiene_filas,
     procesar_extractos_bancarios_pdfs,
 )
+from terceros_imputacion import facturas_pendientes, leer_listado_imputacion
 
 
 class _UploadMemoria:
@@ -835,6 +836,54 @@ def _paso_subir(
             st.success(
                 f"Cache actualizado: {len(data.get('cuentas') or [])} cuentas, "
                 f"{len(data.get('bancos') or {})} bancos."
+            )
+
+    resumen_prov = db.resumen_proveedores_pendientes(sociedad_id)
+    n_facturas_prov = sum(int(r.get("facturas") or 0) for r in resumen_prov)
+    with st.expander(
+        "🧾 Facturas de Proveedores pendientes (opcional)"
+        + (f" — {n_facturas_prov} cargadas" if n_facturas_prov else ""),
+        expanded=False,
+    ):
+        st.caption(
+            "Subí acá el Listado por Imputación de Tango filtrado a Proveedores "
+            "(Compras). No es obligatorio, pero con esto, cuando el banco tenga un "
+            "pago a un proveedor, el sistema busca la factura pendiente por CUIT o "
+            "por monto y te la sugiere en la columna Clasificación — vos la "
+            "confirmás o la cambiás igual que siempre. Subir un listado nuevo "
+            "reemplaza al anterior de esta sociedad."
+        )
+        up_prov = st.file_uploader(
+            "Listado por Imputación — Proveedores (Excel de Tango)",
+            type=["xlsx"],
+            key=f"ce_prov_uploader_{sociedad_id}",
+        )
+        if up_prov is not None:
+            try:
+                df_prov = leer_listado_imputacion(up_prov.name, up_prov.getvalue())
+                pend = facturas_pendientes(df_prov, tipo="proveedor")
+                db.reemplazar_proveedores_pendientes(sociedad_id, pend)
+                total_prov = sum(float(p.get("importe") or 0) for p in pend)
+                st.success(
+                    f"{len(pend)} facturas pendientes cargadas "
+                    f"(total $ {total_prov:,.2f})."
+                )
+                st.rerun()
+            except Exception as exc:
+                st.error(f"No se pudo leer el listado: {exc}")
+        if resumen_prov:
+            st.caption(f"{n_facturas_prov} facturas pendientes de {len(resumen_prov)} proveedores.")
+            st.dataframe(
+                pd.DataFrame(resumen_prov).rename(
+                    columns={
+                        "cuit": "CUIT",
+                        "razon_social": "Razón social",
+                        "facturas": "Facturas",
+                        "importe_total": "Importe pendiente",
+                    }
+                ),
+                use_container_width=True,
+                hide_index=True,
             )
 
 
