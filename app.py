@@ -469,6 +469,27 @@ def _listar_excels_exportaciones_recientes(limite: int = 12) -> list[Path]:
     return archivos[:limite]
 
 
+def _marcar_biblioteca_exportada(
+    sociedad_id: int,
+    *,
+    impuesto: str | None = None,
+    banco: str | None = None,
+) -> None:
+    """Marca (y persiste) que ya se emitió el archivo Tango para este grupo archivado."""
+    ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
+    if impuesto is not None:
+        for e in st.session_state.get("biblioteca_asientos") or []:
+            if e.get("sociedad_id") == sociedad_id and str(e.get("impuesto") or "IVA") == impuesto:
+                e["exportado_tango"] = True
+                e["exportado_en"] = ahora
+    if banco is not None:
+        for e in st.session_state.get("biblioteca_bancos") or []:
+            if e.get("sociedad_id") == sociedad_id and str(e.get("banco") or "Banco") == banco:
+                e["exportado_tango"] = True
+                e["exportado_en"] = ahora
+    _persistir_biblioteca_en_disco()
+
+
 def _resumen_biblioteca_sociedad_activa() -> tuple[int, dict[str, list], int, dict[str, list]]:
     """Totales de biblioteca (impuestos + bancos) para la sociedad activa."""
     sociedad_id = st.session_state.get(_SOCiedad_KEY)
@@ -622,6 +643,9 @@ def _render_barra_superior_cuenta() -> None:
             if sociedad_id is None:
                 st.caption("Elegí una sociedad en la barra lateral.")
             else:
+                cli_bib = db.obtener_cliente(sociedad_id) or {}
+                cuit_activo_bib = str(cli_bib.get("cuit") or "000")
+                nombre_activo_bib = str(cli_bib.get("nombre") or "")
                 st.caption(
                     f"**Meses archivados:** {total_asi} (impuestos) · {total_bco} (bancos)"
                 )
@@ -639,6 +663,53 @@ def _render_barra_superior_cuenta() -> None:
                             f"{imp}: {len(entradas)}"
                             + (f" · [{', '.join(periodos)}]" if periodos else "")
                         )
+                        entradas_exp = [e for e in entradas if e.get("exportado_tango")]
+                        if entradas_exp and len(entradas_exp) == len(entradas):
+                            ultimo = max(
+                                (str(e.get("exportado_en") or "") for e in entradas_exp),
+                                default="",
+                            )
+                            st.caption(
+                                "✅ Ya emitido para Tango"
+                                + (f" ({ultimo})" if ultimo else "")
+                                + ". Podés volver a emitirlo si hace falta."
+                            )
+                        gen_key_imp = f"btn_emitir_bib_top_{_slug_impuesto(imp)}"
+                        bytes_key_imp = f"_bib_tango_bytes_{_slug_impuesto(imp)}_{sociedad_id}"
+                        name_key_imp = f"_bib_tango_name_{_slug_impuesto(imp)}_{sociedad_id}"
+                        if st.button(
+                            f"📦 Emitir {imp} para Tango",
+                            key=gen_key_imp,
+                            use_container_width=True,
+                        ):
+                            try:
+                                plan_df_pop = _asegurar_plan_cuentas_export(
+                                    sociedad_id, cuit_activo_bib, slug=_slug_impuesto(imp),
+                                )
+                                asientos_cons = _asientos_consolidados_biblioteca(sociedad_id, imp)
+                                if plan_df_pop is not None and _auditar_asientos_antes_export_ui(
+                                    asientos_cons, plan_df_pop,
+                                ):
+                                    ruta_consolidada = _generar_excel_biblioteca_consolidada(
+                                        sociedad_id, cuit_activo_bib, nombre_activo_bib,
+                                        impuesto=imp, plan_cuentas=plan_df_pop,
+                                    )
+                                    st.session_state[bytes_key_imp] = ruta_consolidada.read_bytes()
+                                    st.session_state[name_key_imp] = ruta_consolidada.name
+                                    _marcar_biblioteca_exportada(sociedad_id, impuesto=imp)
+                            except ExportacionTangoError as exc:
+                                _mostrar_errores_exportacion_tango(exc)
+                            except Exception as exc:
+                                st.error(f"No se pudo emitir {imp}: {exc}")
+                        if st.session_state.get(bytes_key_imp):
+                            st.download_button(
+                                f"Descargar Tango — {imp}",
+                                st.session_state[bytes_key_imp],
+                                file_name=st.session_state.get(name_key_imp) or f"{imp}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                key=f"dl_bib_top_{_slug_impuesto(imp)}",
+                                use_container_width=True,
+                            )
                     with st.expander("Vaciar impuestos", expanded=False):
                         for imp, entradas in sorted(por_imp.items()):
                             if not entradas:
@@ -668,6 +739,55 @@ def _render_barra_superior_cuenta() -> None:
                             f"{banco}: {len(entradas)}"
                             + (f" · [{', '.join(periodos)}]" if periodos else "")
                         )
+                        entradas_exp_b = [e for e in entradas if e.get("exportado_tango")]
+                        if entradas_exp_b and len(entradas_exp_b) == len(entradas):
+                            ultimo_b = max(
+                                (str(e.get("exportado_en") or "") for e in entradas_exp_b),
+                                default="",
+                            )
+                            st.caption(
+                                "✅ Ya emitido para Tango"
+                                + (f" ({ultimo_b})" if ultimo_b else "")
+                                + ". Podés volver a emitirlo si hace falta."
+                            )
+                        gen_key_bco = f"btn_emitir_bib_banco_top_{_slug_banco(banco)}"
+                        bytes_key_bco = f"_bib_tango_bytes_banco_{_slug_banco(banco)}_{sociedad_id}"
+                        name_key_bco = f"_bib_tango_name_banco_{_slug_banco(banco)}_{sociedad_id}"
+                        if st.button(
+                            f"📦 Emitir {banco} para Tango",
+                            key=gen_key_bco,
+                            use_container_width=True,
+                        ):
+                            try:
+                                plan_df_pop_b = _asegurar_plan_cuentas_export(
+                                    sociedad_id, cuit_activo_bib, slug=_slug_banco(banco),
+                                )
+                                asientos_cons_b = _asientos_consolidados_biblioteca_banco(
+                                    sociedad_id, banco,
+                                )
+                                if plan_df_pop_b is not None and _auditar_asientos_antes_export_ui(
+                                    asientos_cons_b, plan_df_pop_b,
+                                ):
+                                    ruta_consolidada_b = _generar_excel_biblioteca_banco_consolidada(
+                                        sociedad_id, cuit_activo_bib, nombre_activo_bib,
+                                        banco, plan_cuentas=plan_df_pop_b,
+                                    )
+                                    st.session_state[bytes_key_bco] = ruta_consolidada_b.read_bytes()
+                                    st.session_state[name_key_bco] = ruta_consolidada_b.name
+                                    _marcar_biblioteca_exportada(sociedad_id, banco=banco)
+                            except ExportacionTangoError as exc:
+                                _mostrar_errores_exportacion_tango(exc)
+                            except Exception as exc:
+                                st.error(f"No se pudo emitir {banco}: {exc}")
+                        if st.session_state.get(bytes_key_bco):
+                            st.download_button(
+                                f"Descargar Tango — {banco}",
+                                st.session_state[bytes_key_bco],
+                                file_name=st.session_state.get(name_key_bco) or f"{banco}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                key=f"dl_bib_banco_top_{_slug_banco(banco)}",
+                                use_container_width=True,
+                            )
                     with st.expander("Vaciar bancos", expanded=False):
                         for banco in sorted(por_banco.keys()):
                             if st.button(
