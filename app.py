@@ -8663,7 +8663,6 @@ def _filas_grilla_desde_extractor_universal(
         tipo = str(item.get("tipo") or "Debe")
         debe = round(float(item.get("debe", 0) or 0), 2)
         haber = round(float(item.get("haber", 0) or 0), 2)
-        # Permitir filas a $0 (conceptos proyectados del Excel sin movimiento en el mes).
         if debe <= 0 and haber <= 0:
             monto = round(abs(float(item.get("monto") or 0)), 2)
             if monto > 0:
@@ -8671,6 +8670,10 @@ def _filas_grilla_desde_extractor_universal(
                 haber = monto if tipo == "Haber" else 0.0
             else:
                 debe, haber = 0.0, 0.0
+        # Omitir conceptos proyectados del Excel sin movimiento en el mes (importe $0).
+        # Si hiciera falta, se agrega el renglón a mano desde la grilla.
+        if debe <= 0.005 and haber <= 0.005:
+            continue
         monto = max(debe, haber)
         rol = ""
         if es_iva and concepto_raw:
