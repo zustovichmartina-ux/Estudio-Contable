@@ -176,6 +176,18 @@ def inicializar_bd() -> None:
             conn.execute("ALTER TABLE clientes ADD COLUMN plan_cuentas_csv TEXT")
         except sqlite3.OperationalError:
             pass
+        try:
+            conn.execute("ALTER TABLE clientes ADD COLUMN balance_devengamiento_bytes BLOB")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            conn.execute("ALTER TABLE clientes ADD COLUMN balance_devengamiento_nombre TEXT")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            conn.execute("ALTER TABLE clientes ADD COLUMN balance_devengamiento_actualizado TIMESTAMP")
+        except sqlite3.OperationalError:
+            pass
 
         conn.execute(
             """
@@ -690,6 +702,45 @@ def plan_cuentas_csv_cliente(cliente_id: int) -> str:
     if not fila:
         return ""
     return str(fila["plan_cuentas_csv"] or "").strip()
+
+
+def guardar_balance_devengamiento(cliente_id: int, nombre: str, contenido: bytes) -> None:
+    """Guarda el Excel de Balance de Devengamiento en SQLite (evita resubirlo cada vez)."""
+    datos = bytes(contenido or b"")
+    if not datos:
+        return
+    with obtener_conexion() as conn:
+        conn.execute(
+            """
+            UPDATE clientes
+            SET balance_devengamiento_bytes = ?,
+                balance_devengamiento_nombre = ?,
+                balance_devengamiento_actualizado = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (datos, str(nombre or "balance.xlsx"), int(cliente_id)),
+        )
+        conn.commit()
+
+
+def balance_devengamiento_cliente(cliente_id: int) -> dict | None:
+    """Devuelve {"nombre", "contenido", "actualizado"} o None si no hay nada guardado."""
+    with obtener_conexion() as conn:
+        fila = conn.execute(
+            """
+            SELECT balance_devengamiento_bytes, balance_devengamiento_nombre,
+                   balance_devengamiento_actualizado
+            FROM clientes WHERE id = ?
+            """,
+            (int(cliente_id),),
+        ).fetchone()
+    if not fila or not fila["balance_devengamiento_bytes"]:
+        return None
+    return {
+        "nombre": str(fila["balance_devengamiento_nombre"] or "balance.xlsx"),
+        "contenido": bytes(fila["balance_devengamiento_bytes"]),
+        "actualizado": str(fila["balance_devengamiento_actualizado"] or ""),
+    }
 
 
 def _plan_archivo_con_cuentas(ruta: Path | None) -> bool:
