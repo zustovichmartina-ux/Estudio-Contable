@@ -25,6 +25,7 @@ from motor_conciliacion import (
     df_extracto_a_filas,
     es_fila_resumen_impositivo,
     es_fila_saldo_bancario,
+    extraer_cuit_proveedor,
     money,
     origen_linea_extracto,
     renglones_asiento_banco_mes,
@@ -418,12 +419,71 @@ def _opcion_desde_codigo(codigo: str, opciones: list[str]) -> str:
     return opciones[0] if opciones else "99999 — A clasificar"
 
 
-def _enriquecer(movs: list[dict], plan_df, mapa_clasif: dict[str, str] | None = None) -> list[dict]:
+def _opciones_transferencia_propia(
+    sociedad_id: int | None, banco_actual: str, plan_df
+) -> list[dict]:
+    """Cuentas Tango de los OTROS bancos de esta sociedad (no el que se está
+    subiendo ahora): candidatos válidos para una transferencia entre cuentas
+    propias — nunca el mismo banco del extracto."""
+    if sociedad_id is None:
+        return []
+    try:
+        otros = [
+            b for b in db.listar_bancos_sociedad(int(sociedad_id))
+            if b != (banco_actual or "")
+        ]
+    except Exception:
+        return []
+    vistos: set[str] = set()
+    out: list[dict] = []
+    for b in otros:
+        cod, desc = cuenta_banco_del_plan(plan_df, b)
+        if cod and cod != "99999" and cod not in vistos:
+            vistos.add(cod)
+            out.append({"codigo": cod, "label": f"{cod} — {desc}" if desc else cod})
+    return out
+
+
+def _enriquecer(
+    movs: list[dict],
+    plan_df,
+    mapa_clasif: dict[str, str] | None = None,
+    *,
+    sociedad_id: int | None = None,
+    banco_actual: str = "",
+) -> list[dict]:
     out = []
+    cuit_propio = ""
+    if sociedad_id is not None:
+        try:
+            cliente_activo = db.obtener_cliente(int(sociedad_id))
+        except Exception:
+            cliente_activo = None
+        cuit_propio = re.sub(r"\D", "", str((cliente_activo or {}).get("cuit") or ""))
+    opciones_transfer = _opciones_transferencia_propia(sociedad_id, banco_actual, plan_df)
     for i, m in enumerate(movs):
         fila = dict(m)
         cred = float(money(m.get("credito")))
         deb = float(money(m.get("debito")))
+        if (
+            len(cuit_propio) == 11
+            and extraer_cuit_proveedor(str(m.get("descripcion") or "")) == cuit_propio
+        ):
+            fila["extracto_label"] = "Transferencia entre cuentas propias"
+            fila["categoria"] = "Transferencia entre cuentas propias"
+            fila["opciones_codigo"] = opciones_transfer
+            if len(opciones_transfer) == 1:
+                fila["cuenta_codigo"] = opciones_transfer[0]["codigo"]
+                fila["cuenta_plan"] = opciones_transfer[0]["label"]
+                fila["origen"] = "sugerido"
+            else:
+                fila["cuenta_codigo"] = "99999"
+                fila["cuenta_plan"] = "Transferencia entre cuentas propias"
+                fila["origen"] = "a_clasificar"
+            fila["monto"] = round(cred - deb, 2)
+            fila["_idx"] = i
+            out.append(fila)
+            continue
         label = clasificar_movimiento_extracto(
             str(m.get("descripcion") or ""),
             importe=cred - deb,
@@ -519,6 +579,7 @@ def _filas_componente(movs: list[dict]) -> list[dict]:
                 "clasif": str(m.get("categoria") or m.get("extracto_label") or ""),
                 "codigo": str(m.get("cuenta_codigo") or "99999"),
                 "origen": str(m.get("origen") or "a_clasificar"),
+                "opciones_codigo": m.get("opciones_codigo") or [],
             }
         )
     return filas
@@ -805,6 +866,8 @@ def _paso_subir(
             resultados,
             _plan_df_sociedad(sociedad_id),
             mapa_clasif=_cargar_mapa_clasif(sociedad_id),
+            sociedad_id=sociedad_id,
+            banco_actual=banco,
         )
         st.session_state[preview_key] = {
             "movimientos": movs,
