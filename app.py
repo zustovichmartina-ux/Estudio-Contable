@@ -10764,7 +10764,7 @@ def _seccion_conciliacion_bancaria_balance() -> None:
             return
 
         indice = _indice_sociedades_pj(clientes_pj)
-        bancos = listar_bancos_conciliacion()
+        bancos_todos = listar_bancos_conciliacion()
         if not _selector_sociedad_devengamientos(clientes_pj):
             return
 
@@ -10772,12 +10772,40 @@ def _seccion_conciliacion_bancaria_balance() -> None:
         if sociedad_id is None:
             return
 
+        bancos_sociedad = db.listar_bancos_sociedad(int(sociedad_id))
+        with st.expander(
+            "⚙️ Bancos de esta sociedad"
+            + (f" ({len(bancos_sociedad)})" if bancos_sociedad else " — sin configurar"),
+            expanded=not bancos_sociedad,
+        ):
+            st.caption(
+                "Elegí los bancos que efectivamente usa esta sociedad. Así el "
+                "selector de abajo solo te muestra esos (y si es uno solo, se "
+                "usa directo) — y son los que se ofrecen como cuenta destino "
+                "cuando un movimiento es una transferencia entre cuentas "
+                "propias (mismo CUIT)."
+            )
+            seleccion_bancos = st.multiselect(
+                "Bancos de la sociedad", bancos_todos,
+                default=bancos_sociedad, key=f"bancos_soc_ms_{sociedad_id}",
+            )
+            if st.button("Guardar bancos", key=f"bancos_soc_btn_{sociedad_id}"):
+                db.guardar_bancos_sociedad(int(sociedad_id), seleccion_bancos)
+                st.success("Bancos guardados.")
+                st.rerun()
+
+        bancos = bancos_sociedad or bancos_todos
+
         paso = str(st.session_state.get(f"ce_paso_{sociedad_id}") or "subir")
         en_extracto = paso in {"extracto", "asiento"} and bool(
             st.session_state.get(f"ae_preview_{sociedad_id}")
         )
         if en_extracto:
             banco_elegido = str(st.session_state.get(_BANCO_KEY) or (bancos[0] if bancos else ""))
+        elif len(bancos) == 1:
+            banco_elegido = bancos[0]
+            st.session_state[_BANCO_KEY] = banco_elegido
+            st.caption(f"Banco a conciliar: **{banco_elegido}** (único banco configurado para esta sociedad)")
         else:
             banco_elegido = st.selectbox(
                 "Banco a conciliar",
