@@ -1374,6 +1374,19 @@ def _inicializar_tablas_conciliacion(conn: sqlite3.Connection) -> None:
     )
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS sociedad_bancos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cliente_id INTEGER NOT NULL,
+            banco TEXT NOT NULL,
+            orden INTEGER NOT NULL DEFAULT 0,
+            creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(cliente_id, banco),
+            FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS bank_transactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             cliente_id INTEGER NOT NULL,
@@ -1508,6 +1521,39 @@ def actualizar_regla_clasificacion(regla_id: int, **campos) -> None:
     vals.append(regla_id)
     with obtener_conexion() as conn:
         conn.execute(f"UPDATE clasificacion_reglas SET {', '.join(parts)} WHERE id = ?", vals)
+        conn.commit()
+
+
+def listar_bancos_sociedad(cliente_id: int) -> list[str]:
+    """Bancos que efectivamente usa esta sociedad (para filtrar el selector de
+    Conciliación y para ofrecerlos como cuenta destino en transferencias entre
+    cuentas propias). Vacío si todavía no se configuró ninguno para este
+    cliente — en ese caso el resto de la app usa la lista completa como
+    respaldo."""
+    with obtener_conexion() as conn:
+        filas = conn.execute(
+            "SELECT banco FROM sociedad_bancos WHERE cliente_id = ? ORDER BY orden ASC, id ASC",
+            (int(cliente_id),),
+        ).fetchall()
+    return [str(f["banco"]) for f in filas]
+
+
+def guardar_bancos_sociedad(cliente_id: int, bancos: list[str]) -> None:
+    """Reemplaza la lista completa de bancos configurados para esta sociedad."""
+    with obtener_conexion() as conn:
+        conn.execute("DELETE FROM sociedad_bancos WHERE cliente_id = ?", (int(cliente_id),))
+        vistos: set[str] = set()
+        orden = 0
+        for banco in bancos:
+            nombre = str(banco or "").strip()
+            if not nombre or nombre in vistos:
+                continue
+            vistos.add(nombre)
+            conn.execute(
+                "INSERT OR IGNORE INTO sociedad_bancos (cliente_id, banco, orden) VALUES (?, ?, ?)",
+                (int(cliente_id), nombre, orden),
+            )
+            orden += 1
         conn.commit()
 
 
