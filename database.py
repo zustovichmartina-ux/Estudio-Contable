@@ -1425,6 +1425,7 @@ def _inicializar_tablas_conciliacion(conn: sqlite3.Connection) -> None:
             tipo_comp TEXT NOT NULL DEFAULT '',
             num_comp TEXT NOT NULL DEFAULT '',
             razon_social TEXT NOT NULL DEFAULT '',
+            cuit TEXT NOT NULL DEFAULT '',
             importe TEXT NOT NULL DEFAULT '0.00',
             usado INTEGER NOT NULL DEFAULT 0,
             creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -1432,6 +1433,10 @@ def _inicializar_tablas_conciliacion(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    try:
+        conn.execute("ALTER TABLE proveedores_pendientes ADD COLUMN cuit TEXT NOT NULL DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS veps_afip (
@@ -1691,8 +1696,8 @@ def reemplazar_proveedores_pendientes(cliente_id: int, filas: list[dict]) -> int
             conn.execute(
                 """
                 INSERT INTO proveedores_pendientes (
-                    cliente_id, fecha, tipo_comp, num_comp, razon_social, importe, usado
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    cliente_id, fecha, tipo_comp, num_comp, razon_social, cuit, importe, usado
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     cliente_id,
@@ -1700,12 +1705,31 @@ def reemplazar_proveedores_pendientes(cliente_id: int, filas: list[dict]) -> int
                     str(f.get("tipo_comp") or f.get("tipo") or ""),
                     str(f.get("num_comp") or f.get("comprobante") or ""),
                     str(f.get("razon_social") or f.get("proveedor") or ""),
+                    str(f.get("cuit") or ""),
                     str(f.get("importe") or "0.00"),
                     1 if f.get("usado") else 0,
                 ),
             )
         conn.commit()
         return len(filas)
+
+
+def resumen_proveedores_pendientes(cliente_id: int) -> list[dict]:
+    """Total pendiente agrupado por CUIT/razón social (para mostrar en la UI)."""
+    with obtener_conexion() as conn:
+        rows = conn.execute(
+            """
+            SELECT cuit, razon_social,
+                   COUNT(*) AS facturas,
+                   SUM(CAST(importe AS REAL)) AS importe_total
+            FROM proveedores_pendientes
+            WHERE cliente_id = ? AND usado = 0
+            GROUP BY cuit, razon_social
+            ORDER BY importe_total DESC
+            """,
+            (cliente_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 
 def listar_proveedores_pendientes(cliente_id: int, solo_libres: bool = True) -> list[dict]:
