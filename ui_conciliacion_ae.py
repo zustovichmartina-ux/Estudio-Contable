@@ -627,32 +627,40 @@ def _aplicar_filas_componente(
         except (TypeError, ValueError):
             continue
     out = list(movs)
+    resultado: list[dict] = []
     for pos, m in enumerate(out):
         try:
             idx = int(m.get("_idx", pos))
         except (TypeError, ValueError):
             idx = pos
         f = by_i.get(idx) or by_i.get(pos)
+        # El usuario marcó esta línea como "no es parte del extracto" en la
+        # grilla (botón eliminar por fila): se descarta del todo, no solo se
+        # deja sin clasificar.
+        if f and bool(f.get("eliminado")):
+            continue
         if not f:
+            resultado.append(m)
             continue
         codigo = str(f.get("codigo") or "99999").strip() or "99999"
         clasif = str(f.get("clasif") or "").strip()
         origen = str(f.get("origen") or "")
-        out[pos]["cuenta_codigo"] = codigo
-        out[pos]["categoria"] = clasif or out[pos].get("categoria")
+        m["cuenta_codigo"] = codigo
+        m["categoria"] = clasif or m.get("categoria")
         if codigo != "99999" and codigo in desc_por_cod:
-            out[pos]["cuenta_plan"] = desc_por_cod[codigo]
+            m["cuenta_plan"] = desc_por_cod[codigo]
         elif clasif:
-            out[pos]["cuenta_plan"] = clasif
+            m["cuenta_plan"] = clasif
         if origen in {"regla", "sugerido", "a_clasificar", "manual"}:
-            out[pos]["origen"] = origen
+            m["origen"] = origen
         elif codigo != "99999":
-            if str(out[pos].get("origen") or "") == "a_clasificar":
-                out[pos]["origen"] = "sugerido"
+            if str(m.get("origen") or "") == "a_clasificar":
+                m["origen"] = "sugerido"
         else:
-            out[pos]["origen"] = "a_clasificar"
-    mapa = _mapa_desde_movimientos(out, mapa_clasif or {})
-    return _aplicar_mapa_clasif(out, mapa)
+            m["origen"] = "a_clasificar"
+        resultado.append(m)
+    mapa = _mapa_desde_movimientos(resultado, mapa_clasif or {})
+    return _aplicar_mapa_clasif(resultado, mapa)
 
 
 def _html_tabla_asiento(rows: list[dict]) -> str:
