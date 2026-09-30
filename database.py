@@ -2,8 +2,10 @@
 
 import json
 import logging
+import os
 import re
 import sqlite3
+import threading
 import unicodedata
 import warnings
 from pathlib import Path
@@ -16,6 +18,11 @@ try:
     from ddgs import DDGS
 except Exception:
     DDGS = None
+
+try:
+    import libsql_experimental as _libsql
+except Exception:
+    _libsql = None
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "estudio_contable.db"
@@ -107,11 +114,182 @@ def buscar_mes_cierre_web(cuit: str) -> Optional[int]:
     return None
 
 
-def obtener_conexion() -> sqlite3.Connection:
-    """Abre conexión a SQLite con filas accesibles por nombre de columna."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+def _credenciales_turso() -> tuple[str, str]:
+    """Lee URL y token de Turso desde variables de entorno o Secrets de Streamlit."""
+    url = os.environ.get("TURSO_DATABASE_URL", "") or ""
+    token = os.environ.get("TURSO_AUTH_TOKEN", "") or ""
+    if not url:
+        try:
+            import streamlit as st  # import perezoso: no depender de Streamlit fuera de la app
+
+            url = str(st.secrets.get("TURSO_DATABASE_URL", "") or "")
+            token = str(st.secrets.get("TURSO_AUTH_TOKEN", "") or "")
+        except Exception:
+            pass
+    return url.strip(), token.strip()
+
+
+class _FilaCompat(tuple):
+    """Tupla que además permite acceso por nombre de columna, como sqlite3.Row."""
+
+    _cols: tuple = ()
+
+    def __new__(cls, columnas, valores):
+        obj = super().__new__(cls, valores)
+        obj._cols = tuple(columnas)
+        return obj
+
+    def __getitem__(self, clave):
+        if isinstance(clave, str):
+            try:
+                idx = self._cols.index(clave)
+            except ValueError:
+                raise KeyError(clave)
+            return tuple.__getitem__(self, idx)
+        return tuple.__getitem__(self, clave)
+
+    def get(self, clave, default=None):
+        try:
+            return self[clave]
+        except (KeyError, IndexError):
+            return default
+
+    def keys(self):
+        return self._cols
+
+
+class _CursorCompatTurso:
+    """Envuelve el cursor de libsql para que fetchone/fetchall devuelvan _FilaCompat."""
+
+    def __init__(self, cur):
+        self._cur = cur
+
+    def _envolver(self, fila):
+        if fila is None:
+            return None
+        columnas = [d[0] for d in (self._cur.description or [])]
+        return _FilaCompat(columnas, fila)
+
+    def fetchone(self):
+        return self._envolver(self._cur.fetchone())
+
+    def fetchall(self):
+        return [self._envolver(f) for f in self._cur.fetchall()]
+
+    def fetchmany(self, size=None):
+        filas = self._cur.fetchmany(size) if size is not None else self._cur.fetchmany()
+        return [self._envolver(f) for f in filas]
+
+    def __getattr__(self, nombre):
+        return getattr(self._cur, nombre)
+
+
+# Streamlit puede atender varias sesiones en threads del mismo proceso; la
+# conexión de libsql (réplica local + Turso) se comparte, así que serializamos
+# el acceso real con un lock global. El costo de red (sync) solo se paga al
+# abrir la conexión por primera vez en el proceso y al confirmar escrituras,
+# no en cada lectura.
+_turso_conn_lock = threading.Lock()
+_turso_conn_obj = None
+
+
+def _obtener_conn_turso_singleton():
+    global _turso_conn_obj
+    if _turso_conn_obj is not None:
+        return _turso_conn_obj
+    url, token = _credenciales_turso()
+    if _libsql is None or not url:
+        return None
+    with _turso_conn_lock:
+        if _turso_conn_obj is None:
+            try:
+                _turso_conn_obj = _libsql.connect(str(DB_PATH), sync_url=url, auth_token=token)
+            except Exception:
+                _turso_conn_obj = None
+    return _turso_conn_obj
+
+
+class _ConexionCompatTurso:
+    """
+    Envuelve la conexión compartida de libsql con la misma API que usa el resto
+    del código para sqlite3.Connection (execute/commit/with ... as conn).
+    """
+
+    def __init__(self, conn):
+        self._conn = conn
+        self.row_factory = None  # compat: el resto del código no necesita fijarlo
+
+    def _reintentar_si_rota(self, exc):
+        global _turso_conn_obj
+        _turso_conn_obj = None  # próxima conexión reintenta desde cero
+        raise exc
+
+    def execute(self, sql, parametros=()):
+        with _turso_conn_lock:
+            try:
+                return _CursorCompatTurso(self._conn.execute(sql, parametros))
+            except Exception as exc:
+                self._reintentar_si_rota(exc)
+
+    def executemany(self, sql, secuencia):
+        with _turso_conn_lock:
+            return _CursorCompatTurso(self._conn.executemany(sql, secuencia))
+
+    def executescript(self, sql):
+        with _turso_conn_lock:
+            return self._conn.executescript(sql)
+
+    def cursor(self):
+        with _turso_conn_lock:
+            return _CursorCompatTurso(self._conn.cursor())
+
+    def commit(self):
+        with _turso_conn_lock:
+            self._conn.commit()
+            try:
+                self._conn.sync()
+            except Exception:
+                pass
+
+    def rollback(self):
+        with _turso_conn_lock:
+            try:
+                self._conn.rollback()
+            except Exception:
+                pass
+
+    def close(self):
+        pass  # conexión compartida: no se cierra por-caller
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, tipo_exc, exc, tb):
+        if tipo_exc is None:
+            try:
+                self.commit()
+            except Exception:
+                pass
+        else:
+            self.rollback()
+        return False
+
+
+def obtener_conexion():
+    """
+    Abre conexión con filas accesibles por nombre de columna.
+    Si hay credenciales de Turso (Secrets TURSO_DATABASE_URL/TURSO_AUTH_TOKEN o
+    variables de entorno), reutiliza una réplica local sincronizada con Turso
+    (una sola conexión por proceso) para que los datos sobrevivan a un
+    reinicio o "dormida" de la app. Si no hay credenciales, usa el SQLite
+    local de siempre (comportamiento sin cambios).
+    """
+    conn = _obtener_conn_turso_singleton()
+    if conn is not None:
+        return _ConexionCompatTurso(conn)
+    conn2 = sqlite3.connect(DB_PATH)
+    conn2.row_factory = sqlite3.Row
+    return conn2
 
 
 def _migrar_tipo_monotributista(conn: sqlite3.Connection) -> None:
