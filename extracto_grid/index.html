@@ -50,6 +50,10 @@
   tbody td:nth-child(5), tbody td:nth-child(6) { min-width: 260px; }
   tbody tr:nth-child(even) { background: var(--zebra); }
   tbody tr.pend { background: #fff6f5; }
+  tbody tr.elim td { opacity: .45; text-decoration: line-through; }
+  tbody tr.elim select, tbody tr.elim input { pointer-events: none; }
+  .btn-del { border: 0; background: transparent; cursor: pointer; font-size: 15px; padding: 2px 6px; border-radius: 6px; }
+  .btn-del:hover { background: var(--zebra); }
   .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .deb { color: #9b1c1c; }
   .cred { color: #137333; }
@@ -87,6 +91,7 @@
           <th>Clasificación</th>
           <th>Cuenta Tango</th>
           <th>Origen</th>
+          <th></th>
         </tr>
       </thead>
       <tbody id="grid"></tbody>
@@ -239,6 +244,7 @@ function snapshot() {
       clasif: m.clasif,
       codigo: m.codigo,
       origen: m.origen,
+      eliminado: !!m._eliminado,
     })),
     clasifs: CLASIFS.map((c) => ({ nombre: c.nombre, codigo: c.codigo || "" })),
   };
@@ -263,6 +269,7 @@ function restoreLocal(base) {
         clasif: s.clasif != null ? s.clasif : m.clasif,
         codigo: s.codigo != null ? s.codigo : m.codigo,
         origen: s.origen || m.origen,
+        _eliminado: !!s.eliminado,
       });
     });
   } catch (e) { return base; }
@@ -402,8 +409,9 @@ function pintar() {
     const i = g.i;
     const idxsAttr = g.idxs.join(",");
     const extra = g.idxs.length > 1 ? ` <span class="tag regla">×${g.idxs.length}</span>` : "";
+    const elim = !!m._eliminado;
     return `
-    <tr class="${m.origen === "a_clasificar" ? "pend" : ""}">
+    <tr class="${elim ? "elim" : (m.origen === "a_clasificar" ? "pend" : "")}">
       <td>${esc(m.fecha)}</td>
       <td>${esc(m.desc)}${extra}</td>
       <td class="num deb">${money(g.deb)}</td>
@@ -411,17 +419,29 @@ function pintar() {
       <td>${celdaClasif(m, i, idxsAttr)}</td>
       <td><select data-i="${i}" data-idxs="${idxsAttr}" data-k="codigo">${optsHtml(m.codigo, m.opciones_codigo)}</select></td>
       <td><span class="tag ${esc(m.origen)}">${labelOrigen(m.origen)}</span></td>
+      <td><button type="button" class="btn-del" data-idxs="${idxsAttr}" data-accion="${elim ? "restaurar" : "eliminar"}" title="${elim ? "Restaurar movimiento" : "Eliminar: no es parte del extracto"}">${elim ? "\u21ba" : "\ud83d\uddd1"}</button></td>
     </tr>`;
   }).join("");
   tb.querySelectorAll("input, select").forEach(bindUno);
+  tb.querySelectorAll(".btn-del").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idxs = String(btn.getAttribute("data-idxs") || "")
+        .split(",").map((x) => Number(x)).filter((n) => FILAS[n]);
+      const nuevo = btn.getAttribute("data-accion") === "eliminar";
+      idxs.forEach((j) => { FILAS[j]._eliminado = nuevo; });
+      persistLocal();
+      pintar();
+    });
+  });
   chips();
   setHeight();
   if (wrap) wrap.scrollTop = y;
 }
 function chips() {
-  const nR = FILAS.filter((m) => m.origen === "regla").length;
-  const nS = FILAS.filter((m) => m.origen === "sugerido").length;
-  const nP = FILAS.filter((m) => m.origen === "a_clasificar").length;
+  const activas = FILAS.filter((m) => !m._eliminado);
+  const nR = activas.filter((m) => m.origen === "regla").length;
+  const nS = activas.filter((m) => m.origen === "sugerido").length;
+  const nP = activas.filter((m) => m.origen === "a_clasificar").length;
   document.getElementById("n-regla").textContent = nR + " con regla";
   document.getElementById("n-sug").textContent = nS + " sugeridas";
   document.getElementById("n-pend").textContent = nP + " a clasificar";
