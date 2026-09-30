@@ -6343,6 +6343,101 @@ def extraer_movimientos_provincia_tabla(
     return movimientos
 
 
+def extraer_movimientos_nacion_tabla(
+    data: bytes,
+    archivo: str = "",
+) -> list[MovimientoBanco]:
+    """
+    Tablas nativas del PDF digital Banco Nación (BNA).
+    Prioriza las columnas literales Débitos/Créditos/Saldo (no infiere el
+    signo por descripción/heurística) y acota la lectura descartando las
+    filas de Saldo Anterior/Inicial y Saldo Final.
+    """
+    movimientos: list[MovimientoBanco] = []
+    try:
+        with pdfplumber.open(io.BytesIO(data)) as pdf:
+            for page in pdf.pages:
+                tablas = page.extract_tables() or []
+                for tabla in tablas:
+                    if not tabla or len(tabla) < 2:
+                        continue
+                    header = tabla[0]
+                    idxs = _mapear_indices_tabla_provincia(header)
+                    if "fecha" not in idxs and len(tabla) > 2:
+                        idxs = _mapear_indices_tabla_provincia(tabla[1])
+                        filas = tabla[2:]
+                    else:
+                        filas = tabla[1:]
+                    if "fecha" not in idxs:
+                        continue
+                    i_fecha = idxs["fecha"]
+                    i_desc = idxs.get("desc")
+                    i_deb = idxs.get("debito")
+                    i_cred = idxs.get("credito")
+                    i_saldo = idxs.get("saldo")
+                    i_comp = idxs.get("comp")
+                    for fila in filas:
+                        if not fila or i_fecha >= len(fila):
+                            continue
+                        desc = ""
+                        if i_desc is not None and i_desc < len(fila):
+                            desc = str(fila[i_desc] or "").replace("\n", " ").strip()
+                        dnorm = _normalizar_texto(desc)
+                        if any(
+                            x in dnorm
+                            for x in (
+                                "saldo anterior",
+                                "saldo inicial",
+                                "saldo final",
+                                "saldo al inicio",
+                                "saldo al cierre",
+                            )
+                        ):
+                            continue
+                        fecha = _parsear_fecha(str(fila[i_fecha] or "").strip())
+                        if not fecha or not _fecha_plausible_extracto(fecha):
+                            continue
+                        debito = (
+                            _limpiar_monto(fila[i_deb])
+                            if i_deb is not None and i_deb < len(fila)
+                            else 0.0
+                        )
+                        credito = (
+                            _limpiar_monto(fila[i_cred])
+                            if i_cred is not None and i_cred < len(fila)
+                            else 0.0
+                        )
+                        saldo = (
+                            _limpiar_monto(fila[i_saldo])
+                            if i_saldo is not None and i_saldo < len(fila)
+                            else 0.0
+                        )
+                        if debito <= 0 and credito <= 0:
+                            continue
+                        if _parece_saldo_apertura_extracto(
+                            desc, [x for x in (debito, credito, saldo) if x]
+                        ):
+                            continue
+                        comp = ""
+                        if i_comp is not None and i_comp < len(fila):
+                            comp = str(fila[i_comp] or "").strip()
+                        movimientos.append(
+                            MovimientoBanco(
+                                fecha=fecha,
+                                comprobante=comp,
+                                descripcion=desc or "Sin descripción",
+                                debito=debito if debito > 0 else 0.0,
+                                credito=credito if credito > 0 else 0.0,
+                                saldo=saldo if saldo else None,
+                                banco="nacion",
+                                archivo_origen=archivo or "nacion.pdf",
+                            )
+                        )
+    except Exception:
+        return []
+    return movimientos
+
+
 def _parsear_movimientos_provincia_paginas(
     paginas: list[tuple[int, str]],
     archivo_origen: str = "",
@@ -6672,7 +6767,7 @@ _RE_FILA_SALDO_EXTRACTO = re.compile(
 PARSER_EXTRACTO_POR_BANCO: dict[str, str] = {
     "santander": "santander",
     "galicia": "galicia",
-    "nacion": "generico_dh",
+    "nacion": "nacion",
     "frances": "generico_dh",
     "macro": "generico_dh",
     "credicoop": "generico",
@@ -6696,6 +6791,7 @@ FORMATOS_EXTRACTO_LABEL: dict[str, str] = {
     "galicia_texto": "Galicia · texto/OCR",
     "provincia_bip_tabla": "Provincia BIP · tablas",
     "provincia_texto": "Provincia · texto/OCR",
+    "nacion_dc_saldo": "Banco Nación · Débitos/Créditos/Saldo",
     "columnas_dc_saldo": "Columnas Débito/Crédito/Saldo",
     "marcadores_dh": "Marcadores D/H (debe/haber)",
     "texto_generico": "Texto genérico / OCR",
@@ -6742,6 +6838,10 @@ def detectar_formato_extracto(
             fmt, parser = "galicia_texto", "generico"
     elif slug == "santander":
         fmt, parser = "santander_dc_saldo", "santander"
+    elif slug == "nacion":
+        # BNA: priorizar columnas literales Débitos/Créditos/Saldo del PDF
+        # en vez de inferir el signo por marcadores D/H o por texto.
+        fmt, parser = "nacion_dc_saldo", "nacion"
     elif slug == "provincia":
         if tiene_tablas_provincia:
             fmt, parser = "provincia_bip_tabla", "provincia"
@@ -7485,6 +7585,23 @@ def _procesar_un_pdf_extracto(
                     meta_arch = _meta_basica_desde_texto(texto_head)
                     for row in movs_loc:
                         row["Banco"] = display
+        elif estrategia == "nacion":
+            movs_tab = extraer_movimientos_nacion_tabla(data, nombre)
+            if movs_tab:
+                movs_loc = [_movimiento_banco_a_fila_extracto(m) for m in movs_tab]
+                for row in movs_loc:
+                    row["Banco"] = display
+                texto_head = "\n".join(t for _, t in paginas[:2])
+                meta_arch = _meta_basica_desde_texto(texto_head)
+                meta_base["parser"] = "nacion_tabla"
+                meta_base["formato_id"] = "nacion_dc_saldo"
+                meta_base["formato"] = FORMATOS_EXTRACTO_LABEL.get("nacion_dc_saldo", "")
+            else:
+                movs_loc = _filas_desde_paginas_generico(paginas, nombre, "nacion")
+                texto_head = "\n".join(t for _, t in paginas[:2])
+                meta_arch = _meta_basica_desde_texto(texto_head)
+                for row in movs_loc:
+                    row["Banco"] = display
         else:
             # generico / generico_dh
             movs_loc = _filas_desde_paginas_generico(paginas, nombre, banco_slug)
