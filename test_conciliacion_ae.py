@@ -130,6 +130,75 @@ class TestSaldosYSignos(unittest.TestCase):
         self.assertEqual(filas[0]["credito"], Decimal("250.50"))
         self.assertEqual(filas[0]["debito"], Decimal("0.00"))
 
+    def test_misma_linea_en_debito_y_credito_no_duplica(self):
+        df = pd.DataFrame(
+            [
+                {
+                    "Fecha": "02/06/2025",
+                    "Descripcion": "ACREDITAMIENTO PRISMA",
+                    "Debito": 0,
+                    "Credito": 100,
+                    "Importe": 100,
+                    "Saldo": 500,
+                    "Archivo origen": "extracto.pdf",
+                },
+                {
+                    "Fecha": "02/06/2025",
+                    "Descripcion": "ACREDITAMIENTO PRISMA",
+                    "Debito": 100,
+                    "Credito": 0,
+                    "Importe": -100,
+                    "Saldo": 500,
+                    "Archivo origen": "extracto.pdf",
+                },
+            ]
+        )
+        filas = df_extracto_a_filas(df)
+        self.assertEqual(len(filas), 1)
+        self.assertEqual(filas[0]["credito"], Decimal("100.00"))
+        self.assertEqual(filas[0]["debito"], Decimal("0.00"))
+
+    def test_dos_cobros_iguales_con_distinto_saldo_se_conservan(self):
+        df = pd.DataFrame(
+            [
+                {
+                    "Fecha": "02/06/2025",
+                    "Descripcion": "ACREDITAMIENTO PRISMA",
+                    "Debito": 0,
+                    "Credito": 100,
+                    "Importe": 100,
+                    "Saldo": 500,
+                },
+                {
+                    "Fecha": "02/06/2025",
+                    "Descripcion": "ACREDITAMIENTO PRISMA",
+                    "Debito": 0,
+                    "Credito": 100,
+                    "Importe": 100,
+                    "Saldo": 600,
+                },
+            ]
+        )
+        self.assertEqual(len(df_extracto_a_filas(df)), 2)
+
+    def test_fila_con_debito_y_credito_cuenta_un_lado(self):
+        df = pd.DataFrame(
+            [
+                {
+                    "Fecha": "02/06/2025",
+                    "Descripcion": "ACREDITAMIENTO PRISMA",
+                    "Debito": 100,
+                    "Credito": 100,
+                    "Importe": 100,
+                    "Saldo": 500,
+                }
+            ]
+        )
+        filas = df_extracto_a_filas(df)
+        self.assertEqual(len(filas), 1)
+        self.assertEqual(filas[0]["debito"], Decimal("0.00"))
+        self.assertEqual(filas[0]["credito"], Decimal("100.00"))
+
     def test_importe_negativo_va_a_debito(self):
         df = pd.DataFrame(
             [
@@ -423,6 +492,105 @@ class TestAsientoTango(unittest.TestCase):
 
 
 class TestAsientoExtractoAgrupaCuentas(unittest.TestCase):
+    def test_mismo_concepto_no_entra_en_debe_y_en_haber(self):
+        rows = renglones_asiento_banco_mes(
+            [
+                {
+                    "debito": 37914.90,
+                    "credito": 0,
+                    "cuenta_codigo": "11301",
+                    "cuenta_plan": "Deudores por ventas",
+                    "categoria": "Deudores por ventas",
+                    "descripcion": "ACREDITAMIENTO PRISMA MAST EST 0030141735",
+                },
+                {
+                    "debito": 0,
+                    "credito": 525613.73,
+                    "cuenta_codigo": "11301",
+                    "cuenta_plan": "Deudores por ventas",
+                    "categoria": "Deudores por ventas",
+                    "descripcion": "ACREDITAMIENTO PRISMA MAST EST 0099999999",
+                },
+            ],
+            codigo_banco="11104",
+            descripcion_banco="Banco Galicia",
+            periodo="06/2025",
+            fecha_str="30/06/2025",
+        )
+        deudores = [r for r in rows if r["Código"] == "11301"]
+        self.assertEqual(len(deudores), 1)
+        self.assertEqual(deudores[0]["Debe"], 0)
+        self.assertEqual(deudores[0]["Haber"], 525613.73)
+        banco = [r for r in rows if r["Código"] == "11104"]
+        self.assertEqual(len(banco), 1)
+        self.assertEqual(banco[0]["Debe"], 525613.73)
+        self.assertEqual(banco[0]["Haber"], 0)
+
+    def test_dos_bloques_cierran_en_cero(self):
+        rows = renglones_asiento_banco_mes(
+            [
+                {
+                    "debito": 203767.82,
+                    "credito": 0,
+                    "cuenta_codigo": "11301",
+                    "cuenta_plan": "Deudores por Ventas",
+                    "categoria": "Deudores por Ventas",
+                    "descripcion": "ACREDITAMIENTO PRISMA",
+                },
+                {
+                    "debito": 0,
+                    "credito": 4328578.27,
+                    "cuenta_codigo": "11301",
+                    "cuenta_plan": "Deudores por Ventas",
+                    "categoria": "Deudores por Ventas",
+                    "descripcion": "ACREDITAMIENTO PRISMA",
+                },
+                {
+                    "debito": 0,
+                    "credito": 2341291.61,
+                    "cuenta_codigo": "42202",
+                    "cuenta_plan": "S.A.C.",
+                    "categoria": "S.A.C.",
+                    "descripcion": "ACREDITACION SUELDO",
+                },
+                {
+                    "debito": 4606507.54,
+                    "credito": 0,
+                    "cuenta_codigo": "42202",
+                    "cuenta_plan": "S.A.C.",
+                    "categoria": "S.A.C.",
+                    "descripcion": "PAGO SAC",
+                },
+                {
+                    "debito": 905944.42,
+                    "credito": 0,
+                    "cuenta_codigo": "21101",
+                    "cuenta_plan": "Proveedores",
+                    "categoria": "Proveedores",
+                    "descripcion": "PAGO PROVEEDOR",
+                },
+            ],
+            codigo_banco="11108",
+            descripcion_banco="Banco Galicia cta cte",
+            periodo="06/2025",
+            fecha_str="30/06/2025",
+        )
+        deudores = [r for r in rows if r["Código"] == "11301"]
+        self.assertEqual(len(deudores), 1)
+        self.assertEqual(deudores[0]["Debe"], 0)
+        self.assertEqual(deudores[0]["Haber"], 4328578.27)
+        sac = [r for r in rows if r["Código"] == "42202"]
+        self.assertEqual(len(sac), 1)
+        self.assertEqual(sac[0]["Haber"], 0)
+        self.assertEqual(sac[0]["Debe"], 4606507.54)
+        banco_debe = [r for r in rows if r["Código"] == "11108" and r["Debe"]]
+        banco_haber = [r for r in rows if r["Código"] == "11108" and r["Haber"]]
+        self.assertEqual(banco_debe[0]["Debe"], 4328578.27)
+        self.assertEqual(banco_haber[0]["Haber"], round(4606507.54 + 905944.42, 2))
+        self.assertAlmostEqual(banco_debe[0]["Debe"], deudores[0]["Haber"], places=2)
+        gastos = sum(r["Debe"] for r in rows if r["Código"] != "11108")
+        self.assertAlmostEqual(gastos, banco_haber[0]["Haber"], places=2)
+
     def test_partida_doble_contra_banco(self):
         rows = renglones_asiento_banco_mes(
             [
@@ -766,6 +934,106 @@ class TestExtractoComponente(unittest.TestCase):
         filas = df_extracto_a_filas(df)
         self.assertEqual(len(filas), 1)
         self.assertIn("haberes", filas[0]["descripcion"].lower())
+
+    def test_consolidado_galicia_no_entra_ni_duplica_impuestos(self):
+        from extracto_layout import parse_lineas
+        from motor_conciliacion import df_extracto_a_filas
+
+        lineas = [
+            "01/04/26 TRANSFERENCIA DE TERCEROS VENOM S.A. 51.053,00 88.597,00",
+            "01/04/26 IMP. DEB. LEY 25413 GRAL. 76,58- 88.520,42",
+            "Consolidado de retención",
+            "01/04/26 IMP. DEB. LEY 25413 GRAL. 76,58- 88.520,42",
+            "Total impuesto Ley 25.413 76,58",
+        ]
+        movs = parse_lineas(lineas)
+        self.assertEqual(len(movs), 2)
+        self.assertTrue(any("25413" in m["descripcion"] for m in movs))
+        self.assertFalse(any("total impuesto" in m["descripcion"].lower() for m in movs))
+
+        df = pd.DataFrame(
+            [
+                {"Fecha": "01/04/2026", "Descripcion": "IMP. DEB. LEY 25413 GRAL.", "Debito": 76.58, "Credito": 0, "Saldo": 0},
+                {"Fecha": "01/04/2026", "Descripcion": "Total impuesto Ley 25.413", "Debito": 76.58, "Credito": 0, "Saldo": 0},
+                {"Fecha": "01/04/2026", "Descripcion": "Consolidado de retención IIBB", "Debito": 1200, "Credito": 0, "Saldo": 0},
+            ]
+        )
+        filas = df_extracto_a_filas(df)
+        self.assertEqual(len(filas), 1)
+        self.assertIn("25413", filas[0]["descripcion"])
+
+    def test_consolidado_galicia_texto_real_de_la_grilla(self):
+        from extracto_layout import es_fin_cuerpo_movimientos_extracto
+        from motor_conciliacion import df_extracto_a_filas
+
+        recaps = [
+            "Consolidado de retención de impuestos Consolidado Importe TOTAL RETENCION IMPUESTO DTO.301/03 - PCIA. DE TUCUMAN TOTAL RETENCION IMPUESTO REGIMEN S.I.R.C.R.E.B. TOTAL RETENCION I.V.A. SOBRE DEBITOS",
+            "TOTAL RETENCION IMPUESTO LEY 25.413 SOBRE CREDITOS TOTAL RETENCION IMPUESTO LEY 25.413 SOBRE DEBITOS TOTAL MENSUAL RETENCION IMPUESTO LEY 25.413 SOBRE CREDITOS TOTAL MENSUAL RETENCION IMPUESTO LEY 25.413 SOBRE DEBITOS",
+            "TOTAL MENSUAL RETENCION IMPUESTO LEY 25.413 SOBRE CREDITOS TOTAL MENSUAL RETENCION IMPUESTO LEY 25.413 CREDITO COMPUTABLE COMO PAGO A CUENTA TOTAL MENSUAL RETENCION IMPUESTO LEY 25.413 SOBRE DEBITOS",
+            "TOTAL MENSUAL RETENCION IMPUESTO LEY 25.413 SOBRE CREDITOS TOTAL MENSUAL RETENCION IMPUESTO LEY 25.413 CREDITO COMPUTABLE COMO PAGO A CUENTA Los depósitos en pesos y en moneda extranjera cuentan con la garantia de hasta 0",
+        ]
+        for txt in recaps:
+            self.assertTrue(es_fin_cuerpo_movimientos_extracto(txt), txt[:80])
+        self.assertFalse(
+            es_fin_cuerpo_movimientos_extracto("IMP. DEB. LEY 25413 GRAL.")
+        )
+        self.assertFalse(
+            es_fin_cuerpo_movimientos_extracto("ING. BRUTOS S/ CRED DT.301/03-TUCUMAN")
+        )
+
+        df = pd.DataFrame(
+            [
+                {"Fecha": "30/05/2025", "Descripcion": "IMP. DEB. LEY 25413 GRAL.", "Debito": 76.58, "Credito": 0, "Saldo": 0},
+                {"Fecha": "30/05/2025", "Descripcion": recaps[0], "Debito": 19474234.92, "Credito": 0, "Saldo": 0},
+                {"Fecha": "30/05/2025", "Descripcion": recaps[1], "Debito": 14618.78, "Credito": 0, "Saldo": 0},
+                {"Fecha": "30/05/2025", "Descripcion": recaps[2], "Debito": 23569.40, "Credito": 0, "Saldo": 0},
+                {"Fecha": "30/05/2025", "Descripcion": recaps[3], "Debito": 34672.30, "Credito": 0, "Saldo": 0},
+            ]
+        )
+        filas = df_extracto_a_filas(df)
+        self.assertEqual(len(filas), 1)
+        self.assertIn("IMP. DEB", filas[0]["descripcion"])
+
+    def test_asiento_no_suma_el_pie_impositivo(self):
+        rows = renglones_asiento_banco_mes(
+            [
+                {
+                    "debito": 100,
+                    "credito": 0,
+                    "cuenta_codigo": "42506",
+                    "cuenta_plan": "Impuesto a los débitos y créditos",
+                    "categoria": "Impuestos a los débitos y créditos",
+                    "descripcion": "IMP. DEB. LEY 25413 GRAL.",
+                },
+                {
+                    "debito": 6974307.78,
+                    "credito": 0,
+                    "cuenta_codigo": "42202",
+                    "cuenta_plan": "S.A.C.",
+                    "categoria": "Impuestos a los débitos y créditos",
+                    "descripcion": (
+                        "Consolidado de retención de impuestos Consolidado Importe "
+                        "TOTAL RETENCION IMPUESTO LEY 25.413 SOBRE CREDITOS"
+                    ),
+                },
+                {
+                    "debito": 41794.14,
+                    "credito": 0,
+                    "cuenta_codigo": "42202",
+                    "categoria": "Impuestos a los débitos y créditos",
+                    "descripcion": (
+                        "TOTAL MENSUAL RETENCION IMPUESTO LEY 25.413 CREDITO COMPUTABLE "
+                        "COMO PAGO A CUENTA Los depósitos en pesos cuentan con la garantía de hasta 0"
+                    ),
+                },
+            ],
+            codigo_banco="11103",
+            descripcion_banco="Banco",
+        )
+        impuestos = [r for r in rows if r["Código"] == "42506"]
+        self.assertEqual(len(impuestos), 1)
+        self.assertEqual(impuestos[0]["Debe"], 100.0)
+        self.assertFalse(any(r["Código"] == "42202" for r in rows))
 
     def test_asiento_banco_ingresos_debe_gastos_haber(self):
         rows = renglones_asiento_banco_mes(

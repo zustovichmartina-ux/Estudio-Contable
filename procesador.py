@@ -27,10 +27,20 @@ import pandas as pd
 import pdfplumber
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.worksheet.table import Table, TableStyleInfo
 from PIL import Image
 from rapidfuzz import fuzz, process
 
-from extracto_layout import elegir_mejor, lineas_desde_paginas, lineas_por_y, paginas_por_y, parsear_lineas
+from extracto_layout import (
+    elegir_mejor,
+    es_fin_cuerpo_movimientos_extracto,
+    lineas_desde_paginas,
+    lineas_por_y,
+    paginas_por_y,
+    parsear_lineas,
+    truncar_paginas_cuerpo_extracto,
+)
 from excel_formato_estudio import exportar_informe_excel
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -72,7 +82,9 @@ FILAS_PLANTILLA = {
     "diferencia": 62,
 }
 HOJA_DETALLE_MOVIMIENTOS = "Detalle Extracto"
+TABLA_DETALLE_EXTRACTO = "DetalleExtracto"
 FILA_INICIO_DETALLE = 2  # Fila 1 = encabezados
+FMT_IMPORTE_CONCILIACION = '_-"$"\\ * #,##0.00_-;\\-"$"\\ * #,##0.00_-;_-"$"\\ * "-"??_-;_-@_-'
 ANIO_MIN_EXTRACTO = 1990
 ANIO_MAX_EXTRACTO = 2035
 
@@ -3517,6 +3529,8 @@ def _extraer_movimientos_desde_texto(
     i = 0
     while i < len(lineas):
         linea = lineas[i]
+        if es_fin_cuerpo_movimientos_extracto(linea):
+            break
         match_fecha = patron_fecha.search(linea)
         # Fecha sola: anclar día y continuar (no exigir fecha en cada egreso/ingreso)
         if match_fecha and not _montos_en_linea_extracto(linea):
@@ -3556,6 +3570,8 @@ def _extraer_movimientos_desde_texto(
             es_terceros = _es_concepto_transferencia_terceros(linea)
             max_lineas_bloque = 8 if es_terceros else 5
             while j < len(lineas) and j < i + max_lineas_bloque:
+                if es_fin_cuerpo_movimientos_extracto(lineas[j]):
+                    break
                 if patron_fecha.search(lineas[j]):
                     break
                 bloque.append(lineas[j])
@@ -3612,6 +3628,9 @@ def _extraer_movimientos_desde_texto(
             if _parece_saldo_apertura_extracto(descripcion, montos_blk):
                 i = j if j > i else i + 1
                 continue
+            if es_fin_cuerpo_movimientos_extracto(descripcion) or es_fin_cuerpo_movimientos_extracto(texto_bloque):
+                i = j if j > i else i + 1
+                continue
             if debito > 0 or credito > 0:
                 movimientos.append(
                     MovimientoBanco(
@@ -3654,6 +3673,8 @@ def _extraer_movimientos_desde_texto(
         es_terceros = _es_concepto_transferencia_terceros(texto_extra_descripcion or linea)
         max_lineas_bloque = 8 if es_terceros else 5
         while j < len(lineas) and j < i + max_lineas_bloque:
+            if es_fin_cuerpo_movimientos_extracto(lineas[j]):
+                break
             if patron_fecha.search(lineas[j]) and not es_terceros:
                 break
             if patron_fecha.search(lineas[j]) and es_terceros and j > i + 1:
@@ -3723,6 +3744,9 @@ def _extraer_movimientos_desde_texto(
         if _parece_saldo_apertura_extracto(descripcion, montos_blk):
             i = j
             continue
+        if es_fin_cuerpo_movimientos_extracto(descripcion) or es_fin_cuerpo_movimientos_extracto(texto_bloque):
+            i = j
+            continue
 
         if debito > 0 or credito > 0:
             movimientos.append(
@@ -3747,74 +3771,101 @@ def _extraer_movimientos_desde_texto(
 def extraer_datos_pdf_galicia(pdf_file) -> pd.DataFrame:
     """Lee tablas del PDF digital de Galicia y devuelve un DataFrame estructurado."""
     filas_totales: list[list] = []
+    vistos_filas_galicia: set[tuple] = set()
+    cols = ["Fecha", "Descripción", "Origen", "Crédito", "Débito", "Saldo"]
     with pdfplumber.open(pdf_file) as pdf:
         for pagina in pdf.pages:
-            tabla = pagina.extract_table()
-            if not tabla:
-                continue
-            # Detectar orden de columnas por encabezado (Débito/Crédito a veces vienen invertidos)
-            idx_map = {"fecha": 0, "desc": 1, "origen": 2, "credito": 3, "debito": 4, "saldo": 5}
-            header_found = False
-            for fila in tabla:
-                if not fila:
+            tablas = pagina.extract_tables() or []
+            if not tablas:
+                una = pagina.extract_table()
+                tablas = [una] if una else []
+            for tabla in tablas:
+                if not tabla:
                     continue
-                cells = [("" if c is None else str(c)).replace("\r", " ").replace("\n", " ").strip() for c in fila]
-                heads = [_normalizar_texto(c) for c in cells]
-                if any("fecha" in h for h in heads) and any(
-                    ("debit" in h or "credit" in h or "saldo" in h) for h in heads
-                ):
-                    header_found = True
-                    for i, h in enumerate(heads):
-                        if "fecha" in h:
-                            idx_map["fecha"] = i
-                        elif "desc" in h or "concepto" in h or "movimiento" in h:
-                            idx_map["desc"] = i
-                        elif "origen" in h or "comprob" in h or "referencia" in h:
-                            idx_map["origen"] = i
-                        elif "debit" in h or h in {"debe", "egreso"}:
-                            idx_map["debito"] = i
-                        elif "credit" in h or h in {"haber", "ingreso"}:
-                            idx_map["credito"] = i
-                        elif "saldo" in h:
-                            idx_map["saldo"] = i
-                    continue
-                if cells and _normalizar_texto(cells[0]) == "fecha":
-                    continue
+                preview = " ".join(
+                    " ".join(("" if c is None else str(c)) for c in (fila or []))
+                    for fila in tabla[:5]
+                )
+                if es_fin_cuerpo_movimientos_extracto(preview):
+                    return pd.DataFrame(filas_totales, columns=cols)
+                idx_map = {"fecha": 0, "desc": 1, "origen": 2, "credito": 3, "debito": 4, "saldo": 5}
+                header_found = False
+                for fila in tabla:
+                    if not fila:
+                        continue
+                    cells = [
+                        ("" if c is None else str(c)).replace("\r", " ").replace("\n", " ").strip()
+                        for c in fila
+                    ]
+                    if es_fin_cuerpo_movimientos_extracto(" ".join(cells)):
+                        return pd.DataFrame(filas_totales, columns=cols)
+                    heads = [_normalizar_texto(c) for c in cells]
+                    if any("fecha" in h for h in heads) and any(
+                        ("debit" in h or "credit" in h or "saldo" in h) for h in heads
+                    ):
+                        header_found = True
+                        for i, h in enumerate(heads):
+                            if "fecha" in h:
+                                idx_map["fecha"] = i
+                            elif "desc" in h or "concepto" in h or "movimiento" in h:
+                                idx_map["desc"] = i
+                            elif "origen" in h or "comprob" in h or "referencia" in h:
+                                idx_map["origen"] = i
+                            elif "debit" in h or h in {"debe", "egreso"}:
+                                idx_map["debito"] = i
+                            elif "credit" in h or h in {"haber", "ingreso"}:
+                                idx_map["credito"] = i
+                            elif "saldo" in h:
+                                idx_map["saldo"] = i
+                        continue
+                    if cells and _normalizar_texto(cells[0]) == "fecha":
+                        continue
 
-                def _cell(key: str) -> str:
-                    i = idx_map.get(key, 0)
-                    return cells[i] if i < len(cells) else ""
+                    def _cell(key: str) -> str:
+                        i = idx_map.get(key, 0)
+                        return cells[i] if i < len(cells) else ""
 
-                fecha_txt = _cell("fecha")
-                # Filas de continuación (sin fecha): fusionar descripción / montos a la anterior
-                if (not fecha_txt or not re.search(r"\d{2}[/-]\d{2}", fecha_txt)) and filas_totales:
-                    prev = filas_totales[-1]
-                    desc_extra = _cell("desc") or " ".join(c for c in cells if c and not re.fullmatch(r"[\d.,\-\s]+", c))
-                    if desc_extra:
-                        prev[1] = f"{prev[1]} {desc_extra}".strip()
-                    for col_i, key in ((3, "credito"), (4, "debito"), (5, "saldo")):
-                        val = _cell(key)
-                        if val and (not prev[col_i] or str(prev[col_i]).strip() in ("", "-", "None")):
-                            prev[col_i] = val
-                    # Si la "continuación" trae montos y la fila anterior no, ya quedó arriba
-                    continue
+                    fecha_txt = _cell("fecha")
+                    desc_fila = _cell("desc")
+                    blob_fila = " ".join(cells)
+                    if es_fin_cuerpo_movimientos_extracto(desc_fila) or es_fin_cuerpo_movimientos_extracto(blob_fila):
+                        return pd.DataFrame(filas_totales, columns=cols)
+                    if (not fecha_txt or not re.search(r"\d{2}[/-]\d{2}", fecha_txt)) and filas_totales:
+                        prev = filas_totales[-1]
+                        desc_extra = desc_fila or " ".join(
+                            c for c in cells if c and not re.fullmatch(r"[\d.,\-\s]+", c)
+                        )
+                        if desc_extra:
+                            prev[1] = f"{prev[1]} {desc_extra}".strip()
+                        for col_i, key in ((3, "credito"), (4, "debito"), (5, "saldo")):
+                            val = _cell(key)
+                            if val and (not prev[col_i] or str(prev[col_i]).strip() in ("", "-", "None")):
+                                prev[col_i] = val
+                        continue
 
-                if not fecha_txt:
-                    continue
-                if len(cells) < 4 and not header_found:
-                    continue
-                filas_totales.append([
-                    fecha_txt,
-                    _cell("desc"),
-                    _cell("origen"),
-                    _cell("credito"),
-                    _cell("debito"),
-                    _cell("saldo"),
-                ])
-    return pd.DataFrame(
-        filas_totales,
-        columns=["Fecha", "Descripción", "Origen", "Crédito", "Débito", "Saldo"],
-    )
+                    if not fecha_txt:
+                        continue
+                    if len(cells) < 4 and not header_found:
+                        continue
+                    clave_fila = (
+                        _normalizar_texto(fecha_txt),
+                        _normalizar_texto(_cell("desc")),
+                        _normalizar_texto(_cell("credito")),
+                        _normalizar_texto(_cell("debito")),
+                        _normalizar_texto(_cell("saldo")),
+                    )
+                    if clave_fila in vistos_filas_galicia:
+                        continue
+                    vistos_filas_galicia.add(clave_fila)
+                    filas_totales.append([
+                        fecha_txt,
+                        _cell("desc"),
+                        _cell("origen"),
+                        _cell("credito"),
+                        _cell("debito"),
+                        _cell("saldo"),
+                    ])
+    return pd.DataFrame(filas_totales, columns=cols)
 
 
 def extraer_movimientos_galicia_tabla(
@@ -3838,6 +3889,8 @@ def extraer_movimientos_galicia_tabla(
         if not fecha or not _fecha_plausible_extracto(fecha):
             continue
         descripcion = str(row.get("Descripción", "") or "").strip()
+        if es_fin_cuerpo_movimientos_extracto(descripcion):
+            continue
         credito_raw = _limpiar_monto(row.get("Crédito"))
         debito_raw = _limpiar_monto(row.get("Débito"))
         saldo_preview = abs(_limpiar_monto(row.get("Saldo")))
@@ -6295,6 +6348,9 @@ def extraer_movimientos_provincia_tabla(
                         desc = ""
                         if i_desc is not None and i_desc < len(fila):
                             desc = str(fila[i_desc] or "").replace("\n", " ").strip()
+                        blob_fila = " ".join(str(c or "") for c in fila)
+                        if es_fin_cuerpo_movimientos_extracto(desc) or es_fin_cuerpo_movimientos_extracto(blob_fila):
+                            return movimientos
                         if _es_ruido_extracto_provincia(desc) and "saldo" in _normalizar_texto(desc):
                             continue
                         dnorm = _normalizar_texto(desc)
@@ -6321,8 +6377,19 @@ def extraer_movimientos_provincia_tabla(
                             continue
                         # Si solo hay un lado y hay saldo, no hace falta más
                         if debito > 0 and credito > 0:
-                            # A veces duplican; preferir el no-cero distinto del saldo
-                            pass
+                            # La misma línea no puede ser débito y crédito.
+                            if abs(debito - credito) <= 0.02:
+                                if any(
+                                    x in dnorm
+                                    for x in ("debito", "pago", "impuesto", "comision", "retenc", "iibb")
+                                ):
+                                    credito = 0.0
+                                else:
+                                    debito = 0.0
+                            elif saldo and abs(debito - abs(saldo)) <= 0.02:
+                                debito = 0.0
+                            elif saldo and abs(credito - abs(saldo)) <= 0.02:
+                                credito = 0.0
                         comp = ""
                         if i_comp is not None and i_comp < len(fila):
                             comp = str(fila[i_comp] or "").strip()
@@ -6469,6 +6536,8 @@ def _parsear_movimientos_provincia_paginas(
             if not ln or _es_ruido_extracto_provincia(ln):
                 continue
             low = ln.lower()
+            if es_fin_cuerpo_movimientos_extracto(ln):
+                break
             if any(x in low for x in ("total deb", "total cred", "resumen del", "fin del extracto")):
                 break
             lineas.append((pag, ln))
@@ -7132,7 +7201,11 @@ def _filas_desde_galicia_bytes(data: bytes, archivo: str) -> list[dict]:
     if not movs:
         return []
     movs = _deduplicar_y_corregir_saldos(movs)
-    return [_movimiento_banco_a_fila_extracto(m) for m in movs]
+    return [
+        _movimiento_banco_a_fila_extracto(m)
+        for m in movs
+        if not es_fin_cuerpo_movimientos_extracto(m.descripcion or "")
+    ]
 
 
 def _filas_desde_movs_layout(movs: list[dict], nombre: str, banco_slug: str) -> list[dict]:
@@ -7148,6 +7221,8 @@ def _filas_desde_movs_layout(movs: list[dict], nombre: str, banco_slug: str) -> 
         if len(desc) < 12 and det:
             desc = re.sub(r"\s+", " ", f"{desc} {det}").strip()
             det = ""
+        if es_fin_cuerpo_movimientos_extracto(f"{desc} {det}".strip()):
+            continue
         montos_l = [
             abs(float(m.get("debito") or 0)),
             abs(float(m.get("credito") or 0)),
@@ -7263,6 +7338,15 @@ def _meta_basica_desde_texto(texto: str) -> dict:
 def _filas_a_df_extracto(filas: list[dict]) -> pd.DataFrame:
     if not filas:
         return pd.DataFrame(columns=COLUMNAS_EXTRACTO_UNIFICADO)
+    filas = [
+        r
+        for r in filas
+        if not es_fin_cuerpo_movimientos_extracto(
+            f"{r.get('Descripcion') or ''} {r.get('Detalle') or ''}"
+        )
+    ]
+    if not filas:
+        return pd.DataFrame(columns=COLUMNAS_EXTRACTO_UNIFICADO)
     filas = [_anotar_fila_formato_banco(r) for r in _corregir_filas_extracto_por_saldos(list(filas))]
     df = pd.DataFrame(filas)
     for col in COLUMNAS_EXTRACTO_UNIFICADO:
@@ -7273,6 +7357,15 @@ def _filas_a_df_extracto(filas: list[dict]) -> pd.DataFrame:
         subset=["Fecha", "Comprobante", "Descripcion", "Detalle", "Debito", "Credito", "Saldo", "Archivo origen"],
         keep="first",
     )
+    # La misma línea leída como débito y como crédito (mismo saldo) queda una vez.
+    df["_imp_abs"] = pd.to_numeric(df["Importe"], errors="coerce").abs().round(2)
+    df["_desc_k"] = (
+        df["Descripcion"].fillna("").astype(str) + " " + df["Detalle"].fillna("").astype(str)
+    ).map(_normalizar_texto)
+    df = df.drop_duplicates(
+        subset=["Fecha", "_desc_k", "_imp_abs", "Saldo", "Archivo origen"],
+        keep="first",
+    ).drop(columns=["_imp_abs", "_desc_k"])
     df["_sort"] = df["Fecha"].map(lambda x: _parse_fecha_extracto(str(x)) or date.min)
     return df.sort_values(["_sort", "Pagina PDF"], kind="stable").drop(columns=["_sort"]).reset_index(drop=True)
 
@@ -7620,6 +7713,7 @@ def _procesar_un_pdf_extracto(
         paginas_y = paginas_por_y(data)
         if _n_montos_paginas(paginas_y) > _n_montos_paginas(paginas):
             paginas = paginas_y
+        paginas = truncar_paginas_cuerpo_extracto(paginas)
         texto_all = "\n".join(t for _, t in paginas)
         chars = sum(len(t) for _, t in paginas)
         fechas_txt = len(re.findall(r"\b\d{2}/\d{2}/\d{2,4}\b", texto_all))
@@ -8044,8 +8138,9 @@ def _paginas_texto_extracto_pdf(
     data: bytes, dpi_ocr: int = 160, forzar_ocr: bool = False
 ) -> list[tuple[int, str]]:
     """
-    Extrae texto por página: nativo si existe; si la página está vacía (escaneada), OCR.
-    Con forzar_ocr=True reaplica OCR a todas las páginas (útiles para Provincia/BIP escaneados).
+    Extrae texto por página. El OCR no corre en extractos que ya traen texto:
+    solo en páginas vacías, o en todo el PDF si es un escaneo (forzar_ocr).
+    No se mezcla el texto nativo con el OCR de la misma página: eso duplicaría importes.
     Reusa cache en disco para no re-OCR el mismo PDF.
     """
     if _es_entorno_cloud_ocr():
@@ -8214,7 +8309,7 @@ def _es_basura_extracto_concepto(texto: str) -> bool:
         return True
     if t.startswith("promedio "):
         return True
-    if t.startswith("total retencion") or t.startswith("total mensual retencion"):
+    if es_fin_cuerpo_movimientos_extracto(raw):
         return True
     if re.fullmatch(r"usd|ars|\$|u\$s", t):
         return True
@@ -8337,28 +8432,8 @@ def _partir_solo_prefijo(raw_norm: str, det_in: str) -> tuple[str, str]:
 
 
 def _es_resumen_impositivo_extracto(texto: str) -> bool:
-    """Totales del pie del PDF (detalle impositivo): no son movimientos."""
-    low = _normalizar_texto(texto)
-    if not low:
-        return False
-    return any(
-        k in low
-        for k in (
-            "detalle impositivo",
-            "tipo de impuesto",
-            "totales de retencion",
-            "totales de retencion",
-            "totales mensuales de retencion",
-            "pueden ser modificados por devoluciones",
-            "credito fiscal discriminado",
-            "saldo total detalle",
-            "itf-ley25413",
-            "itf-ley 25413",
-            "concepto valor tipo",
-            "s/dec. 380",
-            "s/dec 380",
-        )
-    )
+    """Totales del pie del PDF (detalle impositivo / consolidado): no son movimientos."""
+    return es_fin_cuerpo_movimientos_extracto(texto)
 
 
 def _es_movimiento_ley_25413(low: str) -> bool:
@@ -9989,14 +10064,11 @@ def exportar_match_proveedores_excel(resultado: dict[str, pd.DataFrame], meta: d
 
 
 def movimientos_banco_a_dataframe_conciliacion(movimientos: list) -> pd.DataFrame:
-    """Adapta MovimientoBanco al layout Fecha/Descripción/Crédito/Débito/Saldo de Galicia."""
+    """Movimientos para conciliar. Sin columna de saldo, en ningún banco."""
     filas: list[list] = []
     for mov in movimientos:
         credito = f"{mov.credito:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if mov.credito else ""
         debito = f"{mov.debito:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if mov.debito else ""
-        saldo = ""
-        if mov.saldo is not None:
-            saldo = f"{mov.saldo:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         fecha_txt = mov.fecha.strftime("%d/%m/%Y") if hasattr(mov.fecha, "strftime") else str(mov.fecha)
         filas.append([
             fecha_txt,
@@ -10004,11 +10076,10 @@ def movimientos_banco_a_dataframe_conciliacion(movimientos: list) -> pd.DataFram
             mov.comprobante or "",
             credito,
             debito,
-            saldo,
         ])
     return pd.DataFrame(
         filas,
-        columns=["Fecha", "Descripción", "Origen", "Crédito", "Débito", "Saldo"],
+        columns=["Fecha", "Descripción", "Origen", "Crédito", "Débito"],
     )
 
 
@@ -10048,9 +10119,19 @@ def extraer_movimientos_banco(
                         lineas = [t for _, t in _ocr_pagina(documento[idx])]
                 else:
                     lineas = []
-                movimientos.extend(
-                    _extraer_movimientos_desde_texto(lineas, idx + 1, banco_detectado, ruta.name)
-                )
+                cuerpo: list[str] = []
+                corto = False
+                for ln in lineas:
+                    if es_fin_cuerpo_movimientos_extracto(ln):
+                        corto = True
+                        break
+                    cuerpo.append(ln)
+                if cuerpo:
+                    movimientos.extend(
+                        _extraer_movimientos_desde_texto(cuerpo, idx + 1, banco_detectado, ruta.name)
+                    )
+                if corto:
+                    break
     finally:
         documento.close()
 
@@ -10066,15 +10147,24 @@ def _deduplicar_y_corregir_saldos(movimientos: list[MovimientoBanco]) -> list[Mo
     vistos: set[tuple] = set()
     unicos: list[MovimientoBanco] = []
     for mov in sorted(movimientos, key=lambda m: (m.archivo_origen, m.pagina, m.fecha)):
+        if es_fin_cuerpo_movimientos_extracto(mov.descripcion or ""):
+            continue
+        # La página no entra en la clave cuando hay saldo: la misma línea
+        # leída dos veces (tabla repetida) trae el mismo saldo corrido.
+        # Sin saldo se conserva la página, para no fundir dos cobros iguales.
+        saldo_clave: object
+        if mov.saldo is not None:
+            saldo_clave = round(mov.saldo, 2)
+        else:
+            saldo_clave = ("sin_saldo", mov.pagina)
         clave = (
             mov.fecha,
             round(mov.importe_absoluto, 2),
             _normalizar_texto(mov.descripcion),
             (mov.comprobante or "").strip(),
-            round(mov.saldo, 2) if mov.saldo is not None else None,
+            saldo_clave,
             mov.banco,
             mov.archivo_origen,
-            mov.pagina,
         )
         if clave not in vistos:
             vistos.add(clave)
@@ -10709,8 +10799,8 @@ def _coincide_importe(a: float, b: float) -> bool:
 def _categoria_planilla(descripcion: str, categoria: str = "", es_credito: bool = False) -> str:
     """Devuelve el nombre de fila (columna B) de la plantilla manual."""
     desc = _normalizar_texto(descripcion)
-    for clave, fila in MAPEO_CATEGORIAS_PLANILLA.items():
-        if clave in desc:
+    for clave, fila in sorted(MAPEO_CATEGORIAS_PLANILLA.items(), key=lambda kv: len(kv[0]), reverse=True):
+        if _normalizar_texto(clave) in desc:
             return fila
   # Categoría contable solo si no es genérica (transferencia por defecto del parser)
     if categoria and categoria not in ("transferencia", "") and categoria in MAPEO_CATEGORIAS_PLANILLA:
@@ -10982,46 +11072,155 @@ def _inyectar_balance_mes(hoja, col_mes: str, balance: BalanceMensual, es_primer
     )
 
 
+def _filas_rubro_conciliacion(hoja) -> list[tuple[int, str]]:
+    """Filas de rubro con un importe (columna B). No incluye totales ni notas."""
+    tope = FILAS_PLANTILLA["saldo_inicio"]
+    filas: list[tuple[int, str]] = []
+    for fila in range(7, tope):
+        valor_b = hoja.cell(fila, 2).value
+        if not isinstance(valor_b, str) or not valor_b.strip() or valor_b.startswith("="):
+            continue
+        if _normalizar_texto(valor_b).startswith("esta parte"):
+            continue
+        if _es_formula(hoja.cell(fila, 3).value):
+            continue
+        filas.append((fila, valor_b))
+    return filas
+
+
+def _etiqueta_de_clasificacion(categoria: str, etiquetas: list[str]) -> str:
+    """La imputación que eligieron en el extracto, escrita como la fila de la plantilla."""
+    n = _normalizar_texto(categoria)
+    if not n or n in {"transferencia", "a clasificar", "sin clasificar"}:
+        return ""
+    for etiqueta in etiquetas:
+        if _normalizar_texto(etiqueta) == n:
+            return etiqueta
+    genericas = {"impuesto", "iva", "haber", "transferencia"}
+    for clave, fila in sorted(MAPEO_CATEGORIAS_PLANILLA.items(), key=lambda kv: len(kv[0]), reverse=True):
+        cn = _normalizar_texto(clave)
+        if not cn or cn in genericas or cn not in n:
+            continue
+        objetivo = _normalizar_texto(fila)
+        for etiqueta in etiquetas:
+            if _normalizar_texto(etiqueta) == objetivo:
+                return etiqueta
+    return ""
+
+
+def _imputacion_movimiento(mov: MovimientoBanco, etiquetas: list[str]) -> str:
+    """Texto exacto de la columna B, para que el SUMIFS encuentre la fila."""
+    asignada = _etiqueta_de_clasificacion(str(mov.categoria_contable or ""), etiquetas)
+    if asignada:
+        return asignada
+    propuesta = _categoria_planilla(mov.descripcion, mov.categoria_contable, mov.credito > 0)
+    if propuesta in etiquetas:
+        return propuesta
+    propuesta_norm = _normalizar_texto(propuesta)
+    for etiqueta in etiquetas:
+        if _normalizar_texto(etiqueta) == propuesta_norm:
+            return etiqueta
+    return propuesta
+
+
+def _formula_importe_rubro(col_mes: str, fila: int) -> str:
+    """Un solo importe del mes: suma la columna Importe del detalle, no debe/haber."""
+    mes = f"{col_mes}$5"
+    rubro = f"$B{fila}"
+    suma = (
+        "SUMIFS(DetalleExtracto[Importe],DetalleExtracto[Imputación contable],"
+        f"{rubro},DetalleExtracto[Fecha],\">=\"&{mes},DetalleExtracto[Fecha],\"<\"&EDATE({mes},1))"
+    )
+    return f'=IF({suma}=0,"",{suma})'
+
+
+def _alinear_sumas_rubro(hoja) -> None:
+    """Cada mes suma sus rubros. La plantilla deja afuera la fila 7 en varios meses."""
+    for col in range(3, hoja.max_column + 1):
+        if not isinstance(hoja.cell(5, col).value, (datetime, date)):
+            continue
+        letra = get_column_letter(col)
+        if _es_formula(hoja.cell(6, col).value):
+            hoja.cell(6, col).value = f"=SUM({letra}7:{letra}10)"
+        if _es_formula(hoja.cell(41, col).value):
+            hoja.cell(41, col).value = f"=SUM({letra}12:{letra}40)"
+
+
+def _ligar_rubros_a_detalle(hoja) -> None:
+    """El importe de cada rubro sale del detalle. Cambiar la imputación mueve el monto."""
+    _alinear_sumas_rubro(hoja)
+    for col in range(3, hoja.max_column + 1):
+        if not isinstance(hoja.cell(5, col).value, (datetime, date)):
+            continue
+        col_mes = get_column_letter(col)
+        ref = f"{col_mes}6"
+        for fila, _etiqueta in _filas_rubro_conciliacion(hoja):
+            addr = f"{col_mes}{fila}"
+            if _es_formula(hoja[addr].value):
+                continue
+            _escribir_celda_formula(hoja, addr, _formula_importe_rubro(col_mes, fila), ref)
+
+
 def _inyectar_detalle_movimientos(wb, movimientos: list[MovimientoBanco], hoja_ref) -> None:
     """
-    Volca el detalle de movimientos en hoja 'Detalle Extracto' clonando estilos de la plantilla.
-    Columnas: Fecha | Concepto | Débito | Crédito | Saldo | Banco
+    Movimientos del extracto. Una columna Importe (no debe/haber) y la imputación
+    que alimenta la conciliación. Sin columna de saldo, en ningún banco.
     """
     nombre = HOJA_DETALLE_MOVIMIENTOS
     if nombre in wb.sheetnames:
         del wb[nombre]
     ws = wb.create_sheet(nombre)
 
-    encabezados = ["Fecha", "Concepto", "Débito", "Crédito", "Saldo", "Banco", "Archivo"]
+    etiquetas = [etiqueta for _fila, etiqueta in _filas_rubro_conciliacion(hoja_ref)]
+    encabezados = ["Fecha", "Concepto", "Imputación contable", "Importe", "Banco", "Archivo"]
     for col_idx, titulo in enumerate(encabezados, start=1):
         celda = ws.cell(row=1, column=col_idx, value=titulo)
         _copiar_estilo_celda(hoja_ref["B5"], celda)
 
     estilo_fila = hoja_ref["B8"]
-    for i, mov in enumerate(sorted(movimientos, key=lambda m: (m.fecha, m.pagina)), start=FILA_INICIO_DETALLE):
+    ordenados = sorted(movimientos, key=lambda m: (m.fecha, m.pagina, m.descripcion))
+    for i, mov in enumerate(ordenados, start=FILA_INICIO_DETALLE):
+        importe = mov.importe_absoluto
         fila = [
             mov.fecha,
             mov.descripcion,
-            mov.debito if mov.debito else None,
-            mov.credito if mov.credito else None,
-            mov.saldo,
+            _imputacion_movimiento(mov, etiquetas),
+            round(importe, 2) if importe else None,
             PERFILES_BANCO.get(mov.banco, {}).get("nombre_display", mov.banco),
             mov.archivo_origen,
         ]
         for col_idx, val in enumerate(fila, start=1):
             celda = ws.cell(row=i, column=col_idx, value=val)
             _copiar_estilo_celda(estilo_fila, celda)
-            if col_idx in (3, 4, 5) and val is not None:
-                celda.number_format = "#,##0.00"
-        if i > 500:
-            break
+            if col_idx == 1 and val is not None:
+                celda.number_format = "DD/MM/YYYY"
+            elif col_idx == 4 and val is not None:
+                celda.number_format = FMT_IMPORTE_CONCILIACION
 
-    # Ajustar anchos de columna
-    ws.column_dimensions["A"].width = 12
-    ws.column_dimensions["B"].width = 50
-    ws.column_dimensions["C"].width = 14
-    ws.column_dimensions["D"].width = 14
-    ws.column_dimensions["E"].width = 14
+    ultima = FILA_INICIO_DETALLE + len(ordenados) - 1
+    ws.column_dimensions["A"].width = 14
+    ws.column_dimensions["B"].width = 52
+    ws.column_dimensions["C"].width = 38
+    ws.column_dimensions["D"].width = 16
+    ws.column_dimensions["E"].width = 18
+    ws.column_dimensions["F"].width = 28
+    ws.freeze_panes = "A2"
+
+    tabla = Table(displayName=TABLA_DETALLE_EXTRACTO, ref=f"A1:F{ultima}")
+    tabla.tableStyleInfo = TableStyleInfo(name="TableStyleMedium2", showRowStripes=True)
+    ws.add_table(tabla)
+
+    if etiquetas:
+        for i, etiqueta in enumerate(etiquetas, start=2):
+            ws.cell(row=i, column=26, value=etiqueta)
+        ws.column_dimensions["Z"].hidden = True
+        validacion = DataValidation(
+            type="list",
+            formula1=f"=$Z$2:$Z${1 + len(etiquetas)}",
+            allow_blank=True,
+        )
+        validacion.add(f"C2:C{ultima}")
+        ws.add_data_validation(validacion)
 
 
 def generar_planilla_conciliacion(
@@ -11076,17 +11275,18 @@ def generar_planilla_conciliacion(
         if isinstance(valor_b, str) and valor_b.strip() and not valor_b.startswith("="):
             filas_categoria[_normalizar_texto(valor_b)] = fila
 
-    # Categorías por mes: TODOS los movimientos del extracto → filas de la plantilla
+    # El cuadro no lleva debe/haber: cada rubro es un importe, ligado al detalle.
     movs_fuente = resultado.movimientos_todos or resultado.solo_banco
-    meses_categorias = _agrupar_importes_planilla_por_mes(movs_fuente)
-    if not meses_categorias and resultado.resumen_anual_por_mes:
+    if movs_fuente:
+        _inyectar_detalle_movimientos(wb, movs_fuente, hoja)
+        _ligar_rubros_a_detalle(hoja)
+    else:
         meses_categorias = resultado.resumen_anual_por_mes
-
-    for (anio, mes), categorias in sorted(meses_categorias.items()):
-        col_mes = _columna_mes_en_planilla(hoja, date(anio, mes, 1))
-        if not col_mes:
-            continue
-        _inyectar_categorias_mes(hoja, col_mes, categorias, filas_categoria)
+        for (anio, mes), categorias in sorted(meses_categorias.items()):
+            col_mes = _columna_mes_en_planilla(hoja, date(anio, mes, 1))
+            if not col_mes:
+                continue
+            _inyectar_categorias_mes(hoja, col_mes, categorias, filas_categoria)
 
     # Saldos de control por mes (filas 57-61)
     saldos_meses = resultado.saldos_por_mes or {}
@@ -11112,10 +11312,7 @@ def generar_planilla_conciliacion(
         if col_mes:
             _inyectar_balance_mes(hoja, col_mes, saldos_meses[clave], es_primer_mes=(idx == 0))
 
-    # Detalle de movimientos con estilos clonados
-    movs = resultado.movimientos_todos or resultado.solo_banco
-    if movs:
-        _inyectar_detalle_movimientos(wb, movs, hoja)
+    wb.calculation.calcMode = "auto"
 
     buffer = io.BytesIO()
     wb.save(buffer)
@@ -11178,7 +11375,6 @@ def movimientos_a_dataframe(movimientos: list[MovimientoBanco]) -> pd.DataFrame:
                 "Descripción": m.descripcion,
                 "Débito": m.debito if m.debito else None,
                 "Crédito": m.credito if m.credito else None,
-                "Saldo": m.saldo if m.saldo else None,
                 "CUIT": m.cuit_contraparte,
                 "Categoría": m.etiqueta,
                 "Anomalía": "⚠️ Sí" if m.es_anomalia else "",

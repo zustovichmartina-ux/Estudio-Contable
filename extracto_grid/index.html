@@ -118,6 +118,7 @@ let CUENTAS = [];
 let CUENTAS_SIG = "";
 let CLASIFS = [];
 let PINTADO = false;
+let FILAS_SIG = "";
 let GRID_ID = "";
 const OTRO = "__otro__";
 
@@ -239,7 +240,7 @@ function labelOrigen(o) {
 }
 function snapshot() {
   return {
-    filas: FILAS.map((m) => ({
+    filas: sinRecap(FILAS).map((m) => ({
       i: m.i,
       clasif: m.clasif,
       codigo: m.codigo,
@@ -248,6 +249,27 @@ function snapshot() {
     })),
     clasifs: CLASIFS.map((c) => ({ nombre: c.nombre, codigo: c.codigo || "" })),
   };
+}
+function esRecap(desc) {
+  let n = String(desc || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  n = n.replace(/\s+/g, " ").trim();
+  if (!n) return false;
+  const marcas = [
+    "consolidado de retencion", "consolidado importe", "consolidado de impuestos",
+    "total retencion", "total mensual", "total impuesto",
+    "credito computable como pago a cuenta", "los depositos en pesos",
+    "garantia de hasta", "ley 24.485", "detalle impositivo",
+    "los totales mensuales", "credito fiscal discriminado",
+  ];
+  if (marcas.some((k) => n.indexOf(k) >= 0)) return true;
+  const ley = n.indexOf("25413") >= 0 || n.indexOf("25.413") >= 0 || n.indexOf("25 413") >= 0;
+  return ley && n.indexOf("sobre credito") >= 0 && n.indexOf("sobre debito") >= 0;
+}
+function sinRecap(filas) {
+  return (filas || []).filter((m) => !esRecap(m.desc));
+}
+function firmaFilas(filas) {
+  return (filas || []).map((m) => [m.i, m.fecha, m.desc, m.deb, m.cred].join("\t")).join("\n");
 }
 function persistLocal() {
   if (!GRID_ID) return;
@@ -382,20 +404,32 @@ function celdaClasif(m, i, idxsAttr) {
   }
   return `<select data-i="${i}" data-idxs="${idxsAttr}" data-k="clasif">${optsClasif(m.clasif)}</select>`;
 }
+function esCobranza(m) {
+  const t = (String(m.clasif || "") + " " + String(m.codigo || "")).toLowerCase();
+  return t.indexOf("deudor") >= 0 || t.indexOf("transferencia recib") >= 0 || String(m.codigo || "").indexOf("113") === 0;
+}
+function dejarUnLado(m) {
+  if (esCobranza(m)) m.deb = 0;
+  else m.cred = 0;
+  return m;
+}
 function gruposVista() {
   const seen = {};
   const out = [];
   FILAS.forEach((m, i) => {
+    const deb = Number(m.deb || 0);
+    const cred = Number(m.cred || 0);
+    if (deb <= 0.004 && cred <= 0.004) return;
     const k = claveRepetida(m) || ("row-" + i);
     if (seen[k] != null) {
       const g = out[seen[k]];
       g.idxs.push(i);
-      g.deb += Number(m.deb || 0);
-      g.cred += Number(m.cred || 0);
+      g.deb += deb;
+      g.cred += cred;
       return;
     }
     seen[k] = out.length;
-    out.push({ i: i, idxs: [i], m: m, deb: Number(m.deb || 0), cred: Number(m.cred || 0) });
+    out.push({ i: i, idxs: [i], m: m, deb: deb, cred: cred });
   });
   return out;
 }
@@ -410,12 +444,18 @@ function pintar() {
     const idxsAttr = g.idxs.join(",");
     const extra = g.idxs.length > 1 ? ` <span class="tag regla">×${g.idxs.length}</span>` : "";
     const elim = !!m._eliminado;
+    let deb = Number(g.deb || 0);
+    let cred = Number(g.cred || 0);
+    if (deb > 0.004 && cred > 0.004) {
+      if (esCobranza(m)) deb = 0;
+      else cred = 0;
+    }
     return `
     <tr class="${elim ? "elim" : (m.origen === "a_clasificar" ? "pend" : "")}">
       <td>${esc(m.fecha)}</td>
       <td>${esc(m.desc)}${extra}</td>
-      <td class="num deb">${money(g.deb)}</td>
-      <td class="num cred">${money(g.cred)}</td>
+      <td class="num deb">${money(deb)}</td>
+      <td class="num cred">${money(cred)}</td>
       <td>${celdaClasif(m, i, idxsAttr)}</td>
       <td><select data-i="${i}" data-idxs="${idxsAttr}" data-k="codigo">${optsHtml(m.codigo, m.opciones_codigo)}</select></td>
       <td><span class="tag ${esc(m.origen)}">${labelOrigen(m.origen)}</span></td>
@@ -472,9 +512,11 @@ function onRender(event) {
       upsertClasif(c.nombre, c.codigo);
     });
   }
-  if (!PINTADO) {
-    const base = (args.filas || []).map((m) => Object.assign({}, m));
+  const base = sinRecap((args.filas || []).map((m) => dejarUnLado(Object.assign({}, m))));
+  const sigFilas = firmaFilas(base);
+  if (!PINTADO || sigFilas !== FILAS_SIG) {
     FILAS = restoreLocal(base);
+    FILAS_SIG = sigFilas;
     PINTADO = true;
     pintar();
   } else if (cuentasCambiaron) {

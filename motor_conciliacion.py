@@ -11,6 +11,7 @@ from typing import Any, Iterable
 
 import pandas as pd
 
+from extracto_layout import es_fin_cuerpo_movimientos_extracto
 from conceptos_bancos import (
     _ALIAS_BANCO,
     _banco_desde_texto,
@@ -407,11 +408,27 @@ def _lado_debito_credito(
     importe: Decimal,
     tipo_mov: str,
 ) -> tuple[Decimal, Decimal]:
-    """Débito/crédito del extracto. NCC acredita; el signo del Importe manda si no hay D/C."""
+    """Débito/crédito del extracto. NCC acredita; el signo del Importe manda si no hay D/C.
+
+    Un movimiento es débito o crédito. Si las dos columnas traen importe, cuenta una sola vez.
+    """
+    tipo_u = normalizar_texto(tipo_mov)
+    if debito != 0 and credito != 0:
+        if importe < 0:
+            return abs(importe), Decimal("0.00")
+        if importe > 0:
+            return Decimal("0.00"), abs(importe)
+        if abs(abs(debito) - abs(credito)) <= Decimal("0.02"):
+            if "DEB" in tipo_u and "CRED" not in tipo_u:
+                return abs(debito), Decimal("0.00")
+            return Decimal("0.00"), abs(credito)
+        # El mayor suele ser el saldo leído en la otra columna.
+        if abs(debito) < abs(credito):
+            return abs(debito), Decimal("0.00")
+        return Decimal("0.00"), abs(credito)
     if debito != 0 or credito != 0:
         return debito, credito
     blob = normalizar_texto(descripcion)
-    tipo_u = normalizar_texto(tipo_mov)
     es_ncc = any(t in blob for t in _TOKENS_NCC) or "NCC" in blob
     es_ndd = any(t in blob for t in _TOKENS_NDD) or "NDD" in blob
     if es_ncc and not es_ndd:
@@ -456,24 +473,7 @@ def es_fila_saldo_bancario(desc: str, tipo_fila: str = "") -> bool:
 
 def es_fila_resumen_impositivo(desc: str) -> bool:
     """Pie del extracto (totales de impuestos): duplica movimientos ya leídos."""
-    n = normalizar_texto(desc)
-    return any(
-        k in n
-        for k in (
-            "DETALLE IMPOSITIVO",
-            "TIPO DE IMPUESTO",
-            "TOTALES DE RETENCION",
-            "TOTALES MENSUALES DE RETENCION",
-            "PUEDEN SER MODIFICADOS POR DEVOLUCIONES",
-            "CREDITO FISCAL DISCRIMINADO",
-            "SALDO TOTAL DETALLE",
-            "ITF-LEY25413",
-            "ITF-LEY 25413",
-            "CONCEPTO VALOR TIPO",
-            "S/DEC. 380",
-            "S/DEC 380",
-        )
-    )
+    return es_fin_cuerpo_movimientos_extracto(desc)
 
 
 def _limpiar_desc_extracto(desc: str) -> str:
@@ -481,6 +481,43 @@ def _limpiar_desc_extracto(desc: str) -> str:
     t = re.sub(r"\s+\bnan\b", "", t, flags=re.I)
     t = re.sub(r"\s+", " ", t).strip()
     return t
+
+
+def _dedup_filas_mismo_movimiento(filas: list[dict]) -> list[dict]:
+    """Misma fecha, concepto, importe y saldo: una sola fila.
+
+    Dos cobros iguales del mismo día se distinguen por el saldo corrido.
+    Una copia sin saldo se descarta si la otra trae el saldo.
+    """
+    preparados: list[tuple[tuple, float | None, dict]] = []
+    con_saldo: set[tuple] = set()
+    for r in filas:
+        fecha = str(r.get("fecha") or "")
+        desc = normalizar_texto(str(r.get("descripcion") or ""))
+        deb = abs(float(r.get("debito") or 0))
+        cred = abs(float(r.get("credito") or 0))
+        imp = round(max(deb, cred), 2)
+        arch = str(r.get("archivo") or "")
+        saldo_raw = r.get("_saldo_clave", r.get("saldo"))
+        try:
+            saldo = round(float(saldo_raw), 2) if saldo_raw not in (None, "") else None
+        except (TypeError, ValueError):
+            saldo = None
+        base = (fecha, desc, imp, arch)
+        preparados.append((base, saldo, r))
+        if saldo is not None:
+            con_saldo.add(base)
+    vistos: set[tuple] = set()
+    out: list[dict] = []
+    for base, saldo, r in preparados:
+        if saldo is None and base in con_saldo:
+            continue
+        clave = base + (saldo,)
+        if clave in vistos:
+            continue
+        vistos.add(clave)
+        out.append(r)
+    return out
 
 
 def df_extracto_a_filas(df: pd.DataFrame) -> list[dict]:
@@ -509,18 +546,24 @@ def df_extracto_a_filas(df: pd.DataFrame) -> list[dict]:
         )
         if debito == 0 and credito == 0:
             continue
+        saldo_raw = row.get("Saldo")
+        saldo = money(saldo_raw) if saldo_raw not in (None, "") else None
         out.append(
             {
                 "fecha": _parse_fecha(row.get("Fecha")),
                 "descripcion": desc,
                 "credito": credito,
                 "debito": debito,
-                "saldo": money(row.get("Saldo")),
+                "saldo": saldo if saldo is not None else Decimal("0.00"),
                 "archivo": str(row.get("Archivo origen") or ""),
                 "banco": str(row.get("Banco") or ""),
+                "_saldo_clave": saldo,
             }
         )
-    return out
+    unicos = _dedup_filas_mismo_movimiento(out)
+    for fila in unicos:
+        fila.pop("_saldo_clave", None)
+    return unicos
 
 
 def _fuzzy_ratio(a: str, b: str) -> float:
@@ -949,6 +992,61 @@ def _cuenta_mayoritaria(codigos: list[str]) -> str:
     return max(set(validos), key=validos.count)
 
 
+def _es_cobranza_asiento(m: dict) -> bool:
+    """Ingreso del asiento: deudores por ventas o transferencia recibida."""
+    cod = str(m.get("cuenta_codigo") or m.get("cuenta_sugerida") or "").strip()
+    blob = normalizar_texto(
+        " ".join(
+            str(m.get(k) or "")
+            for k in ("categoria", "cuenta_plan", "clasif", "extracto_label", "descripcion")
+        )
+    )
+    if cod.startswith("113"):
+        return True
+    if "DEUDOR" in blob:
+        return True
+    return "TRANSFERENCIA RECIB" in blob or "TRANSFERENCIAS RECIB" in blob
+
+
+def _clave_concepto_renglon(desc: str) -> str:
+    """Misma clave que la grilla: ignora el número largo del comprobante."""
+    t = normalizar_texto(desc).lower()
+    t = re.sub(r"\b\d{5,}\b", "", t)
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def dejar_un_importe_por_concepto(movs: list[dict]) -> list[dict]:
+    """Un concepto queda de un solo lado. No se netea ni se suma con el otro."""
+    out = [dict(m) for m in movs or []]
+    for m in out:
+        debito = float(money(m.get("debito")))
+        credito = float(money(m.get("credito")))
+        if debito > 0.005 and credito > 0.005:
+            if credito >= debito:
+                m["debito"] = 0
+            else:
+                m["credito"] = 0
+    grupos: dict[str, list[dict]] = {}
+    for m in out:
+        desc = _clave_concepto_renglon(str(m.get("descripcion") or ""))
+        if not desc:
+            continue
+        grupos.setdefault(desc, []).append(m)
+    for grupo in grupos.values():
+        # Cobranza: solo el crédito. Gasto o pago: solo el débito.
+        if any(_es_cobranza_asiento(m) for m in grupo):
+            for m in grupo:
+                m["debito"] = 0
+        else:
+            for m in grupo:
+                m["credito"] = 0
+    return [
+        m
+        for m in out
+        if float(money(m.get("debito"))) > 0.005 or float(money(m.get("credito"))) > 0.005
+    ]
+
+
 def renglones_asiento_banco_mes(
     movimientos: list[dict],
     *,
@@ -957,15 +1055,17 @@ def renglones_asiento_banco_mes(
     periodo: str = "",
     fecha_str: str = "",
 ) -> list[dict]:
-    """Asiento en dos bloques, como en Tango:
+    """Dos bloques, cada uno cierra en cero.
 
-    1) Ingresos: Banco al Debe y contrapartidas (deudores) al Haber.
-    2) Gastos: cuentas al Debe y Banco al Haber con el total.
+    1) Ingresos: Banco al Debe, Deudores por ventas o transferencias recibidas al Haber.
+    2) Gastos y pagos: esas cuentas al Debe, Banco al Haber.
     """
     por_clasif: dict[str, dict] = {}
     banco_debe = 0.0
     banco_haber = 0.0
-    for m in movimientos:
+    for m in dejar_un_importe_por_concepto(movimientos):
+        if es_fila_resumen_impositivo(str(m.get("descripcion") or "")):
+            continue
         debito = float(money(m.get("debito")))
         credito = float(money(m.get("credito")))
         clasif = _clave_englobar_asiento(m)
@@ -977,12 +1077,23 @@ def renglones_asiento_banco_mes(
         if desc:
             slot["desc"] = desc
         slot["codigos"].append(cod)
-        if debito > 0.005:
+        cobranza = _es_cobranza_asiento(
+            {
+                "categoria": clasif,
+                "cuenta_plan": desc,
+                "descripcion": m.get("descripcion"),
+                "cuenta_codigo": cod,
+            }
+        )
+        # Ingresos: solo el crédito, contra el banco al Debe.
+        # Gastos y pagos: solo el débito, contra el banco al Haber.
+        if cobranza:
+            if credito > 0.005:
+                slot["haber"] = round(slot["haber"] + credito, 2)
+                banco_debe = round(banco_debe + credito, 2)
+        elif debito > 0.005:
             slot["debe"] = round(slot["debe"] + debito, 2)
             banco_haber = round(banco_haber + debito, 2)
-        if credito > 0.005:
-            slot["haber"] = round(slot["haber"] + credito, 2)
-            banco_debe = round(banco_debe + credito, 2)
 
     rows: list[dict] = []
 

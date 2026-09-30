@@ -7,7 +7,7 @@ import copy
 import html
 import json
 import re
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -28,6 +28,7 @@ from motor_conciliacion import (
     extraer_cuit_proveedor,
     money,
     origen_linea_extracto,
+    dejar_un_importe_por_concepto,
     renglones_asiento_banco_mes,
 )
 from procesador import (
@@ -35,8 +36,12 @@ from procesador import (
     ExportacionTangoError,
     RenglonAsiento,
     cargar_plan_cuentas,
+    BalanceMensual,
+    MovimientoBanco,
+    ResultadoConciliacion,
     clasificar_movimiento_extracto,
     generar_excel_tango_nativo,
+    generar_planilla_conciliacion,
     guardar_biblioteca_persistida,
     normalizar_codigo_cuenta_tango,
     plan_cuentas_desde_csv,
@@ -77,7 +82,7 @@ div[data-testid="stCustomComponentV1"] iframe{border:0 !important;}
 """
 
 _EXTRACTO_GRID = components.declare_component(
-    "extracto_grid",
+    "extracto_grid_un_lado",
     path=str(Path(__file__).resolve().parent / "extracto_grid"),
 )
 
@@ -577,6 +582,20 @@ def _df_extracto(movs: list[dict], opciones: list[str]) -> pd.DataFrame:
     return pd.DataFrame(filas)
 
 
+def _clave_renglon_grilla(desc: str) -> str:
+    t = re.sub(r"\s+", " ", str(desc or "").lower()).strip()
+    return re.sub(r"\b\d{5,}\b", "", t).strip()
+
+
+def _es_cobranza_fila(clasif: str, codigo: str, desc: str = "") -> bool:
+    blob = f"{clasif} {codigo} {desc}".lower()
+    return (
+        "deudor" in blob
+        or "transferencia recib" in blob
+        or str(codigo or "").startswith("113")
+    )
+
+
 def _filas_componente(movs: list[dict]) -> list[dict]:
     filas = []
     for i, m in enumerate(_sin_filas_saldo(movs)):
@@ -593,7 +612,30 @@ def _filas_componente(movs: list[dict]) -> list[dict]:
                 "opciones_codigo": m.get("opciones_codigo") or [],
             }
         )
-    return filas
+    grupos: dict[str, list[dict]] = {}
+    for f in filas:
+        grupos.setdefault(_clave_renglon_grilla(f["desc"]), []).append(f)
+    for grupo in grupos.values():
+        cobranza = any(
+            _es_cobranza_fila(f["clasif"], f["codigo"], f["desc"]) for f in grupo
+        )
+        for f in grupo:
+            if cobranza:
+                f["deb"] = 0.0
+            else:
+                f["cred"] = 0.0
+    por_i = {f["i"]: f for f in filas}
+    for pos, m in enumerate(movs):
+        try:
+            idx = int(m.get("_idx", pos))
+        except (TypeError, ValueError):
+            idx = pos
+        f = por_i.get(idx)
+        if not f:
+            continue
+        m["debito"] = f["deb"]
+        m["credito"] = f["cred"]
+    return [f for f in filas if f["deb"] > 0.004 or f["cred"] > 0.004]
 
 
 def _cuentas_componente(opciones: list[str]) -> list[dict]:
@@ -977,7 +1019,9 @@ def _paso_extracto(
     nombre_activo: str | None,
 ) -> None:
     preview = st.session_state.get(preview_key) or {}
-    movs = _sin_filas_saldo(list(preview.get("movimientos") or []))
+    movs = dejar_un_importe_por_concepto(
+        _sin_filas_saldo(list(preview.get("movimientos") or []))
+    )
     preview["movimientos"] = movs
     st.session_state[preview_key] = preview
     banco = str(preview.get("banco") or "")
@@ -1003,12 +1047,12 @@ def _paso_extracto(
     out = _EXTRACTO_GRID(
         titulo=f"Extracto {banco} · {periodo}",
         subtitulo=subtitulo,
-        grid_id=f"ce_grid_{sociedad_id}_{token}_v6",
+        grid_id=f"ce_grid_{sociedad_id}_{token}_v11",
         filas=_filas_componente(movs),
         cuentas=cuentas,
         cuentas_json=json.dumps(cuentas, ensure_ascii=False),
         clasifs_json=json.dumps(_clasifs_componente(sociedad_id, movs), ensure_ascii=False),
-        key=f"ce_grid_{sociedad_id}_{token}_v6",
+        key=f"ce_grid_{sociedad_id}_{token}_v11",
         default={"action": "idle", "filas": []},
     )
     accion = str((out or {}).get("action") or "idle")
@@ -1035,6 +1079,81 @@ def _paso_extracto(
         st.rerun()
 
 
+def _fecha_mov_planilla(val, fallback: date) -> date:
+    if isinstance(val, datetime):
+        return val.date()
+    if isinstance(val, date):
+        return val
+    s = str(val or "").strip()
+    if "T" in s:
+        s = s.split("T", 1)[0]
+    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"):
+        try:
+            return datetime.strptime(s[:10], fmt).date()
+        except ValueError:
+            continue
+    return fallback
+
+
+def _slug_banco_preview(preview: dict) -> str:
+    meta = preview.get("meta") or {}
+    for item in meta.get("por_banco") or []:
+        slug = str((item or {}).get("banco_slug") or "").strip()
+        if slug:
+            return slug
+    slug = str(meta.get("banco_slug") or "").strip()
+    return slug or "santander"
+
+
+def _bytes_excel_conciliacion(
+    movs: list[dict],
+    *,
+    nombre: str,
+    banco_slug: str,
+    periodo: date,
+) -> bytes:
+    """Plantilla oficial: solapa de conciliación + Detalle Extracto, ligadas por fórmula."""
+    filas: list[MovimientoBanco] = []
+    for m in movs:
+        debito = float(money(m.get("debito")))
+        credito = float(money(m.get("credito")))
+        if debito <= 0.005 and credito <= 0.005:
+            continue
+        clasif = str(m.get("categoria") or m.get("extracto_label") or "").strip()
+        filas.append(
+            MovimientoBanco(
+                fecha=_fecha_mov_planilla(m.get("fecha"), periodo),
+                comprobante="",
+                descripcion=str(m.get("descripcion") or ""),
+                debito=debito,
+                credito=credito,
+                banco=banco_slug,
+                categoria_contable=clasif or "transferencia",
+                archivo_origen=str(m.get("archivo") or m.get("archivo_origen") or ""),
+            )
+        )
+    ingresos = round(sum(m.credito for m in filas), 2)
+    egresos = round(sum(m.debito for m in filas), 2)
+    mes = periodo.replace(day=1)
+    resultado = ResultadoConciliacion(
+        movimientos_todos=filas,
+        solo_banco=filas,
+        bancos_detectados=[banco_slug] if banco_slug else [],
+        mes_referencia=mes,
+        total_depositos=ingresos,
+        total_retiros=egresos,
+        saldos_por_mes={
+            (mes.year, mes.month): BalanceMensual(
+                anio=mes.year,
+                mes=mes.month,
+                total_ingresos=ingresos,
+                total_egresos=egresos,
+            )
+        },
+    )
+    return generar_planilla_conciliacion(resultado, nombre or "Cliente")
+
+
 def _paso_asiento(
     *,
     sociedad_id: int,
@@ -1045,7 +1164,9 @@ def _paso_asiento(
     paso_key: str,
 ) -> None:
     preview = st.session_state.get(preview_key) or {}
-    movs = _sin_filas_saldo(list(preview.get("movimientos") or []))
+    movs = dejar_un_importe_por_concepto(
+        _sin_filas_saldo(list(preview.get("movimientos") or []))
+    )
     preview["movimientos"] = movs
     st.session_state[preview_key] = preview
     banco = str(preview.get("banco") or banco_elegido or "Banco")
@@ -1107,7 +1228,7 @@ def _paso_asiento(
         st.caption("Volvé al extracto y completá las líneas en 99999 / A clasificar.")
         return
 
-    c_bib, c_xls = st.columns(2)
+    c_bib, c_conc, c_xls = st.columns(3)
     with c_bib:
         if st.button(
             "Guardar en biblioteca",
@@ -1125,6 +1246,49 @@ def _paso_asiento(
                 st.error(str(exc))
             except Exception as exc:
                 st.error(f"No se pudo guardar: {exc}")
+    with c_conc:
+        try:
+            periodo_date = preview.get("periodo_date")
+            if not isinstance(periodo_date, date):
+                periodo_date = fecha_asiento.replace(day=1)
+            fp_conc = (
+                banco,
+                periodo,
+                _slug_banco_preview(preview),
+                tuple(
+                    (
+                        str(m.get("fecha") or ""),
+                        str(m.get("descripcion") or ""),
+                        str(m.get("categoria") or ""),
+                        round(float(money(m.get("debito"))), 2),
+                        round(float(money(m.get("credito"))), 2),
+                    )
+                    for m in movs
+                ),
+            )
+            cache_fp_c = f"ce_conc_fp_{sociedad_id}"
+            cache_bytes_c = f"ce_conc_bytes_{sociedad_id}"
+            cache_name_c = f"ce_conc_name_{sociedad_id}"
+            if st.session_state.get(cache_fp_c) != fp_conc:
+                st.session_state[cache_bytes_c] = _bytes_excel_conciliacion(
+                    movs,
+                    nombre=nombre_activo or banco,
+                    banco_slug=_slug_banco_preview(preview),
+                    periodo=periodo_date,
+                )
+                etiqueta = str(periodo).replace("/", "-")
+                st.session_state[cache_name_c] = f"Conciliacion_{etiqueta}.xlsx"
+                st.session_state[cache_fp_c] = fp_conc
+            st.download_button(
+                "Excel de conciliación",
+                data=st.session_state[cache_bytes_c],
+                file_name=st.session_state.get(cache_name_c) or "Conciliacion.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key=f"ce_conc_xlsx_{sociedad_id}",
+            )
+        except Exception as exc:
+            st.error(f"No se pudo armar el Excel de conciliación: {exc}")
     with c_xls:
         try:
             parts = [int(p) for p in periodo.replace("-", "/").split("/") if p]

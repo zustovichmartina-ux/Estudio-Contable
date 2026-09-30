@@ -739,7 +739,7 @@ def _exportar_movimientos_detectados(grupos: list[dict], errores: list[dict]) ->
         )
     ws_mov = wb.create_sheet("MOVIMIENTOS")
     ws_mov.append(
-        ["Banco", "Cuenta", "Archivo", "Fecha", "Descripcion", "Detalle", "Importe", "Saldo", "Clasificacion"]
+        ["Banco", "Cuenta", "Archivo", "Fecha", "Descripcion", "Detalle", "Importe", "Clasificacion"]
     )
     for grupo in grupos:
         df = grupo.get("df")
@@ -755,7 +755,6 @@ def _exportar_movimientos_detectados(grupos: list[dict], errores: list[dict]) ->
                     row.get("Descripcion"),
                     row.get("Detalle"),
                     row.get("Importe"),
-                    row.get("Saldo"),
                     row.get("Clasificacion") or row.get("Nueva_Clasificacion"),
                 ]
             )
