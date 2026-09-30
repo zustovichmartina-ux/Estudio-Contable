@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections import defaultdict
 from typing import Any
 
@@ -16,6 +17,111 @@ RE_SKIP = re.compile(
     r"Llaman|Usted|Al comp|Banco de|Chatea|http|Pagina|Página)",
     re.I,
 )
+
+# Pie del PDF (todos los bancos): totales de impuestos / legal. No son movimientos.
+# Galicia pega este recap a la fecha del último día; hay que matchearlo en cualquier parte del texto.
+_MARCAS_FIN_CUERPO_EXTRACTO = (
+    "detalle impositivo",
+    "tipo de impuesto",
+    "totales de retencion",
+    "totales mensuales de retencion",
+    "totales de percepcion",
+    "informacion impositiva",
+    "resumen impositivo",
+    "resumen de impuestos",
+    "detalle de impuestos",
+    "consolidado de retencion",
+    "consolidado de retenciones",
+    "consolidado importe",
+    "consolidado de impuestos",
+    "credito fiscal discriminado",
+    "el credito fiscal",
+    "credito computable como pago a cuenta",
+    "pueden ser modificados por devoluciones",
+    "los totales mensuales",
+    "total retencion impuesto",
+    "total mensual retencion",
+    "total retencion i.v.a",
+    "total retencion iva",
+    "total retencion imp",
+    "concepto valor tipo",
+    "itf-ley25413",
+    "itf-ley 25413",
+    "s/dec. 380",
+    "s/dec 380",
+    "cambio de comisiones",
+    "tasas de acuerdos",
+    "los precios no incluyen iva",
+    "fin del extracto",
+    "resumen del periodo",
+    "total creditos del periodo",
+    "total debitos del periodo",
+    "canales de atencion",
+    "los depositos estan garantizados",
+    "los depositos efectuados",
+    "los depositos en pesos",
+    "garantia de hasta",
+    "ponemos en tu conocimiento",
+    "saldo total detalle",
+    "tasa extraordinaria",
+)
+_PREFIJOS_FIN_CUERPO_EXTRACTO = (
+    "total retencion",
+    "total mensual retencion",
+    "total impuesto",
+    "total mensual",
+    "consolidado de",
+    "consolidado importe",
+    "itf-ley",
+)
+
+
+def _norm_marca_extracto(texto: str) -> str:
+    t = unicodedata.normalize("NFKD", str(texto or ""))
+    t = "".join(c for c in t if not unicodedata.combining(c))
+    return re.sub(r"\s+", " ", t.lower()).strip()
+
+
+def es_fin_cuerpo_movimientos_extracto(texto: str) -> bool:
+    """True si el texto es el recap de impuestos / pie legal: cortar acá."""
+    n = _norm_marca_extracto(texto)
+    if not n:
+        return False
+    if any(k in n for k in _MARCAS_FIN_CUERPO_EXTRACTO):
+        return True
+    if n.startswith("total $") or n.startswith("total$"):
+        return True
+    if any(n.startswith(p) or f" {p}" in n for p in _PREFIJOS_FIN_CUERPO_EXTRACTO):
+        return True
+    # Galicia: el consolidado lista débito y crédito de 25.413 en el mismo renglón.
+    if (
+        ("25413" in n or "25.413" in n or "25 413" in n)
+        and "sobre credito" in n
+        and "sobre debito" in n
+    ):
+        return True
+    if n.count("total retencion") >= 2 or n.count("total mensual") >= 2:
+        return True
+    return False
+
+
+def truncar_paginas_cuerpo_extracto(
+    paginas: list[tuple[int, str]],
+) -> list[tuple[int, str]]:
+    """Deja el extracto del primer movimiento al último: tira el recap y lo que sigue."""
+    out: list[tuple[int, str]] = []
+    for num, texto in paginas or []:
+        lineas: list[str] = []
+        corto = False
+        for ln in str(texto or "").splitlines():
+            if es_fin_cuerpo_movimientos_extracto(ln):
+                corto = True
+                break
+            lineas.append(ln)
+        out.append((num, "\n".join(lineas)))
+        if corto:
+            break
+    return out
 
 
 def pnum(s: str) -> float:
@@ -99,7 +205,11 @@ def parse_lineas(lineas: list[str]) -> list[dict[str, Any]]:
     while i < len(lineas):
         raw = re.sub(r"[ \t]+", " ", lineas[i]).strip()
         i += 1
-        if not raw or RE_SKIP.match(raw):
+        if not raw:
+            continue
+        if es_fin_cuerpo_movimientos_extracto(raw):
+            break
+        if RE_SKIP.match(raw):
             continue
         mf = RE_FECHA.match(raw)
         if not mf:
@@ -117,6 +227,8 @@ def parse_lineas(lineas: list[str]) -> list[dict[str, Any]]:
         extras: list[str] = []
         while i < len(lineas):
             nxt = re.sub(r"[ \t]+", " ", lineas[i]).strip()
+            if es_fin_cuerpo_movimientos_extracto(nxt):
+                break
             if RE_FECHA.match(nxt) or RE_FECHA_SOLA.match(nxt) or RE_SKIP.match(nxt):
                 break
             if nxt.lower().startswith("total") or re.search(r"p[aá]gina", nxt, re.I):
@@ -167,6 +279,8 @@ def parse_bloques(lineas: list[str]) -> list[dict[str, Any]]:
     while i < len(lineas):
         raw = re.sub(r"[ \t]+", " ", lineas[i]).strip()
         i += 1
+        if es_fin_cuerpo_movimientos_extracto(raw):
+            break
         mf = RE_FECHA_SOLA.match(raw)
         if not mf:
             continue
@@ -175,6 +289,8 @@ def parse_bloques(lineas: list[str]) -> list[dict[str, Any]]:
         while i < len(lineas) and len(montos) < 2:
             nxt = re.sub(r"[ \t]+", " ", lineas[i]).strip()
             if RE_FECHA_SOLA.match(nxt) and (montos or extras):
+                break
+            if es_fin_cuerpo_movimientos_extracto(nxt):
                 break
             if RE_SKIP.match(nxt) or nxt.lower().startswith("total"):
                 break
