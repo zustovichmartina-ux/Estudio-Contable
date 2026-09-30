@@ -674,6 +674,29 @@ def _render_barra_superior_cuenta() -> None:
                                 + (f" ({ultimo})" if ultimo else "")
                                 + ". Podés volver a emitirlo si hace falta."
                             )
+                        with st.expander(
+                            f"👁 Ver asiento {imp} antes de emitir", expanded=False,
+                        ):
+                            asientos_prev = _asientos_consolidados_biblioteca(sociedad_id, imp)
+                            filas_prev = [
+                                {
+                                    "Asiento": a.identificador,
+                                    "Fecha": a.fecha,
+                                    "Cuenta": f"{r.codigo_cuenta} — {r.descripcion_cuenta}",
+                                    "Debe": r.debe,
+                                    "Haber": r.haber,
+                                }
+                                for a in asientos_prev
+                                for r in a.renglones
+                            ]
+                            if filas_prev:
+                                st.dataframe(
+                                    pd.DataFrame(filas_prev),
+                                    use_container_width=True,
+                                    hide_index=True,
+                                )
+                            else:
+                                st.caption("No hay renglones para mostrar.")
                         gen_key_imp = f"btn_emitir_bib_top_{_slug_impuesto(imp)}"
                         bytes_key_imp = f"_bib_tango_bytes_{_slug_impuesto(imp)}_{sociedad_id}"
                         name_key_imp = f"_bib_tango_name_{_slug_impuesto(imp)}_{sociedad_id}"
@@ -750,6 +773,31 @@ def _render_barra_superior_cuenta() -> None:
                                 + (f" ({ultimo_b})" if ultimo_b else "")
                                 + ". Podés volver a emitirlo si hace falta."
                             )
+                        with st.expander(
+                            f"👁 Ver asiento {banco} antes de emitir", expanded=False,
+                        ):
+                            asientos_prev_b = _asientos_consolidados_biblioteca_banco(
+                                sociedad_id, banco,
+                            )
+                            filas_prev_b = [
+                                {
+                                    "Asiento": a.identificador,
+                                    "Fecha": a.fecha,
+                                    "Cuenta": f"{r.codigo_cuenta} — {r.descripcion_cuenta}",
+                                    "Debe": r.debe,
+                                    "Haber": r.haber,
+                                }
+                                for a in asientos_prev_b
+                                for r in a.renglones
+                            ]
+                            if filas_prev_b:
+                                st.dataframe(
+                                    pd.DataFrame(filas_prev_b),
+                                    use_container_width=True,
+                                    hide_index=True,
+                                )
+                            else:
+                                st.caption("No hay renglones para mostrar.")
                         gen_key_bco = f"btn_emitir_bib_banco_top_{_slug_banco(banco)}"
                         bytes_key_bco = f"_bib_tango_bytes_banco_{_slug_banco(banco)}_{sociedad_id}"
                         name_key_bco = f"_bib_tango_name_banco_{_slug_banco(banco)}_{sociedad_id}"
