@@ -14,3 +14,4 @@ rapidocr>=3.0.0
 ddgs>=9.0.0
 plyer>=2.1.0
 cryptography>=42.0.0
+libsql-experimental==0.0.55
