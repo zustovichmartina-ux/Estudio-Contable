@@ -11223,6 +11223,21 @@ def _inyectar_detalle_movimientos(wb, movimientos: list[MovimientoBanco], hoja_r
         ws.add_data_validation(validacion)
 
 
+def _abrir_en_solapa_banco(wb, hoja) -> None:
+    """El archivo abre en la conciliación del banco. IVA queda más atrás."""
+    nombre = hoja.title
+    idx = wb.sheetnames.index(nombre)
+    if idx:
+        wb.move_sheet(hoja, offset=-idx)
+    if HOJA_DETALLE_MOVIMIENTOS in wb.sheetnames:
+        det_idx = wb.sheetnames.index(HOJA_DETALLE_MOVIMIENTOS)
+        if det_idx != 1:
+            wb.move_sheet(wb[HOJA_DETALLE_MOVIMIENTOS], offset=1 - det_idx)
+    wb.active = wb[nombre]
+    for ws in wb.worksheets:
+        ws.sheet_view.tabSelected = ws.title == nombre
+
+
 def generar_planilla_conciliacion(
     resultado: ResultadoConciliacion,
     nombre_cliente: str,
@@ -11313,6 +11328,7 @@ def generar_planilla_conciliacion(
             _inyectar_balance_mes(hoja, col_mes, saldos_meses[clave], es_primer_mes=(idx == 0))
 
     wb.calculation.calcMode = "auto"
+    _abrir_en_solapa_banco(wb, hoja)
 
     buffer = io.BytesIO()
     wb.save(buffer)
