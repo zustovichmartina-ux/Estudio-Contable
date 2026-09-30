@@ -1134,7 +1134,8 @@ def _bytes_excel_conciliacion(
         )
     ingresos = round(sum(m.credito for m in filas), 2)
     egresos = round(sum(m.debito for m in filas), 2)
-    mes = periodo.replace(day=1)
+    ultimo = calendar.monthrange(periodo.year, periodo.month)[1]
+    mes = date(periodo.year, periodo.month, ultimo)
     resultado = ResultadoConciliacion(
         movimientos_todos=filas,
         solo_banco=filas,

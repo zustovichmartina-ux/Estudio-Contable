@@ -10969,6 +10969,25 @@ def imputar_cuenta(descripcion: str, plan_cuentas: pd.DataFrame, categoria: str 
     return PERFILES_BANCO["santander"]["cuenta_contable"]
 
 
+def _alinear_meses_a_fecha_asiento(hoja, fecha: date) -> None:
+    """El mes del asiento es el mes del banco. Conserva el orden de la plantilla."""
+    columnas: list[tuple[int, int]] = []
+    for col in range(3, 15):
+        valor = hoja.cell(5, col).value
+        if isinstance(valor, datetime):
+            columnas.append((col, valor.month))
+        elif isinstance(valor, date):
+            columnas.append((col, valor.month))
+    if not columnas:
+        return
+    inicio = columnas[0][1]
+    anio_inicio = fecha.year if fecha.month >= inicio else fecha.year - 1
+    for col, mes in columnas:
+        anio = anio_inicio if mes >= inicio else anio_inicio + 1
+        hoja.cell(row=5, column=col, value=datetime(anio, mes, 1))
+    hoja["B2"] = datetime(fecha.year, fecha.month, fecha.day)
+
+
 def _columna_mes_en_planilla(hoja, mes: date) -> Optional[str]:
     for col in range(3, hoja.max_column + 1):
         valor = hoja.cell(5, col).value
@@ -11261,28 +11280,20 @@ def generar_planilla_conciliacion(
         hoja_nombre = HOJA_BANCO_DEFAULT
     hoja = wb[hoja_nombre]
 
-    # Reordenar meses en la fila 5 según mes_cierre_balance
-    mes_inicio = (mes_cierre_balance % 12) + 1
-    if resultado.mes_referencia:
-        ref_year = resultado.mes_referencia.year
-        ref_month = resultado.mes_referencia.month
-        if ref_month < mes_inicio:
-            anio_inicio = ref_year - 1
-        else:
-            anio_inicio = ref_year
-    else:
-        anio_inicio = date.today().year
-
-    for i in range(12):
-        col = 3 + i
-        m = (mes_inicio - 1 + i) % 12 + 1
-        y = anio_inicio + ((mes_inicio - 1 + i) // 12)
-        hoja.cell(row=5, column=col, value=datetime(y, m, 1))
-
-    # Solo modificar celdas de datos — encabezado cliente
+    # La fecha del asiento es el último día del mes del banco. Esa misma fecha va arriba.
     hoja["B1"] = nombre_cliente
     if resultado.mes_referencia:
-        hoja["B2"] = datetime(resultado.mes_referencia.year, resultado.mes_referencia.month, 1)
+        ultimo = calendar.monthrange(resultado.mes_referencia.year, resultado.mes_referencia.month)[1]
+        fecha_mes = date(resultado.mes_referencia.year, resultado.mes_referencia.month, ultimo)
+        _alinear_meses_a_fecha_asiento(hoja, fecha_mes)
+    else:
+        mes_inicio = ((mes_cierre_balance or 12) % 12) + 1
+        anio_inicio = date.today().year
+        for i in range(12):
+            col = 3 + i
+            m = (mes_inicio - 1 + i) % 12 + 1
+            y = anio_inicio + ((mes_inicio - 1 + i) // 12)
+            hoja.cell(row=5, column=col, value=datetime(y, m, 1))
 
     filas_categoria: dict[str, int] = {}
     for fila in range(1, hoja.max_row + 1):
