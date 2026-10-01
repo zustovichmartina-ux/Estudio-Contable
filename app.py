@@ -347,7 +347,7 @@ _VENTANA_HEADER = {
     ),
     "ARCA": (
         "ARCA",
-        "Bajá comprobantes de ARCA a la carpeta del cliente",
+        "Facturación electrónica, comprobantes y cola de trabajos",
     ),
     "clientes": ("Clientes", "Altas, CUITs y fichas"),
     "usuarios_oficina": ("Usuarios", "Accesos de la oficina"),
@@ -13319,7 +13319,7 @@ def _main() -> None:
             - **Inversiones**: carga de operaciones, depuración del pool USD y patrimonio (Ganancias / bienes personales).
             - **Herramientas**: recategorización monotributo; extractos PDF → Excel; cuadro bancario; caja USD; convertidor de liquidaciones; cruce facturas.
             - **Tango**: agente del estudio (responde, formula y lee capturas) con las ayudas Axoft y el export de sueldos.
-            - **ARCA**: encola jobs AFIP (Comprobantes en Línea, Portal IVA, FCC/VEPs); el worker local ejecuta en Chrome. Sin claves en la web.
+            - **ARCA**: facturación electrónica (WSFEv1) y cola de jobs (Comprobantes en Línea, Portal IVA, FCC/VEPs). El certificado está en Secrets; las claves de ARCA no se cargan en la web.
             - **Usuarios de oficina**: cada persona entra con su usuario; sesiones independientes.
             - **Cloud**: link público + muro de login (PIN). Planes/balances subidos se cifran con `DATA_ENCRYPTION_KEY`.
             - **Multi-PDF anual**: hasta {MAX_PDFS_ANUALES} extractos consolidados cronológicamente.

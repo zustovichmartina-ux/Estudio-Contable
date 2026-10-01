@@ -414,6 +414,10 @@ def inicializar_bd() -> None:
         import inversiones_db
 
         inversiones_db.inicializar_tablas_inversiones(conn)
+        # Facturación ARCA: CAE, ticket WSAA y datos de emisor en la misma base.
+        import arca.persistencia as arca_persistencia
+
+        arca_persistencia.inicializar_tablas_arca(conn)
         conn.commit()
     auth_oficina.sembrar_usuarios_oficina_default()
     _sembrar_convenios_sueldos_default()

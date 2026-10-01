@@ -6,6 +6,10 @@
 gastos_mp_local/
 *.pem
 *.key
+*.crt
+# Tickets WSAA y salidas locales del emisor (no commitear)
+/cache/
+/salida/
 credentials.json
 secrets.json
 .streamlit/secrets.toml
