@@ -2,10 +2,14 @@
 from __future__ import annotations
 
 import hashlib
+import time
 from datetime import timedelta
 
 import streamlit as st
+from streamlit.runtime.scriptrunner_utils.script_run_context import get_script_run_ctx
 
+import cache_lecturas
+import database
 from rutinas import (
     AVISO_EJERCICIO,
     OPCION_TODOS,
@@ -256,10 +260,26 @@ def _cancelar(pedido_id: int) -> None:
 @st.fragment(run_every=_REFRESCO)
 def _zona_viva(codigo: str, estado_al_abrir: str) -> None:
     """Se actualiza sola mientras el pedido de esta rutina sigue abierto."""
-    _zona(codigo, en_vivo=True)
-    vivo = pedido_abierto(codigo)
-    if vivo is None or str(vivo["estado"]) != estado_al_abrir:
-        st.rerun(scope="app")
+    fragmento = _rerun_solo_fragmento()
+    t0 = time.perf_counter() if fragmento else 0.0
+    antes = database.metricas_rerun() if fragmento else None
+    try:
+        if fragmento:
+            _refrescar_cola()
+        _zona(codigo, en_vivo=True)
+        vivo = pedido_abierto(codigo)
+        if vivo is None or str(vivo["estado"]) != estado_al_abrir:
+            st.rerun(scope="app")
+    finally:
+        if fragmento and antes is not None:
+            despues = database.metricas_rerun()
+            database.imprimir_linea_rerun(
+                total=time.perf_counter() - t0,
+                sync_s=float(despues["sync_s"]) - float(antes["sync_s"]),
+                consultas=int(despues["consultas"]) - int(antes["consultas"]),
+                syncs=int(despues["syncs"]) - int(antes["syncs"]),
+                pagina="Rutinas",
+            )
 
 
 def _zona(codigo: str, *, en_vivo: bool = False) -> None:
@@ -269,6 +289,27 @@ def _zona(codigo: str, *, en_vivo: bool = False) -> None:
     _historial()
 
 
+def _rerun_solo_fragmento() -> bool:
+    """True cuando Streamlit reejecuta solo el fragmento (auto-refresh o el botón)."""
+    try:
+        ctx = get_script_run_ctx(suppress_warning=True)
+    except TypeError:
+        ctx = get_script_run_ctx()
+    except Exception:
+        return False
+    if ctx is None:
+        return False
+    return bool(getattr(ctx, "fragment_ids_this_run", None))
+
+
+def _refrescar_cola() -> None:
+    """Sync de rutina_pedidos y se tira el cache corto para leer lo que acaba de llegar."""
+    database.sincronizar_cola_rutinas()
+    cache_lecturas.pedido_abierto.clear()
+    cache_lecturas.ultimo_pedido.clear()
+    cache_lecturas.pedidos.clear()
+
+
 def _vista_previa(codigo: str, *, en_vivo: bool) -> None:
     st.markdown("##### Vista previa")
     if es_proyeccion(codigo):
@@ -276,6 +317,9 @@ def _vista_previa(codigo: str, *, en_vivo: bool) -> None:
     if en_vivo:
         st.caption("Se actualiza sola cada 5 segundos mientras esta rutina está pendiente o en curso.")
     if st.button("Refrescar", key="rutina_refrescar"):
+        # Dentro del fragmento el sync lo hace el propio rerun del fragmento.
+        if not _rerun_solo_fragmento():
+            _refrescar_cola()
         st.rerun()
 
     pedido = ultimo_pedido(codigo)
