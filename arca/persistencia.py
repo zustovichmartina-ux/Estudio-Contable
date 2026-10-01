@@ -44,6 +44,8 @@ _DDL = (
         condicion_iva TEXT,
         iibb TEXT,
         inicio_actividades TEXT,
+        pto_vta TEXT,
+        tipo TEXT,
         actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """,
@@ -70,6 +72,18 @@ def inicializar_tablas_arca(conn) -> None:
     """Crea las tablas si no existen. Llamado desde database.inicializar_bd()."""
     for sql in _DDL:
         conn.execute(sql)
+    _agregar_columnas_emisor(conn)
+
+
+def _agregar_columnas_emisor(conn) -> None:
+    """Bases ya creadas: suma punto de venta y tipo sin borrar la ficha."""
+    existentes: set[str] = set()
+    for fila in conn.execute("PRAGMA table_info(arca_emisores)").fetchall():
+        nombre = fila["name"] if hasattr(fila, "keys") else fila[1]
+        existentes.add(str(nombre))
+    for col, tipo in (("pto_vta", "TEXT"), ("tipo", "TEXT")):
+        if col not in existentes:
+            conn.execute(f"ALTER TABLE arca_emisores ADD COLUMN {col} {tipo}")
 
 
 def asegurar_tablas() -> None:
@@ -163,23 +177,38 @@ def obtener_emision(emision_id: int) -> dict | None:
 
 
 def guardar_emisor(cuit: str, razon_social: str = "", domicilio: str = "", condicion_iva: str = "",
-                   iibb: str = "", inicio_actividades: str = "") -> None:
+                   iibb: str = "", inicio_actividades: str = "",
+                   pto_vta: str | None = None, tipo: str | None = None) -> None:
+    """Guarda la ficha. Si pto_vta o tipo vienen en None, no pisa el último usado."""
     asegurar_tablas()
+    previo = cargar_emisor(cuit) or {}
+    if pto_vta is None:
+        pto_vta = previo.get("pto_vta") or ""
+    if tipo is None:
+        tipo = previo.get("tipo") or ""
     ahora = dt.datetime.now().isoformat(timespec="seconds")
     with database.obtener_conexion() as conn:
         conn.execute(
             """
-            INSERT INTO arca_emisores (cuit, razon_social, domicilio, condicion_iva, iibb, inicio_actividades, actualizado_en)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO arca_emisores (
+                cuit, razon_social, domicilio, condicion_iva, iibb, inicio_actividades,
+                pto_vta, tipo, actualizado_en
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(cuit) DO UPDATE SET
                 razon_social = excluded.razon_social,
                 domicilio = excluded.domicilio,
                 condicion_iva = excluded.condicion_iva,
                 iibb = excluded.iibb,
                 inicio_actividades = excluded.inicio_actividades,
+                pto_vta = excluded.pto_vta,
+                tipo = excluded.tipo,
                 actualizado_en = excluded.actualizado_en
             """,
-            (cuit, razon_social or "", domicilio or "", condicion_iva or "", iibb or "", inicio_actividades or "", ahora),
+            (
+                cuit, razon_social or "", domicilio or "", condicion_iva or "", iibb or "",
+                inicio_actividades or "", str(pto_vta or ""), str(tipo or ""), ahora,
+            ),
         )
         conn.commit()
 

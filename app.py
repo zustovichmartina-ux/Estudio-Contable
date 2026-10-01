@@ -349,7 +349,7 @@ _VENTANA_HEADER = {
     ),
     "ARCA": (
         "ARCA",
-        "Facturación electrónica, comprobantes y cola de trabajos",
+        "Facturación electrónica y consulta",
     ),
     "Rutinas": (
         "Rutinas",
@@ -12647,7 +12647,7 @@ def _herramienta_extracto_fci() -> None:
 
 
 def _seccion_arca() -> None:
-    """ARCA: la web controla; otra máquina ejecuta AFIP."""
+    """ARCA: facturación electrónica y consulta."""
     render_arca_module()
 
 
@@ -13326,7 +13326,7 @@ def _main() -> None:
             - **Inversiones**: carga de operaciones, depuración del pool USD y patrimonio (Ganancias / bienes personales).
             - **Herramientas**: recategorización monotributo; extractos PDF → Excel; cuadro bancario; caja USD; convertidor de liquidaciones; cruce facturas.
             - **Tango**: agente del estudio (responde, formula y lee capturas) con las ayudas Axoft y el export de sueldos.
-            - **ARCA**: facturación electrónica (WSFEv1) y cola de jobs (Comprobantes en Línea, Portal IVA, FCC/VEPs). El certificado está en Secrets; las claves de ARCA no se cargan en la web.
+            - **ARCA**: facturación electrónica (WSFEv1). El certificado está en Secrets; las claves de ARCA no se cargan en la web.
             - **Rutinas**: encola tareas de la oficina (balances, FCC, Bazan, proyección de Ganancias por IVA). Requisitos, vista previa y el asistente las ejecuta; esta web no.
             - **Usuarios de oficina**: cada persona entra con su usuario; sesiones independientes.
             - **Cloud**: link público + muro de login (PIN). Planes/balances subidos se cifran con `DATA_ENCRYPTION_KEY`.

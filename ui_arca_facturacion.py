@@ -8,7 +8,15 @@ import pandas as pd
 import streamlit as st
 
 from arca.codigos import ALICUOTAS, COND_IVA_RECEPTOR, CONCEPTOS, DOC_TIPOS, TIPOS_CBTE
-from arca.comprobante import COND_IVA_EMISOR, COND_VENTA, a_fecha, solo_digitos
+from arca.comprobante import COND_IVA_EMISOR, COND_VENTA, a_fecha, cuit_valido, solo_digitos
+from arca.formulario import (
+    campos_desde_asociado,
+    campos_desde_emisor,
+    candidatos_asociados,
+    etiqueta_asociado,
+    mensaje_cuit,
+    tipos_para_condicion,
+)
 from arca.persistencia import cargar_emisor, guardar_emisor, listar_emisiones, listar_emisores
 from arca.secretos import CUIT_ESTUDIO, CredencialesError
 from arca.servicio import (
@@ -164,22 +172,154 @@ def _confirmar(borrador: dict, env: str) -> None:
     st.rerun()
 
 
+def _mem() -> dict:
+    mem = st.session_state.get("_fe_mem")
+    if not isinstance(mem, dict):
+        mem = {
+            "razon": "", "domicilio": "", "iibb": "", "inicio": "", "cond": "",
+            "pto": 1, "tipo": "A",
+            "doc_tipo": "CUIT", "doc_nro": "", "nombre_rec": "", "dom_rec": "",
+            "cond_rec": "", "detalle": "", "neto": 0.0, "alicuota": "21%",
+            "asoc_tipo": "", "asoc_pto": 0, "asoc_nro": 0, "asoc_fecha": "", "asoc_id": "",
+        }
+        st.session_state["_fe_mem"] = mem
+    return mem
+
+
+def _gen(nombre: str) -> int:
+    return int(st.session_state.get(nombre) or 0)
+
+
+def _texto(etiqueta: str, mem_key: str, gen: int, clave: str, **kwargs) -> str:
+    mem = _mem()
+    wkey = f"{clave}_{gen}"
+    extra = {}
+    if wkey not in st.session_state:
+        extra["value"] = str(mem.get(mem_key) or "")
+    valor = st.text_input(etiqueta, key=wkey, **extra, **kwargs)
+    mem[mem_key] = valor
+    return valor
+
+
+def _opcion(etiqueta: str, mem_key: str, gen: int, clave: str, opciones: list, **kwargs):
+    mem = _mem()
+    wkey = f"{clave}_{gen}"
+    actual = mem.get(mem_key)
+    if actual not in opciones:
+        actual = opciones[0] if opciones else ""
+        mem[mem_key] = actual
+        st.session_state.pop(wkey, None)
+    extra = {}
+    if wkey not in st.session_state:
+        extra["index"] = opciones.index(actual) if actual in opciones else 0
+    valor = st.selectbox(etiqueta, opciones, key=wkey, **extra, **kwargs)
+    mem[mem_key] = valor
+    return valor
+
+
+def _numero(etiqueta: str, mem_key: str, gen: int, clave: str, minimo, maximo, paso, flotante: bool = False):
+    mem = _mem()
+    wkey = f"{clave}_{gen}"
+    extra = {}
+    if wkey not in st.session_state:
+        bruto = mem.get(mem_key, minimo)
+        try:
+            extra["value"] = float(bruto) if flotante else int(bruto)
+        except (TypeError, ValueError):
+            extra["value"] = float(minimo) if flotante else int(minimo)
+    kwargs = {"min_value": minimo, "step": paso, "key": wkey}
+    if maximo is not None:
+        kwargs["max_value"] = maximo
+    if flotante:
+        kwargs["format"] = "%.2f"
+    valor = st.number_input(etiqueta, **kwargs, **extra)
+    mem[mem_key] = valor
+    return valor
+
+
+def _aplicar_emisor_guardado(cuit: str) -> None:
+    """Si la CUIT es válida y la ficha cambió, completa el formulario una sola vez."""
+    if not cuit_valido(cuit):
+        return
+    emisor = cargar_emisor(cuit) or {}
+    firma = f"{cuit}|{emisor.get('actualizado_en') or ''}"
+    if st.session_state.get("_fe_aplicado") == firma:
+        return
+    st.session_state["_fe_aplicado"] = firma
+    mem = _mem()
+    campos = campos_desde_emisor(emisor)
+    if not campos:
+        if not st.session_state.get("_fe_cargo"):
+            return
+        mem["razon"] = ""
+        mem["domicilio"] = ""
+        mem["iibb"] = ""
+        mem["inicio"] = ""
+        mem["cond"] = ""
+        mem["pto"] = 1
+        mem["tipo"] = "A"
+        st.session_state["_fe_cargo"] = ""
+    else:
+        mem["razon"] = campos.get("razon") or ""
+        mem["domicilio"] = campos.get("domicilio") or ""
+        mem["iibb"] = campos.get("iibb") or ""
+        mem["inicio"] = campos.get("inicio") or ""
+        mem["cond"] = campos.get("cond") or ""
+        if "pto" in campos:
+            mem["pto"] = campos["pto"]
+        if campos.get("tipo"):
+            mem["tipo"] = campos["tipo"]
+        st.session_state["_fe_cargo"] = cuit
+    st.session_state["_fe_gen_emisor"] = _gen("_fe_gen_emisor") + 1
+
+
+def _on_elegir_asociado() -> None:
+    etiq = str(st.session_state.get("fe_asoc_lista") or "")
+    row = (st.session_state.get("_fe_asoc_map") or {}).get(etiq)
+    if not row:
+        return
+    mem = _mem()
+    for clave, valor in campos_desde_asociado(row).items():
+        if valor is None:
+            continue
+        mem[clave] = valor
+    st.session_state["_fe_gen_rec"] = _gen("_fe_gen_rec") + 1
+
+
 def _formulario_manual(env: str) -> None:
     st.markdown("###### Comprobante")
     cuit_txt = st.text_input("CUIT emisor (cliente)", key="fe_cuit", placeholder="11 dígitos, sin guiones")
-    _prefill_emisor(solo_digitos(cuit_txt))
+    aviso = mensaje_cuit(cuit_txt)
+    if aviso:
+        st.warning(aviso)
+    cuit = solo_digitos(cuit_txt)
+    _aplicar_emisor_guardado(cuit)
+    if st.session_state.get("_fe_cargo") == cuit and cuit_valido(cuit):
+        st.caption("Se cargaron los datos guardados de esta CUIT.")
+    gen_e = _gen("_fe_gen_emisor")
+    gen_r = _gen("_fe_gen_rec")
     c1, c2 = st.columns(2)
     with c1:
-        razon = st.text_input("Razón social", key="fe_razon")
-        domicilio = st.text_input("Domicilio comercial", key="fe_dom")
-        cond_emisor = st.selectbox("Condición IVA emisor", COND_IVA_EMISOR, key="fe_cond_emisor")
+        razon = _texto("Razón social", "razon", gen_e, "fe_razon")
+        domicilio = _texto("Domicilio comercial", "domicilio", gen_e, "fe_dom")
+        cond_emisor = _opcion(
+            "Condición IVA emisor", "cond", gen_e, "fe_cond",
+            [""] + list(COND_IVA_EMISOR),
+            format_func=lambda v: v or "Elegí la condición",
+        )
     with c2:
-        iibb = st.text_input("Ingresos brutos", key="fe_iibb")
-        inicio = st.text_input("Inicio de actividades (dd/mm/aaaa)", key="fe_inicio")
-        pto = st.number_input("Punto de venta (WS)", min_value=1, max_value=99999, step=1, key="fe_pto")
+        iibb = _texto("Ingresos brutos", "iibb", gen_e, "fe_iibb")
+        inicio = _texto("Inicio de actividades (dd/mm/aaaa)", "inicio", gen_e, "fe_inicio")
+        pto = _numero("Punto de venta (WS)", "pto", gen_e, "fe_pto", 1, 99999, 1)
+    if cond_emisor == "Responsable Monotributo":
+        st.caption("Monotributo: solo se puede emitir C, nota de crédito C o nota de débito C.")
+    tipos = tipos_para_condicion(cond_emisor)
+    if _mem().get("tipo") not in tipos:
+        _mem()["tipo"] = "C" if cond_emisor == "Responsable Monotributo" else tipos[0]
+        st.session_state.pop(f"fe_tipo_{gen_e}", None)
     c3, c4, c5 = st.columns(3)
     with c3:
-        tipo = st.selectbox("Tipo de comprobante", list(TIPOS_CBTE), key="fe_tipo")
+        tipo = _opcion("Tipo de comprobante", "tipo", gen_e, "fe_tipo", tipos)
     with c4:
         concepto = st.selectbox("Concepto", list(CONCEPTOS), key="fe_concepto")
     with c5:
@@ -190,24 +330,34 @@ def _formulario_manual(env: str) -> None:
     st.markdown("###### Receptor")
     letra = str(tipo)[-1:] if tipo else "C"
     conds = [desc for _cod, (desc, clases) in COND_IVA_RECEPTOR.items() if letra in clases or letra not in "ABC"]
-    if st.session_state.get("fe_cond_rec") not in conds:
-        st.session_state["fe_cond_rec"] = conds[0]
+    if _mem().get("cond_rec") not in conds:
+        _mem()["cond_rec"] = conds[0]
+        st.session_state.pop(f"fe_cond_rec_{gen_r}", None)
+    if str(tipo).startswith(("NC", "ND")):
+        _elegir_asociado(cuit, env, str(tipo))
     r1, r2 = st.columns(2)
     with r1:
-        doc_tipo = st.selectbox("Documento", list(DOC_TIPOS), key="fe_doc_tipo")
-        doc_nro = st.text_input("Número de documento", key="fe_doc_nro")
-        cond_rec = st.selectbox("Condición IVA receptor (RG 5616)", conds, key="fe_cond_rec")
+        doc_tipo = _opcion("Documento", "doc_tipo", gen_r, "fe_doc_tipo", list(DOC_TIPOS))
+        doc_nro = _texto("Número de documento", "doc_nro", gen_r, "fe_doc_nro")
+        if doc_tipo in ("CUIT", "CUIL"):
+            aviso_doc = mensaje_cuit(doc_nro)
+            if aviso_doc:
+                st.warning(aviso_doc)
+        cond_rec = _opcion("Condición IVA receptor (RG 5616)", "cond_rec", gen_r, "fe_cond_rec", conds)
     with r2:
-        nombre_rec = st.text_input("Nombre / razón social", key="fe_nombre_rec")
-        dom_rec = st.text_input("Domicilio", key="fe_dom_rec")
+        nombre_rec = _texto("Nombre / razón social", "nombre_rec", gen_r, "fe_nombre_rec")
+        dom_rec = _texto("Domicilio", "dom_rec", gen_r, "fe_dom_rec")
 
     st.markdown("###### Ítem")
-    detalle = st.text_input("Detalle", key="fe_detalle")
+    detalle = _texto("Detalle", "detalle", gen_r, "fe_detalle")
+    if str(tipo).endswith("C") and _mem().get("alicuota") != "No corresponde (C)":
+        _mem()["alicuota"] = "No corresponde (C)"
+        st.session_state.pop(f"fe_alic_{gen_r}", None)
     i1, i2 = st.columns(2)
     with i1:
-        neto = st.number_input("Neto (A/B) o importe (C)", min_value=0.0, step=0.01, format="%.2f", key="fe_neto")
+        neto = _numero("Neto (A/B) o importe (C)", "neto", gen_r, "fe_neto", 0.0, None, 0.01, flotante=True)
     with i2:
-        alicuota = st.selectbox("Alícuota IVA", list(ALICUOTAS), key="fe_alic")
+        alicuota = _opcion("Alícuota IVA", "alicuota", gen_r, "fe_alic", list(ALICUOTAS))
     if str(tipo).endswith("C"):
         st.caption("En C la alícuota tiene que ser «No corresponde (C)». El importe es el total.")
 
@@ -237,25 +387,29 @@ def _formulario_manual(env: str) -> None:
     asoc_id = asoc_tipo = asoc_pto = asoc_nro = asoc_fecha = None
     if str(tipo).startswith(("NC", "ND")):
         st.markdown("###### Comprobante asociado")
-        st.caption("Una de las dos opciones: el ID de una factura de este lote (o ya emitida desde acá) , o tipo / punto / número.")
-        asoc_id = st.text_input("ID factura asociado", key="fe_asoc_id")
+        st.caption("Elegí uno ya emitido o completá tipo, punto y número. No uses las dos cosas a la vez.")
+        asoc_id = _texto("ID factura asociado (si está en este lote)", "asoc_id", gen_r, "fe_asoc_id")
         a1, a2, a3, a4 = st.columns(4)
         with a1:
-            asoc_tipo = st.selectbox("Tipo asociado", [""] + list(TIPOS_CBTE), key="fe_asoc_tipo")
+            asoc_tipo = _opcion("Tipo asociado", "asoc_tipo", gen_r, "fe_asoc_tipo", [""] + list(TIPOS_CBTE))
         with a2:
-            asoc_pto = st.number_input("Punto de venta", min_value=0, max_value=99998, step=1, key="fe_asoc_pto")
+            asoc_pto = _numero("Punto de venta", "asoc_pto", gen_r, "fe_asoc_pto", 0, 99998, 1)
         with a3:
-            asoc_nro = st.number_input("Número", min_value=0, step=1, key="fe_asoc_nro")
+            asoc_nro = _numero("Número", "asoc_nro", gen_r, "fe_asoc_nro", 0, 99999999, 1)
         with a4:
-            asoc_fecha = st.text_input("Fecha (dd/mm/aaaa)", key="fe_asoc_fecha")
+            asoc_fecha = _texto("Fecha (dd/mm/aaaa)", "asoc_fecha", gen_r, "fe_asoc_fecha")
 
     if "fe_recordar" not in st.session_state:
         st.session_state["fe_recordar"] = True
     recordar = st.checkbox("Guardar estos datos de emisor para la CUIT", key="fe_recordar")
     if st.button("Validar y armar borrador", type="primary", key="fe_validar_manual"):
+        aviso_emit = mensaje_cuit(cuit_txt)
+        if aviso_emit:
+            st.error(aviso_emit)
+            return
         fila = {
             "id": (id_factura or "").strip() or None,
-            "cuit_emisor": solo_digitos(cuit_txt),
+            "cuit_emisor": cuit,
             "razon_emisor": razon,
             "dom_emisor": domicilio,
             "iibb_emisor": iibb,
@@ -285,9 +439,26 @@ def _formulario_manual(env: str) -> None:
             "asoc_nro": int(asoc_nro) if asoc_nro else None,
             "asoc_fecha": (asoc_fecha or "").strip() or None,
         }
-        if recordar and len(fila["cuit_emisor"]) == 11:
+        if recordar and cuit_valido(fila["cuit_emisor"]):
             _guardar_emisor_form(fila)
         _validar_y_guardar(excel_desde_filas([fila]), env, incluir_ejemplos=False)
+
+
+def _elegir_asociado(cuit: str, env: str, tipo: str) -> None:
+    filas = candidatos_asociados(listar_emisiones(cuit, env, limite=500), tipo) if cuit_valido(cuit) else []
+    if not filas:
+        st.caption("No hay comprobantes aprobados de esta CUIT en este ambiente para asociar.")
+        st.session_state["_fe_asoc_map"] = {}
+        return
+    mapa = {etiqueta_asociado(row): row for row in filas}
+    st.session_state["_fe_asoc_map"] = mapa
+    st.selectbox(
+        "Usar un comprobante ya emitido",
+        [""] + list(mapa),
+        key="fe_asoc_lista",
+        on_change=_on_elegir_asociado,
+        format_func=lambda v: v or "Elegí una factura",
+    )
 
 
 def _carga_excel(env: str) -> None:
@@ -368,6 +539,8 @@ def _guardar_emisor_form(fila: dict) -> None:
         condicion_iva=str(fila.get("cond_iva_emisor") or ""),
         iibb=str(fila.get("iibb_emisor") or ""),
         inicio_actividades=str(inicio or ""),
+        pto_vta=str(int(fila.get("pto_vta") or 0) or ""),
+        tipo=str(fila.get("tipo") or ""),
     )
 
 
@@ -525,20 +698,34 @@ def _tab_emisor() -> None:
         st.session_state["fe_em_cuit"] = cuit_sel
         st.session_state["fe_em_razon"] = em.get("razon_social") or ""
         st.session_state["fe_em_dom"] = em.get("domicilio") or ""
-        st.session_state["fe_em_cond"] = em.get("condicion_iva") or COND_IVA_EMISOR[0]
+        st.session_state["fe_em_cond"] = em.get("condicion_iva") or ""
         st.session_state["fe_em_iibb"] = em.get("iibb") or ""
         st.session_state["fe_em_inicio"] = em.get("inicio_actividades") or ""
         st.rerun()
     cuit = st.text_input("CUIT", key="fe_em_cuit")
+    aviso_cuit = mensaje_cuit(cuit)
+    if aviso_cuit:
+        st.warning(aviso_cuit)
     razon = st.text_input("Razón social", key="fe_em_razon")
     domicilio = st.text_input("Domicilio comercial", key="fe_em_dom")
-    cond = st.selectbox("Condición frente al IVA", COND_IVA_EMISOR, key="fe_em_cond")
+    if "fe_em_cond" not in st.session_state:
+        st.session_state["fe_em_cond"] = ""
+    cond = st.selectbox(
+        "Condición frente al IVA",
+        [""] + list(COND_IVA_EMISOR),
+        format_func=lambda v: v or "Elegí la condición",
+        key="fe_em_cond",
+    )
     iibb = st.text_input("Ingresos brutos", key="fe_em_iibb")
     inicio = st.text_input("Inicio de actividades (dd/mm/aaaa)", key="fe_em_inicio")
     if st.button("Guardar datos del emisor", type="primary", key="fe_em_guardar"):
         digits = solo_digitos(cuit)
-        if len(digits) != 11:
-            st.error("El CUIT tiene que tener 11 dígitos.")
+        if not digits:
+            st.error("Ingresá la CUIT.")
+            return
+        aviso_guardar = mensaje_cuit(digits)
+        if aviso_guardar:
+            st.error(aviso_guardar)
             return
         texto_inicio = (inicio or "").strip()
         if texto_inicio:
