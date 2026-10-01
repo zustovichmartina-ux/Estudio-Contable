@@ -418,6 +418,10 @@ def inicializar_bd() -> None:
         import arca.persistencia as arca_persistencia
 
         arca_persistencia.inicializar_tablas_arca(conn)
+        # Cola de rutinas: la web encola, el asistente externo ejecuta.
+        import rutinas as rutinas_cola
+
+        rutinas_cola.inicializar_tablas_rutinas(conn)
         conn.commit()
     auth_oficina.sembrar_usuarios_oficina_default()
     _sembrar_convenios_sueldos_default()
