@@ -180,6 +180,10 @@ class _CursorCompatTurso:
         filas = self._cur.fetchmany(size) if size is not None else self._cur.fetchmany()
         return [self._envolver(f) for f in filas]
 
+    def __iter__(self):
+        # libsql no hace iterable el cursor. Sin esto, `for fila in conn.execute(...)` revienta.
+        return iter(self.fetchall())
+
     def __getattr__(self, nombre):
         return getattr(self._cur, nombre)
 
