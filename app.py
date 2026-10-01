@@ -38,6 +38,7 @@ from prestamos_listado_excel import (
 import auth_oficina
 import database as db
 from afip_worker.ui_streamlit import render_arca_module
+from ui_rutinas import render_rutinas
 from inversiones_ui import seccion_inversiones_arg
 from cruce_facturas_arca import procesar_cruce_facturas_arca
 from ui_extractos import render_herramienta_extractos
@@ -315,6 +316,7 @@ _VENTANAS_PRINCIPALES = (
     "Herramientas",
     "Tango",
     "ARCA",
+    "Rutinas",
 )
 # v4: radio vertical en sidebar (formato Samsara). v3 era segmented top.
 _VENTANA_KEY = "ventana_principal_v4"
@@ -349,6 +351,10 @@ _VENTANA_HEADER = {
         "ARCA",
         "Facturación electrónica y consulta",
     ),
+    "Rutinas": (
+        "Rutinas",
+        "Pedí las tareas de la oficina. Las corre el asistente, no esta web.",
+    ),
     "clientes": ("Clientes", "Altas, CUITs y fichas"),
     "usuarios_oficina": ("Usuarios", "Accesos de la oficina"),
     "acerca": ("Acerca", "Qué hace cada módulo"),
@@ -362,6 +368,7 @@ _VENTANA_NAV_LABELS = {
     "Herramientas": "Herramientas",
     "Tango": "Tango",
     "ARCA": "ARCA",
+    "Rutinas": "Rutinas",
 }
 
 
@@ -13320,6 +13327,7 @@ def _main() -> None:
             - **Herramientas**: recategorización monotributo; extractos PDF → Excel; cuadro bancario; caja USD; convertidor de liquidaciones; cruce facturas.
             - **Tango**: agente del estudio (responde, formula y lee capturas) con las ayudas Axoft y el export de sueldos.
             - **ARCA**: facturación electrónica (WSFEv1). El certificado está en Secrets; las claves de ARCA no se cargan en la web.
+            - **Rutinas**: encola tareas de la oficina (balances, FCC, Bazan, proyección de Ganancias por IVA). Requisitos, vista previa y el asistente las ejecuta; esta web no.
             - **Usuarios de oficina**: cada persona entra con su usuario; sesiones independientes.
             - **Cloud**: link público + muro de login (PIN). Planes/balances subidos se cifran con `DATA_ENCRYPTION_KEY`.
             - **Multi-PDF anual**: hasta {MAX_PDFS_ANUALES} extractos consolidados cronológicamente.
@@ -13351,6 +13359,8 @@ def _main() -> None:
             render_tango_bot()
         elif ventana_activa == "ARCA":
             _seccion_arca()
+        elif ventana_activa == "Rutinas":
+            render_rutinas()
         elif _es_ventana_herramientas(ventana_activa):
             _seccion_herramientas()
         elif ventana_activa == "Recategorización Monotributo":
