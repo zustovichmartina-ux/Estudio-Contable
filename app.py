@@ -13327,7 +13327,7 @@ def _main() -> None:
             - **Herramientas**: recategorización monotributo; extractos PDF → Excel; cuadro bancario; caja USD; convertidor de liquidaciones; cruce facturas.
             - **Tango**: agente del estudio (responde, formula y lee capturas) con las ayudas Axoft y el export de sueldos.
             - **ARCA**: facturación electrónica (WSFEv1) y cola de jobs (Comprobantes en Línea, Portal IVA, FCC/VEPs). El certificado está en Secrets; las claves de ARCA no se cargan en la web.
-            - **Rutinas**: encola tareas de la oficina (balances, FCC, Bazan). Las ejecuta el asistente, no esta web.
+            - **Rutinas**: encola tareas de la oficina (balances, FCC, Bazan, proyección de Ganancias por IVA). Requisitos, vista previa y el asistente las ejecuta; esta web no.
             - **Usuarios de oficina**: cada persona entra con su usuario; sesiones independientes.
             - **Cloud**: link público + muro de login (PIN). Planes/balances subidos se cifran con `DATA_ENCRYPTION_KEY`.
             - **Multi-PDF anual**: hasta {MAX_PDFS_ANUALES} extractos consolidados cronológicamente.

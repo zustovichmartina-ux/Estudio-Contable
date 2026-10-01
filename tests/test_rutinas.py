@@ -53,7 +53,54 @@ def test_tablas_idempotentes(tmp_path, monkeypatch):
         "terminado_en",
         "resultado",
         "archivos",
+        "preview",
     }
+
+
+def test_agrega_preview_si_la_tabla_era_vieja(tmp_path, monkeypatch):
+    _db(tmp_path, monkeypatch)
+    with database.obtener_conexion() as conn:
+        conn.execute(
+            """
+            CREATE TABLE rutina_pedidos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                rutina TEXT NOT NULL,
+                parametros TEXT,
+                solicitado_por TEXT NOT NULL,
+                creado_en TEXT NOT NULL,
+                estado TEXT NOT NULL,
+                tomado_en TEXT,
+                terminado_en TEXT,
+                resultado TEXT,
+                archivos TEXT
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO rutina_pedidos (rutina, solicitado_por, creado_en, estado)
+            VALUES ('fcc_monotributistas', 'Marti', '2026-10-01T15:00:00+00:00', 'OK')
+            """
+        )
+        conn.commit()
+    rutinas.asegurar_tablas()
+    rutinas.asegurar_tablas()
+    pedido = rutinas.obtener_pedido(1)
+    assert pedido is not None
+    assert pedido["preview"] is None
+    assert pedido["estado"] == "OK"
+
+
+def test_catalogo_requisitos_a_confirmar():
+    codigos = [item["codigo"] for item in rutinas.RUTINAS]
+    assert "proyecciones_ganancias_iva" in codigos
+    proy = rutinas.rutina_por_codigo("proyecciones_ganancias_iva")
+    assert proy is not None
+    assert any("compras y ventas" in texto for texto in proy["requisitos"])
+    for item in rutinas.RUTINAS:
+        assert item["nombre"] and item["descripcion"] and item["requisitos"]
+        for texto in item["requisitos"]:
+            assert str(texto).startswith("A CONFIRMAR")
 
 
 def test_inicializar_bd_engancha_la_tabla():
@@ -163,6 +210,114 @@ def test_listar_por_estado(tmp_path, monkeypatch):
     assert len(rutinas.listar_pedidos(estado="EN_CURSO")) == 1
     with pytest.raises(rutinas.ErrorRutina):
         rutinas.listar_pedidos(estado="RARO")
+
+
+def test_terminar_guarda_preview(tmp_path, monkeypatch):
+    _db(tmp_path, monkeypatch)
+    pedido = rutinas.crear_pedido("proyecciones_ganancias_iva", "Sol", "2026-09")
+    rutinas.tomar_pedido(pedido["id"])
+    with pytest.raises(rutinas.ErrorRutina):
+        rutinas.normalizar_preview(["no"])
+    ruta = r"\\TANGOSRV\Compartido\CLIENTES\ACME\Ganancias.xlsx"
+    cerrado = rutinas.terminar_pedido(
+        pedido["id"],
+        "OK",
+        "Proyección actualizada",
+        preview={
+            "resumen_md": "Quedó la proyección de **Ganancias**.",
+            "tablas": [
+                {"titulo": "Cambios", "columnas": ["Cliente", "Celda"], "filas": [["ACME", "C12"]]}
+            ],
+            "archivos": [ruta],
+        },
+    )
+    assert cerrado["preview"]["resumen_md"].startswith("Quedó")
+    assert cerrado["preview"]["tablas"][0]["filas"] == [["ACME", "C12"]]
+    assert cerrado["archivos"] == ruta
+    assert rutinas.filas_tabla_preview(cerrado["preview"]["tablas"][0]) == [
+        {"Cliente": "ACME", "Celda": "C12"}
+    ]
+    assert rutinas.ultimo_pedido("proyecciones_ganancias_iva")["id"] == pedido["id"]
+
+
+def test_cli_preview_json(tmp_path, monkeypatch, capsys):
+    _db(tmp_path, monkeypatch)
+    cli = _cli()
+    pedido = rutinas.crear_pedido("bazan_detalle_items", "Lu")
+    rutinas.tomar_pedido(pedido["id"])
+    path = tmp_path / "preview.json"
+    path.write_text(
+        json.dumps(
+            {
+                "resumen_md": "Detalle **armado**.",
+                "tablas": [
+                    {
+                        "titulo": "Ítems",
+                        "columnas": ["Archivo", "Fila"],
+                        "filas": [["items.xlsx", 4]],
+                    }
+                ],
+                "archivos": [r"D:\Bazan\items.xlsx"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert (
+        cli.main(
+            [
+                "terminar",
+                str(pedido["id"]),
+                "--estado",
+                "OK",
+                "--resultado",
+                "Detalle listo",
+                "--preview-json",
+                str(path),
+            ]
+        )
+        == 0
+    )
+    data = json.loads(capsys.readouterr().out)
+    assert data["pedido"]["preview"]["tablas"][0]["titulo"] == "Ítems"
+    assert data["pedido"]["archivos"] == r"D:\Bazan\items.xlsx"
+
+    otro = rutinas.crear_pedido("bazan_detalle_items", "Lu")
+    rutinas.tomar_pedido(otro["id"])
+    malo = tmp_path / "malo.json"
+    malo.write_text("{", encoding="utf-8")
+    assert (
+        cli.main(
+            [
+                "terminar",
+                str(otro["id"]),
+                "--estado",
+                "OK",
+                "--resultado",
+                "no",
+                "--preview-json",
+                str(malo),
+            ]
+        )
+        == 1
+    )
+    fallo = json.loads(capsys.readouterr().out)
+    assert fallo["ok"] is False
+    assert rutinas.obtener_pedido(otro["id"])["estado"] == "EN_CURSO"
+    assert (
+        cli.main(
+            [
+                "terminar",
+                str(otro["id"]),
+                "--estado",
+                "ERROR",
+                "--resultado",
+                "sin archivo",
+                "--preview-json",
+                str(tmp_path / "no-esta.json"),
+            ]
+        )
+        == 1
+    )
 
 
 def test_cli_listar_tomar_terminar(tmp_path, monkeypatch, capsys):

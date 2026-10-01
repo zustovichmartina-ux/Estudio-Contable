@@ -9,6 +9,7 @@ Ejemplos (desde la raíz del repo):
     python scripts/cola_rutinas.py listar --estado PENDIENTE
     python scripts/cola_rutinas.py tomar 12
     python scripts/cola_rutinas.py terminar 12 --estado OK --resultado "Listo" --archivos "C:\\ruta\\salida.xlsx"
+    python scripts/cola_rutinas.py terminar 12 --estado OK --resultado "Listo" --preview-json preview.json
 """
 from __future__ import annotations
 
@@ -26,6 +27,7 @@ from rutinas import (  # noqa: E402
     ESTADOS_CIERRE,
     ErrorRutina,
     listar_pedidos,
+    normalizar_preview,
     tomar_pedido,
     terminar_pedido,
 )
@@ -49,7 +51,19 @@ def _pedido_json(pedido: dict) -> dict:
         "terminado_en": pedido.get("terminado_en"),
         "resultado": pedido.get("resultado"),
         "archivos": pedido.get("archivos"),
+        "preview": pedido.get("preview"),
     }
+
+
+def _leer_preview(ruta: str) -> dict:
+    path = Path(ruta)
+    if not path.is_file():
+        raise ErrorRutina(f"No está el archivo de preview: {path}")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ErrorRutina(f"El preview no es JSON válido: {exc}") from exc
+    return normalizar_preview(data)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -70,6 +84,11 @@ def main(argv: list[str] | None = None) -> int:
     p_terminar.add_argument("--estado", required=True, choices=ESTADOS_CIERRE)
     p_terminar.add_argument("--resultado", required=True)
     p_terminar.add_argument("--archivos", default=None)
+    p_terminar.add_argument(
+        "--preview-json",
+        default=None,
+        help="Archivo JSON {resumen_md, tablas:[{titulo, columnas, filas}], archivos:[rutas]}",
+    )
 
     args = parser.parse_args(argv)
     try:
@@ -79,7 +98,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "tomar":
             pedido = tomar_pedido(args.id)
             return _imprimir({"ok": True, "pedido": _pedido_json(pedido)})
-        pedido = terminar_pedido(args.id, args.estado, args.resultado, args.archivos)
+        preview = _leer_preview(args.preview_json) if args.preview_json else None
+        pedido = terminar_pedido(
+            args.id, args.estado, args.resultado, args.archivos, preview=preview
+        )
         return _imprimir({"ok": True, "pedido": _pedido_json(pedido)})
     except ErrorRutina as exc:
         return _imprimir({"ok": False, "error": str(exc)}, ok=False)

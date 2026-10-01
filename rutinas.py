@@ -6,6 +6,7 @@ el SQLite local.
 """
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -13,31 +14,62 @@ from zoneinfo import ZoneInfo
 import database
 
 # Catálogo editable. `codigo` es lo que se guarda en rutina_pedidos.rutina.
-RUTINAS: tuple[dict[str, str], ...] = (
+# `requisitos` es la checklist de la web: hay que tildarlos todos para ejecutar.
+# Van marcados A CONFIRMAR hasta que la oficina ajuste el texto.
+RUTINAS: tuple[dict, ...] = (
     {
         "codigo": "seguimiento_balances_urgencia",
         "nombre": "Seguimiento balances urgencia",
         "descripcion": "Actualiza Seguimiento_Balances.xlsx en el servidor marcando urgencias.",
+        "requisitos": (
+            "A CONFIRMAR: Seguimiento_Balances.xlsx está en el servidor y nadie lo tiene abierto.",
+            "A CONFIRMAR: ya está definido qué urgencias hay que marcar.",
+        ),
     },
     {
         "codigo": "control_fcc_portal_iva",
         "nombre": "Control FCC Portal IVA",
         "descripcion": "Revisa en ARCA Portal IVA las facturas de los clientes FCC.",
+        "requisitos": (
+            "A CONFIRMAR: el listado de clientes FCC del período está al día.",
+            "A CONFIRMAR: el asistente puede entrar a ARCA Portal IVA.",
+        ),
     },
     {
         "codigo": "fcc_monotributistas",
         "nombre": "FCC monotributistas",
         "descripcion": "Control mensual de monotributistas FCC.",
+        "requisitos": (
+            "A CONFIRMAR: el mes a controlar es el que corresponde.",
+            "A CONFIRMAR: el padrón de monotributistas FCC está actualizado.",
+        ),
     },
     {
         "codigo": "aviso_bazan_bajar_archivos",
         "nombre": "Aviso Bazan bajar archivos",
         "descripcion": "Recordatorio para bajar archivos de Bazan.",
+        "requisitos": (
+            "A CONFIRMAR: corresponde avisar ahora para bajar los archivos de Bazan.",
+            "A CONFIRMAR: hay alguien en la oficina para bajarlos.",
+        ),
     },
     {
         "codigo": "bazan_detalle_items",
         "nombre": "Bazan Detalle Items",
         "descripcion": "Arma el detalle de ítems de Bazan.",
+        "requisitos": (
+            "A CONFIRMAR: los archivos de Bazan de este período ya se bajaron.",
+            "A CONFIRMAR: el período del detalle está definido.",
+        ),
+    },
+    {
+        "codigo": "proyecciones_ganancias_iva",
+        "nombre": "Proyecciones Ganancias por IVA",
+        "descripcion": "Arma o actualiza la proyección de Ganancias de cada cliente desde las compras y ventas descargadas.",
+        "requisitos": (
+            "A CONFIRMAR: están descargados los archivos de compras y ventas del período en la carpeta del cliente.",
+            "A CONFIRMAR: el período y los clientes a proyectar están definidos.",
+        ),
     },
 )
 
@@ -66,7 +98,8 @@ _DDL = (
         tomado_en TEXT,
         terminado_en TEXT,
         resultado TEXT,
-        archivos TEXT
+        archivos TEXT,
+        preview TEXT
     )
     """,
     """
@@ -135,7 +168,16 @@ def inicializar_tablas_rutinas(conn) -> None:
     """Crea la tabla y los índices si no existen. Llamado desde database.inicializar_bd()."""
     for sql in _DDL:
         conn.execute(sql)
+    _agregar_columna_preview(conn)
     _asegurar_indice_abierto(conn)
+
+
+def _agregar_columna_preview(conn) -> None:
+    """Suma `preview` en bases que ya tenían la tabla (ALTER idempotente)."""
+    columnas = {fila[1] for fila in conn.execute("PRAGMA table_info(rutina_pedidos)")}
+    if "preview" in columnas:
+        return
+    conn.execute("ALTER TABLE rutina_pedidos ADD COLUMN preview TEXT")
 
 
 def asegurar_tablas() -> None:
@@ -161,7 +203,91 @@ def _asegurar_indice_abierto(conn) -> None:
 def _a_dict(fila) -> dict:
     datos = {clave: fila[clave] for clave in fila.keys()}
     datos["nombre"] = nombre_rutina(str(datos.get("rutina") or ""))
+    datos["preview"] = _preview_desde_texto(datos.get("preview"))
     return datos
+
+
+def _preview_desde_texto(valor) -> dict | None:
+    if valor is None or valor == "":
+        return None
+    if isinstance(valor, dict):
+        return valor
+    try:
+        data = json.loads(valor)
+    except (TypeError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data
+
+
+def _celda_preview(valor):
+    if isinstance(valor, (dict, list)):
+        return json.dumps(valor, ensure_ascii=False)
+    return valor
+
+
+def normalizar_preview(data) -> dict:
+    """Deja el preview en {resumen_md, tablas, archivos}. Lanza ErrorRutina si no cierra."""
+    if not isinstance(data, dict):
+        raise ErrorRutina("El preview tiene que ser un objeto JSON.")
+    resumen = data.get("resumen_md")
+    if resumen is None:
+        resumen = ""
+    if not isinstance(resumen, str):
+        raise ErrorRutina("resumen_md tiene que ser texto.")
+    tablas = data.get("tablas") or []
+    if not isinstance(tablas, list):
+        raise ErrorRutina("tablas tiene que ser una lista.")
+    limpias = []
+    for tabla in tablas:
+        if not isinstance(tabla, dict):
+            raise ErrorRutina("Cada tabla del preview tiene que ser un objeto.")
+        columnas = tabla.get("columnas") or []
+        filas = tabla.get("filas") or []
+        if not isinstance(columnas, list) or not isinstance(filas, list):
+            raise ErrorRutina("columnas y filas tienen que ser listas.")
+        filas_limpias = []
+        for fila in filas:
+            if isinstance(fila, (list, tuple)):
+                filas_limpias.append([_celda_preview(celda) for celda in fila])
+            else:
+                filas_limpias.append(fila)
+        limpias.append(
+            {
+                "titulo": str(tabla.get("titulo") or ""),
+                "columnas": [str(col) for col in columnas],
+                "filas": filas_limpias,
+            }
+        )
+    archivos = data.get("archivos") or []
+    if not isinstance(archivos, list):
+        raise ErrorRutina("archivos tiene que ser una lista de rutas.")
+    return {
+        "resumen_md": resumen,
+        "tablas": limpias,
+        "archivos": [str(ruta) for ruta in archivos if str(ruta or "").strip()],
+    }
+
+
+def filas_tabla_preview(tabla: dict) -> list[dict]:
+    """Pasa una tabla del preview a filas para st.dataframe."""
+    columnas = [str(col) for col in (tabla.get("columnas") or [])]
+    salida: list[dict] = []
+    for fila in tabla.get("filas") or []:
+        if isinstance(fila, dict):
+            if columnas:
+                salida.append({col: fila.get(col, "") for col in columnas})
+            else:
+                salida.append({str(clave): valor for clave, valor in fila.items()})
+            continue
+        if isinstance(fila, (list, tuple)):
+            headers = columnas or [str(i + 1) for i in range(len(fila))]
+            valores = list(fila) + [""] * max(0, len(headers) - len(fila))
+            salida.append({col: valores[i] if i < len(valores) else "" for i, col in enumerate(headers)})
+            continue
+        salida.append({"valor": fila})
+    return salida
 
 
 def _validar_codigo(rutina: str) -> str:
@@ -235,6 +361,25 @@ def crear_pedido(rutina: str, solicitado_por: str, parametros: str | None = None
     if fila is None:
         raise ErrorRutina("No se pudo crear el pedido.")
     return _a_dict(fila)
+
+
+def ultimo_pedido(rutina: str) -> dict | None:
+    """El pedido más nuevo de esa rutina, en cualquier estado."""
+    codigo = str(rutina or "").strip()
+    if not codigo:
+        return None
+    asegurar_tablas()
+    with database.obtener_conexion() as conn:
+        fila = conn.execute(
+            """
+            SELECT * FROM rutina_pedidos
+            WHERE rutina = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (codigo,),
+        ).fetchone()
+    return _a_dict(fila) if fila else None
 
 
 def obtener_pedido(pedido_id: int) -> dict | None:
@@ -320,8 +465,9 @@ def terminar_pedido(
     estado: str,
     resultado: str,
     archivos: str | None = None,
+    preview: dict | None = None,
 ) -> dict:
-    """Cierra un pedido EN_CURSO en OK o ERROR."""
+    """Cierra un pedido EN_CURSO en OK o ERROR. `preview` es el JSON de la vista previa."""
     cierre = str(estado or "").strip().upper()
     if cierre not in ESTADOS_CIERRE:
         raise EstadoInvalido("El cierre tiene que ser OK o ERROR.")
@@ -329,16 +475,22 @@ def terminar_pedido(
     if not texto:
         raise ErrorRutina("El resultado no puede estar vacío.")
     adjuntos = str(archivos or "").strip() or None
+    preview_txt = None
+    if preview is not None:
+        normal = normalizar_preview(preview)
+        preview_txt = json.dumps(normal, ensure_ascii=False)
+        if adjuntos is None and normal["archivos"]:
+            adjuntos = "\n".join(normal["archivos"])
     asegurar_tablas()
     with database.obtener_conexion() as conn:
         fila = conn.execute(
             """
             UPDATE rutina_pedidos
-            SET estado = ?, resultado = ?, archivos = ?, terminado_en = ?
+            SET estado = ?, resultado = ?, archivos = ?, preview = ?, terminado_en = ?
             WHERE id = ? AND estado = 'EN_CURSO'
             RETURNING *
             """,
-            (cierre, texto, adjuntos, ahora_utc(), int(pedido_id)),
+            (cierre, texto, adjuntos, preview_txt, ahora_utc(), int(pedido_id)),
         ).fetchone()
         if fila is None:
             _raise_estado(conn, int(pedido_id), "Solo se puede terminar un pedido EN_CURSO.")
