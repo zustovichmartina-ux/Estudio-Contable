@@ -377,7 +377,14 @@ def _clave_mov_repetido(m: dict) -> str:
 
 
 def _propagar_cuentas_repetidas(movs: list[dict]) -> list[dict]:
-    """La misma descripción/clasificación queda en la misma cuenta Tango."""
+    """La misma descripción/clasificación queda en la misma cuenta Tango.
+
+    Si alguna fila del grupo fue corregida a mano (origen == "manual"), esa
+    corrección manda y pisa a las demás filas del grupo que no sean manuales
+    (sugeridas o sin clasificar). Si nadie corrigió nada a mano todavía, se
+    mantiene el comportamiento anterior: solo se completan las filas en
+    blanco con la cuenta más repetida del grupo.
+    """
     grupos: dict[str, list[int]] = {}
     for i, m in enumerate(movs):
         clave = _clave_mov_repetido(m)
@@ -387,6 +394,26 @@ def _propagar_cuentas_repetidas(movs: list[dict]) -> list[dict]:
     out = list(movs)
     for idxs in grupos.values():
         if len(idxs) < 2:
+            continue
+        manuales = [
+            i
+            for i in idxs
+            if str(out[i].get("origen") or "") == "manual"
+            and str(out[i].get("cuenta_codigo") or "").strip() not in {"", "99999"}
+        ]
+        if manuales:
+            codigos_manual = [str(out[i].get("cuenta_codigo") or "").strip() for i in manuales]
+            elegido = max(set(codigos_manual), key=codigos_manual.count)
+            modelo = next(
+                out[i] for i in manuales if str(out[i].get("cuenta_codigo") or "").strip() == elegido
+            )
+            for i in idxs:
+                if i in manuales:
+                    continue
+                out[i]["cuenta_codigo"] = elegido
+                out[i]["cuenta_plan"] = modelo.get("cuenta_plan") or out[i].get("cuenta_plan")
+                out[i]["categoria"] = modelo.get("categoria") or out[i].get("categoria")
+                out[i]["origen"] = "sugerido"
             continue
         codigos = [
             str(out[i].get("cuenta_codigo") or "").strip()
@@ -701,6 +728,7 @@ def _aplicar_filas_componente(
         else:
             m["origen"] = "a_clasificar"
         resultado.append(m)
+    resultado = _propagar_cuentas_repetidas(resultado)
     mapa = _mapa_desde_movimientos(resultado, mapa_clasif or {})
     return _aplicar_mapa_clasif(resultado, mapa)
 

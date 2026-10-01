@@ -325,20 +325,33 @@ def _traducir_error_libsql(exc: BaseException) -> None:
     raise exc
 
 
+_ES_SQL_ESCRITURA = re.compile(
+    r"^\s*(INSERT|UPDATE|DELETE|REPLACE|CREATE|ALTER|DROP)\b", re.IGNORECASE
+)
+
+
 class _ConexionCompatTurso:
     """
     Envuelve la conexión compartida de libsql con la misma API que usa el resto
     del código para sqlite3.Connection (execute/commit/with ... as conn).
+
+    Sync con la nube: uno antes de leer, como máximo uno por rerun
+    (`sincronizar_replica_una_vez`), y uno después de un commit solo si hubo
+    una escritura real (``_sucio``). Un commit sin escritura no sale a la red.
     """
 
     def __init__(self, conn):
         self._conn = conn
-        self._dirty = False
+        self._dirty = False  # hubo un INSERT/UPDATE/DELETE: invalidar el cache de lecturas
+        self._sucio = False  # hubo una escritura (incluye DDL) desde el último sync()
         self.row_factory = None  # compat: el resto del código no necesita fijarlo
 
     def _anotar(self, sql) -> None:
-        if _RE_MUTACION.match(str(sql)):
+        texto = str(sql)
+        if _RE_MUTACION.match(texto):
             self._dirty = True
+        if _ES_SQL_ESCRITURA.match(texto):
+            self._sucio = True
 
     def _reintentar_si_rota(self, exc):
         _traducir_error_libsql(exc)
@@ -359,11 +372,12 @@ class _ConexionCompatTurso:
         cada uno es un viaje de red. Un UPDATE u otro SQL sigue por el driver.
         """
         _contadores["consultas"] += 1
-        self._anotar(sql)
         with _turso_conn_lock:
             filas = [_parametros_libsql(fila) for fila in secuencia]
             if not filas:
                 return None
+            self._anotar(sql)
+            self._sucio = True
             masivo = _insert_masivo(sql, filas)
             try:
                 if masivo is None:
@@ -382,6 +396,9 @@ class _ConexionCompatTurso:
         """
         _contadores["consultas"] += 1
         self._anotar(sql)
+        if _RE_MUTACION.search(str(sql)):
+            self._dirty = True
+        self._sucio = True
         with _turso_conn_lock:
             try:
                 return self._conn.cursor().executescript(sql)
@@ -398,6 +415,13 @@ class _ConexionCompatTurso:
                 self._conn.commit()
             except Exception as exc:
                 self._reintentar_si_rota(exc)
+            if self._sucio:
+                self._sucio = False
+                try:
+                    self._conn.sync()
+                    _contadores["syncs"] += 1
+                except Exception:
+                    pass
         if self._dirty:
             _invalidar_lecturas()
             self._dirty = False

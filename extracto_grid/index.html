@@ -151,6 +151,14 @@ function claveRepetida(m) {
   t = t.replace(/\s+/g, " ").replace(/\b\d{5,}\b/g, "").trim();
   return t;
 }
+function claveSimilar(m) {
+  let t = String(m.desc || "").toLowerCase().trim();
+  t = t.replace(/\s+/g, " ");
+  t = t.replace(/\b\d{4,}\b/g, "");
+  t = t.replace(/-?\s*\d+\s*\/\s*\d+/g, "");
+  t = t.replace(/\s+/g, " ").trim();
+  return t;
+}
 function clasifUsaCuenta(n) {
   return n && n !== "sin clasificar" && n.indexOf("identificar") < 0;
 }
@@ -207,6 +215,35 @@ function aplicarCuentaAClasif(nombre, codigo) {
   });
   chips();
   persistLocal();
+}
+function codigoDesdeTexto(texto) {
+  let s = String(texto || "").trim();
+  if (!s) return "99999";
+  const dash = s.indexOf("—");
+  if (dash >= 0) return s.slice(0, dash).trim() || "99999";
+  if (/^\d+$/.test(s)) return s;
+  const hit = CUENTAS.find((c) => String(c.label || "").toLowerCase() === s.toLowerCase());
+  if (hit) return String(hit.codigo || "99999");
+  return "99999";
+}
+function textoDeCodigo(cod, opciones) {
+  const lista = (opciones && opciones.length) ? opciones : CUENTAS;
+  const c = String(cod || "");
+  const hit = lista.find((x) => String(x.codigo || "") === c);
+  if (hit) return hit.label || (c ? c + " — " : "");
+  return (c && c !== "99999") ? c : "";
+}
+function asegurarDatalistCuentas() {
+  let dl = document.getElementById("dl-cuentas");
+  if (!dl) {
+    dl = document.createElement("datalist");
+    dl.id = "dl-cuentas";
+    document.body.appendChild(dl);
+  }
+  dl.innerHTML = CUENTAS.map((c) => {
+    const lab = c.label || (String(c.codigo || "") + " — ");
+    return `<option value="${esc(lab)}"></option>`;
+  }).join("");
 }
 function optsHtml(sel, opciones) {
   const lista = (opciones && opciones.length) ? opciones : CUENTAS;
@@ -362,25 +399,37 @@ function bindUno(el) {
       return;
     }
     if (k === "codigo") {
+      const codigoFinal = codigoDesdeTexto(el.value);
       const clasifRef = FILAS[i].clasif;
+      const claveRef = claveSimilar(FILAS[i]);
       dest.forEach((j) => {
-        FILAS[j].codigo = el.value;
-        FILAS[j].origen = el.value === "99999" ? "a_clasificar" : "manual";
+        FILAS[j].codigo = codigoFinal;
+        FILAS[j].origen = codigoFinal === "99999" ? "a_clasificar" : "manual";
       });
-      if (clasifUsaCuenta(normClasif(clasifRef)) && el.value !== "99999") {
-        upsertClasif(clasifRef, el.value);
+      let huboOtros = false;
+      if (clasifUsaCuenta(normClasif(clasifRef)) && codigoFinal !== "99999") {
+        upsertClasif(clasifRef, codigoFinal);
         const otros = FILAS
           .map((f, idx) => idx)
-          .filter((idx) => dest.indexOf(idx) < 0 && normClasif(FILAS[idx].clasif) === normClasif(clasifRef) && String(FILAS[idx].codigo || "") !== String(el.value));
-        if (otros.length && window.confirm("¿Aplicar esta cuenta también a los otros " + otros.length + " movimientos con la misma clasificación (" + clasifRef + ")?")) {
+          .filter((idx) => dest.indexOf(idx) < 0
+            && String(FILAS[idx].codigo || "") !== codigoFinal
+            && (normClasif(FILAS[idx].clasif) === normClasif(clasifRef)
+                || (claveRef && claveSimilar(FILAS[idx]) === claveRef)));
+        if (otros.length && window.confirm("¿Aplicar esta cuenta también a los otros " + otros.length + " movimientos parecidos (" + clasifRef + ")?")) {
           otros.forEach((j) => {
-            FILAS[j].codigo = el.value;
+            FILAS[j].codigo = codigoFinal;
+            FILAS[j].clasif = clasifRef;
             FILAS[j].origen = "manual";
           });
           dest = dest.concat(otros);
+          huboOtros = true;
         }
       }
-      dest.forEach((j) => pintarFilaCuenta(j, FILAS[j].codigo, FILAS[j].origen));
+      if (huboOtros) {
+        pintar();
+      } else {
+        dest.forEach((j) => pintarFilaCuenta(j, FILAS[j].codigo, FILAS[j].origen));
+      }
       chips();
       persistLocal();
       return;
@@ -389,10 +438,11 @@ function bindUno(el) {
     persistLocal();
   };
   el.addEventListener("change", aplicar);
-  if (el.getAttribute("data-k") === "clasif_nuevo") {
+  if (el.getAttribute("data-k") === "clasif_nuevo" || el.getAttribute("data-k") === "codigo") {
     el.addEventListener("keydown", (ev) => {
       if (ev.key === "Enter") {
         ev.preventDefault();
+        el.blur();
         aplicar();
       }
     });
@@ -437,6 +487,7 @@ function pintar() {
   const tb = document.getElementById("grid");
   const wrap = document.querySelector(".wrap");
   const y = wrap ? wrap.scrollTop : 0;
+  asegurarDatalistCuentas();
   const grupos = gruposVista();
   tb.innerHTML = grupos.map((g) => {
     const m = g.m;
@@ -457,7 +508,7 @@ function pintar() {
       <td class="num deb">${money(deb)}</td>
       <td class="num cred">${money(cred)}</td>
       <td>${celdaClasif(m, i, idxsAttr)}</td>
-      <td><select data-i="${i}" data-idxs="${idxsAttr}" data-k="codigo">${optsHtml(m.codigo, m.opciones_codigo)}</select></td>
+      <td><input list="dl-cuentas" data-i="${i}" data-idxs="${idxsAttr}" data-k="codigo" value="${esc(textoDeCodigo(m.codigo, m.opciones_codigo))}" placeholder="Buscar cuenta..." autocomplete="off"/></td>
       <td><span class="tag ${esc(m.origen)}">${labelOrigen(m.origen)}</span></td>
       <td><button type="button" class="btn-del" data-idxs="${idxsAttr}" data-accion="${elim ? "restaurar" : "eliminar"}" title="${elim ? "Restaurar movimiento" : "Eliminar: no es parte del extracto"}">${elim ? "\u21ba" : "\ud83d\uddd1"}</button></td>
     </tr>`;
