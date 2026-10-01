@@ -484,3 +484,19 @@ def test_cache_de_clientes_no_repite_y_se_invalida(tmp_path, monkeypatch):
     assert llamadas["n"] == 2
     assert any(fila["nombre"] == "Cache SA" for fila in database.listar_clientes())
     assert llamadas["n"] == 2
+
+
+def test_commit_sin_escritura_no_sincroniza_y_con_escritura_una_vez():
+    interno = _ConnFalso(RuntimeError("no se usa"), donde="ninguno")
+    conn = database._ConexionCompatTurso(interno)
+    conn.execute("SELECT 1")
+    conn.commit()
+    assert interno.sync_llamado is False
+    generacion = database.generacion_datos()
+    conn.execute("UPDATE clientes SET razon_social = ? WHERE id = ?", ("x", 1))
+    conn.commit()
+    assert interno.sync_llamado is True
+    assert database.generacion_datos() == generacion + 1
+    interno.sync_llamado = False
+    conn.commit()
+    assert interno.sync_llamado is False
