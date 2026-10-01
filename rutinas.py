@@ -21,7 +21,8 @@ import database
 # Catálogo editable. `codigo` es lo que se guarda en rutina_pedidos.rutina.
 # `requisitos` es la checklist de la web: hay que tildarlos todos para ejecutar.
 # Van marcados A CONFIRMAR hasta que la oficina ajuste el texto.
-# Proyecciones no usa checklist: `requisitos` va vacío y el texto está en `ayuda`.
+# Proyecciones usa 4 tildes. La ayuda es la carpeta MMAAAA.
+# El cierre del ejercicio no es tilde: es AVISO_EJERCICIO en la vista previa.
 RUTINAS: tuple[dict, ...] = (
     {
         "codigo": "seguimiento_balances_urgencia",
@@ -72,16 +73,14 @@ RUTINAS: tuple[dict, ...] = (
         "codigo": "proyecciones_ganancias_iva",
         "nombre": "Proyecciones Ganancias por IVA",
         "descripcion": "Arma o actualiza la proyección de Ganancias de cada cliente desde las compras y ventas descargadas.",
-        "requisitos": (),
+        "requisitos": (
+            "Listado de imputación contable resumido",
+            "Copia del F931",
+            "Copia de IIBB",
+            "Copia de TISH",
+        ),
         "ayuda": (
-            "Por cada cliente y mes se verifica en el servidor:",
-            "1. En la carpeta de Proyecciones tiene que existir la subcarpeta del período en formato MMAAAA (ej. 082026 para agosto 2026), con los archivos del mes. Solo se procesa el cliente si existe esa carpeta; si no existe, el estado es SIN CARPETA MMAAAA y no se toca nada.",
-            "2. Listado de imputación contable resumido de compras y ventas del mes.",
-            "3. Excel de proyección vigente en su carpeta.",
-            "4. PDF DDJJ IIBB del mes.",
-            "5. PDF F931 del mes (no aplica si 'NO TIENE EMPLEADOS').",
-            "6. TISH del mes solo si TISH=Sí.",
-            "7. Si el mes es posterior al cierre del ejercicio, hace falta papel nuevo del ejercicio siguiente.",
+            "Todo en una carpeta MMAAAA (ej. 082026) dentro de la carpeta de Proyecciones del cliente.",
         ),
     },
 )
@@ -91,15 +90,22 @@ OPCION_TODOS = "Todos"
 ESTADO_SIN_CARPETA = "SIN CARPETA MMAAAA"
 ESTADOS_CONTROL = ("OK", "FALTA", "NO APLICA", "FALTA DATO", ESTADO_SIN_CARPETA)
 COLUMNAS_RESULTADO_PROYECCION = (
-    "Carpeta MMAAAA",
     "Cliente",
-    "Imputación compras y ventas",
-    "Proyección vigente",
-    "DDJJ IIBB",
+    "Carpeta",
+    "Imputación",
     "F931",
+    "IIBB",
     "TISH",
-    "Papel ejercicio siguiente",
     "Estado",
+)
+# Lo controla el asistente en el servidor. En la web no son tildes.
+REGLAS_CONTROL_PROYECCION = (
+    "Tiene que existir la carpeta MMAAAA dentro de la carpeta de Proyecciones y contener los 4 archivos. Si no existe, Carpeta y Estado quedan en SIN CARPETA MMAAAA y no se toca nada.",
+    "F931 es NO APLICA si dice NO TIENE EMPLEADOS.",
+    "TISH es NO APLICA si TISH no es Sí.",
+)
+AVISO_EJERCICIO = (
+    "Si el mes es posterior al cierre del ejercicio, hace falta papel nuevo del ejercicio siguiente."
 )
 # Campo interno, título de la columna en la ficha xlsx / en el JSON exportado.
 COLUMNAS_FICHA = (

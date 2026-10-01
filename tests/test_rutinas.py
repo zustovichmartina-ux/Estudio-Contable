@@ -97,18 +97,30 @@ def test_agrega_preview_si_la_tabla_era_vieja(tmp_path, monkeypatch):
 def test_catalogo_requisitos_a_confirmar():
     proy = rutinas.rutina_por_codigo(rutinas.CODIGO_PROYECCION)
     assert proy is not None
-    assert proy["requisitos"] == ()
-    ayuda = " ".join(proy["ayuda"])
-    assert proy["ayuda"][1].startswith("1.")
-    assert "082026" in proy["ayuda"][1]
-    assert rutinas.ESTADO_SIN_CARPETA in proy["ayuda"][1]
-    assert proy["ayuda"][2].startswith("2.")
-    assert "compras y ventas" in ayuda
-    assert "NO TIENE EMPLEADOS" in ayuda
-    assert "TISH=Sí" in ayuda
-    assert "ejercicio siguiente" in ayuda
-    assert rutinas.COLUMNAS_RESULTADO_PROYECCION[0] == "Carpeta MMAAAA"
-    assert rutinas.COLUMNAS_RESULTADO_PROYECCION[1] == "Cliente"
+    assert proy["requisitos"] == (
+        "Listado de imputación contable resumido",
+        "Copia del F931",
+        "Copia de IIBB",
+        "Copia de TISH",
+    )
+    assert proy["ayuda"] == (
+        "Todo en una carpeta MMAAAA (ej. 082026) dentro de la carpeta de Proyecciones del cliente.",
+    )
+    assert "ejercicio" not in " ".join(proy["requisitos"]).casefold()
+    assert "ejercicio siguiente" in rutinas.AVISO_EJERCICIO
+    reglas = " ".join(rutinas.REGLAS_CONTROL_PROYECCION)
+    assert "NO TIENE EMPLEADOS" in reglas
+    assert "TISH no es Sí" in reglas
+    assert rutinas.ESTADO_SIN_CARPETA in reglas
+    assert rutinas.COLUMNAS_RESULTADO_PROYECCION == (
+        "Cliente",
+        "Carpeta",
+        "Imputación",
+        "F931",
+        "IIBB",
+        "TISH",
+        "Estado",
+    )
     assert rutinas.periodo_mmaaaa("08-2026") == "082026"
     assert rutinas.periodo_mmaaaa("01-2026") == "012026"
     for item in rutinas.RUTINAS:
@@ -504,18 +516,16 @@ def test_tabla_control_proyeccion_en_preview():
         [
             {
                 "Cliente": "ACME",
-                "Carpeta MMAAAA": "OK",
-                "Imputación compras y ventas": "OK",
-                "Proyección vigente": "FALTA",
-                "DDJJ IIBB": "OK",
+                "Carpeta": "OK",
+                "Imputación": "OK",
                 "F931": "NO APLICA",
-                "TISH": "FALTA DATO",
-                "Papel ejercicio siguiente": "NO APLICA",
+                "IIBB": "OK",
+                "TISH": "OK",
                 "Estado": "FALTA",
             },
             {
                 "Cliente": "BETA",
-                "Carpeta MMAAAA": rutinas.ESTADO_SIN_CARPETA,
+                "Carpeta": rutinas.ESTADO_SIN_CARPETA,
                 "Estado": rutinas.ESTADO_SIN_CARPETA,
             },
         ]
@@ -525,13 +535,15 @@ def test_tabla_control_proyeccion_en_preview():
     )
     filas = rutinas.filas_tabla_preview(preview["tablas"][0])
     assert list(filas[0]) == list(rutinas.COLUMNAS_RESULTADO_PROYECCION)
-    assert filas[0]["Carpeta MMAAAA"] == "OK"
+    assert filas[0]["Carpeta"] == "OK"
     assert filas[0]["F931"] == "NO APLICA"
-    assert filas[0]["TISH"] == "FALTA DATO"
+    assert filas[0]["IIBB"] == "OK"
+    assert filas[0]["TISH"] == "OK"
     assert filas[0]["Estado"] == "FALTA"
-    assert filas[1]["Carpeta MMAAAA"] == "SIN CARPETA MMAAAA"
+    assert filas[1]["Carpeta"] == "SIN CARPETA MMAAAA"
     assert filas[1]["Estado"] == "SIN CARPETA MMAAAA"
-    assert filas[1]["Imputación compras y ventas"] == ""
+    assert filas[1]["Imputación"] == ""
+    assert "Papel ejercicio siguiente" not in filas[0]
     assert set(filas[0].values()) <= set(rutinas.ESTADOS_CONTROL) | {"ACME"}
 
 

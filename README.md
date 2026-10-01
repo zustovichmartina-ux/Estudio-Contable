@@ -92,7 +92,9 @@ El catálogo (nombre y descripción) está en `rutinas.py`, en la lista `RUTINAS
 
 En la web se elige la rutina en un desplegable. En las rutinas con checklist, **Ejecutar** se habilita cuando están todos los requisitos tildados. **Listo** cierra la vista previa. Mientras esa rutina está `PENDIENTE` o `EN_CURSO`, la vista y el historial se actualizan solos cada 5 segundos; también está el botón **Refrescar**.
 
-**Proyecciones Ganancias por IVA** no usa checklist. En la carpeta de Proyecciones de cada cliente, los archivos del mes van en una subcarpeta `MMAAAA` (agosto 2026 = `082026`). Si esa carpeta no existe, el cliente no se procesa: estado `SIN CARPETA MMAAAA` y no se toca nada. Después se verifican imputación de compras y ventas, Excel de proyección, DDJJ IIBB, F931 si tiene empleados, TISH si corresponde, y papel del ejercicio siguiente si el mes pasó el cierre. Se elige el período `MM-AAAA` y los clientes (o **Todos**). En `parametros` el período queda en formato `MMAAAA`. La ficha se carga con **Actualizar ficha de clientes (xlsx)** y queda en la base. El asistente la lee con `ficha --json`. La vista previa puede traer una tabla **Por cliente**. La primera columna es **Carpeta MMAAAA**; después van el cliente, un requisito por columna (`OK`, `FALTA`, `NO APLICA`, `FALTA DATO` o `SIN CARPETA MMAAAA`) y el estado final.
+**Proyecciones Ganancias por IVA** tiene 4 tildes: listado de imputación contable resumido, copia del F931, copia de IIBB y copia de TISH. La ayuda dice que todo va en una carpeta `MMAAAA` (agosto 2026 = `082026`) dentro de la carpeta de Proyecciones del cliente. **Ejecutar** se habilita con las 4 tildes, el período y al menos un cliente. En `parametros` el período queda en formato `MMAAAA`. La ficha se carga con **Actualizar ficha de clientes (xlsx)**; el asistente la lee con `ficha --json`.
+
+En el servidor el asistente confirma que esa carpeta exista y tenga los 4 archivos. Si no existe, `Carpeta` y `Estado` quedan en `SIN CARPETA MMAAAA` y no se toca nada. F931 es `NO APLICA` si dice `NO TIENE EMPLEADOS`. TISH es `NO APLICA` si TISH no es Sí. La vista previa trae una tabla por cliente con columnas **Cliente, Carpeta, Imputación, F931, IIBB, TISH y Estado**. El cierre del ejercicio no es una tilde: la vista previa avisa que, si el mes es posterior al cierre, hace falta papel nuevo del ejercicio siguiente.
 
 Códigos que viajan en el JSON (`rutina`):
 
@@ -144,10 +146,10 @@ La vista previa de esa rutina puede incluir la tabla por cliente (el asistente c
   "tablas": [
     {
       "titulo": "Por cliente",
-      "columnas": ["Carpeta MMAAAA", "Cliente", "Imputación compras y ventas", "Proyección vigente", "DDJJ IIBB", "F931", "TISH", "Papel ejercicio siguiente", "Estado"],
+      "columnas": ["Cliente", "Carpeta", "Imputación", "F931", "IIBB", "TISH", "Estado"],
       "filas": [
-        ["OK", "ACME", "OK", "FALTA", "OK", "NO APLICA", "FALTA DATO", "NO APLICA", "FALTA"],
-        ["SIN CARPETA MMAAAA", "BETA", "", "", "", "", "", "", "SIN CARPETA MMAAAA"]
+        ["ACME", "OK", "OK", "NO APLICA", "OK", "OK", "FALTA"],
+        ["BETA", "SIN CARPETA MMAAAA", "", "", "", "", "SIN CARPETA MMAAAA"]
       ]
     }
   ],

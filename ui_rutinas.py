@@ -7,6 +7,7 @@ from datetime import timedelta
 import streamlit as st
 
 from rutinas import (
+    AVISO_EJERCICIO,
     OPCION_TODOS,
     RUTINAS,
     ErrorRutina,
@@ -91,7 +92,7 @@ def render_rutinas() -> None:
             st.rerun()
 
     if not requisitos_ok and es_proyeccion(codigo):
-        st.caption("Elegí el período y al menos un cliente para poder ejecutar.")
+        st.caption("Tildá los 4 requisitos y elegí el período y al menos un cliente.")
     elif not requisitos_ok:
         st.caption("Tildá todos los requisitos para poder ejecutar.")
     elif not str(quien or "").strip():
@@ -130,13 +131,11 @@ def _formulario_checklist(item: dict) -> tuple[str, bool]:
 
 
 def _formulario_proyeccion(item: dict) -> tuple[str, bool]:
-    st.markdown("##### Qué se verifica")
-    st.caption("Texto de ayuda. No hay que tildar nada: el asistente lo controla en el servidor.")
-    for linea in item.get("ayuda") or ():
-        if str(linea).startswith("Por cada"):
-            st.markdown(linea)
-        else:
-            st.markdown(f"- {linea}")
+    st.markdown("##### Requisitos")
+    st.caption(" ".join(item.get("ayuda") or ()))
+    tildes = []
+    for indice, texto in enumerate(item["requisitos"]):
+        tildes.append(st.checkbox(texto, key=f"rutina_req_{item['codigo']}_{indice}"))
 
     st.markdown("##### Ficha de clientes")
     archivo = st.file_uploader(
@@ -194,7 +193,7 @@ def _formulario_proyeccion(item: dict) -> tuple[str, bool]:
     clientes, todos = resolver_clientes(list(elegidos))
     if todos:
         st.caption(f"Todos: {len(clientes)} cliente(s) activo(s).")
-    if not clientes or not periodo_valido(periodo):
+    if not all(tildes) or not clientes or not periodo_valido(periodo):
         return "", False
     try:
         return parametros_proyeccion(periodo, clientes, todos=todos), True
@@ -272,6 +271,8 @@ def _zona(codigo: str, *, en_vivo: bool = False) -> None:
 
 def _vista_previa(codigo: str, *, en_vivo: bool) -> None:
     st.markdown("##### Vista previa")
+    if es_proyeccion(codigo):
+        st.info(AVISO_EJERCICIO)
     if en_vivo:
         st.caption("Se actualiza sola cada 5 segundos mientras esta rutina está pendiente o en curso.")
     if st.button("Refrescar", key="rutina_refrescar"):
