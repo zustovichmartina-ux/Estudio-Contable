@@ -257,6 +257,11 @@ def _traducir_error_libsql(exc: BaseException) -> None:
     raise exc
 
 
+_ES_SQL_ESCRITURA = re.compile(
+    r"^\s*(INSERT|UPDATE|DELETE|REPLACE|CREATE|ALTER|DROP)\b", re.IGNORECASE
+)
+
+
 class _ConexionCompatTurso:
     """
     Envuelve la conexión compartida de libsql con la misma API que usa el resto
@@ -266,6 +271,7 @@ class _ConexionCompatTurso:
     def __init__(self, conn):
         self._conn = conn
         self.row_factory = None  # compat: el resto del código no necesita fijarlo
+        self._sucio = False  # hubo una escritura desde el último sync()
 
     def _reintentar_si_rota(self, exc):
         _traducir_error_libsql(exc)
@@ -273,24 +279,34 @@ class _ConexionCompatTurso:
     def execute(self, sql, parametros=()):
         with _turso_conn_lock:
             try:
-                return _CursorCompatTurso(self._conn.execute(sql, _parametros_libsql(parametros)))
+                cur = _CursorCompatTurso(self._conn.execute(sql, _parametros_libsql(parametros)))
             except Exception as exc:
                 self._reintentar_si_rota(exc)
+                return
+            if _ES_SQL_ESCRITURA.match(sql):
+                self._sucio = True
+            return cur
 
     def executemany(self, sql, secuencia):
         with _turso_conn_lock:
             filas = [_parametros_libsql(fila) for fila in secuencia]
             try:
-                return _CursorCompatTurso(self._conn.executemany(sql, filas))
+                cur = _CursorCompatTurso(self._conn.executemany(sql, filas))
             except Exception as exc:
                 self._reintentar_si_rota(exc)
+                return
+            self._sucio = True
+            return cur
 
     def executescript(self, sql):
         with _turso_conn_lock:
             try:
-                return self._conn.executescript(sql)
+                r = self._conn.executescript(sql)
             except Exception as exc:
                 self._reintentar_si_rota(exc)
+                return
+            self._sucio = True
+            return r
 
     def cursor(self):
         with _turso_conn_lock:
@@ -302,10 +318,13 @@ class _ConexionCompatTurso:
                 self._conn.commit()
             except Exception as exc:
                 self._reintentar_si_rota(exc)
+            if not self._sucio:
+                return
             try:
                 self._conn.sync()
             except Exception:
                 pass
+            self._sucio = False
 
     def rollback(self):
         with _turso_conn_lock:
