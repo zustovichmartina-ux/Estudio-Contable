@@ -1,4 +1,4 @@
-"""UI Streamlit ARCA: solo encola jobs. Nunca claves. Badge de acceso por CUIT."""
+"""UI Streamlit ARCA: cola de trabajos y facturación electrónica. Nunca claves en la cola."""
 from __future__ import annotations
 
 import base64
@@ -28,6 +28,7 @@ from afip_worker.registry import (
     mark_needs_admin,
 )
 from afip_worker.tunnel import DISCOVERY_URLS
+from ui_arca_facturacion import render_facturacion_arca
 
 
 _ACTION_LABELS = {
@@ -238,11 +239,11 @@ def _cuit_rows(remote: RemoteWorker | None) -> list[dict[str, Any]]:
 
 
 def render_arca_module() -> None:
-    """Módulo top-level ARCA: encolar + cola + registry (sin ejecutar AFIP)."""
+    """Módulo top-level ARCA: facturación por web service y cola del ejecutor."""
     st.caption(
-        "Desde acá solo **controlás**: encolás y mirás la cola. "
-        "AFIP lo abre **otra máquina** (el ejecutor), con la sesión del estudio. "
-        "Las claves nunca van a Excel ni a esta web."
+        "Facturación emite por Web Service con el certificado del estudio (Secrets). "
+        "Encolar, Cola y CUITs solo arman trabajos: AFIP lo abre otra máquina. "
+        "Las claves fiscales no se cargan en esta web."
     )
     remote = _remote()
     if remote:
@@ -262,8 +263,12 @@ def render_arca_module() -> None:
 
     _watch_tareas()
 
-    tab_encolar, tab_cola, tab_cuits = st.tabs(["Encolar", "Cola", "CUITs"])
+    tab_fe, tab_encolar, tab_cola, tab_cuits = st.tabs(
+        ["Facturación", "Encolar", "Cola", "CUITs"]
+    )
 
+    with tab_fe:
+        render_facturacion_arca()
     with tab_encolar:
         _render_encolar(remote)
     with tab_cola:
