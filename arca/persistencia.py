@@ -86,10 +86,31 @@ def _agregar_columnas_emisor(conn) -> None:
             conn.execute(f"ALTER TABLE arca_emisores ADD COLUMN {col} {tipo}")
 
 
+_tablas_ok: set[str] = set()
+
+
+def _clave_bd() -> str:
+    try:
+        return str(database.DB_PATH.resolve())
+    except OSError:
+        return str(database.DB_PATH)
+
+
+def marcar_tablas_listas() -> None:
+    """El arranque ya creó las tablas: las lecturas de la pantalla no repiten el DDL."""
+    _tablas_ok.add(_clave_bd())
+
+
 def asegurar_tablas() -> None:
+    if not database.ddl_permitido():
+        return
+    clave = _clave_bd()
+    if clave in _tablas_ok:
+        return
     with database.obtener_conexion() as conn:
         inicializar_tablas_arca(conn)
         conn.commit()
+    _tablas_ok.add(clave)
 
 
 def _txt(v):
@@ -151,7 +172,7 @@ def emisiones_que_bloquean(ambiente: str) -> list[dict]:
     return [dict(f) for f in filas]
 
 
-def listar_emisiones(cuit: str = "", ambiente: str = "", limite: int = 200) -> list[dict]:
+def _listar_emisiones_directo(cuit: str = "", ambiente: str = "", limite: int = 200) -> list[dict]:
     asegurar_tablas()
     with database.obtener_conexion() as conn:
         filas = conn.execute(
@@ -167,6 +188,13 @@ def listar_emisiones(cuit: str = "", ambiente: str = "", limite: int = 200) -> l
             (cuit, cuit, ambiente, ambiente, int(limite)),
         ).fetchall()
     return [dict(f) for f in filas]
+
+
+def listar_emisiones(cuit: str = "", ambiente: str = "", limite: int = 200) -> list[dict]:
+    # import local: cache_lecturas importa este módulo (ciclo).
+    import cache_lecturas
+
+    return [dict(fila) for fila in cache_lecturas.emisiones_de_pantalla(cuit, ambiente, int(limite))]
 
 
 def obtener_emision(emision_id: int) -> dict | None:
@@ -222,13 +250,20 @@ def cargar_emisor(cuit: str) -> dict | None:
     return dict(fila) if fila else None
 
 
-def listar_emisores() -> list[dict]:
+def _listar_emisores_directo() -> list[dict]:
     asegurar_tablas()
     with database.obtener_conexion() as conn:
         filas = conn.execute(
             "SELECT cuit, razon_social, domicilio, condicion_iva, iibb, inicio_actividades FROM arca_emisores ORDER BY razon_social"
         ).fetchall()
     return [dict(f) for f in filas]
+
+
+def listar_emisores() -> list[dict]:
+    # import local: cache_lecturas importa este módulo (ciclo).
+    import cache_lecturas
+
+    return [dict(fila) for fila in cache_lecturas.emisores_de_pantalla()]
 
 
 def leer_ta(ambiente: str, servicio: str, cert_hash: str) -> dict | None:

@@ -282,6 +282,13 @@ def sembrar_equipo_oficina(
     aplicar_pin = bool(forzar_pin) and not _EQUIPO_PIN_LISTO
     marca_pin = _marca_equipo(True)
     marca_sin_pin = _marca_equipo(False)
+    if not aplicar_pin and not conocemos_marca:
+        # import local: cache_lecturas importa auth_oficina (ciclo).
+        import cache_lecturas
+
+        actual_cache = cache_lecturas.semilla_de_pantalla("usuarios_equipo")
+        if actual_cache in (marca_pin, marca_sin_pin):
+            return 0
     if conocemos_marca and (
         marca_leida == marca_pin or (marca_leida == marca_sin_pin and not aplicar_pin)
     ):
@@ -358,7 +365,7 @@ def sembrar_usuarios_oficina_default(
     )
 
 
-def listar_usuarios_oficina(solo_activos: bool = True) -> list[dict]:
+def _listar_usuarios_directo(solo_activos: bool = True) -> list[dict]:
     with database.obtener_conexion() as conn:
         if solo_activos:
             filas = conn.execute(
@@ -371,6 +378,13 @@ def listar_usuarios_oficina(solo_activos: bool = True) -> list[dict]:
                 "ORDER BY nombre COLLATE NOCASE"
             ).fetchall()
     return [dict(f) for f in filas]
+
+
+def listar_usuarios_oficina(solo_activos: bool = True) -> list[dict]:
+    # import local: cache_lecturas importa auth_oficina (ciclo).
+    import cache_lecturas
+
+    return [dict(fila) for fila in cache_lecturas.usuarios_de_pantalla(bool(solo_activos))]
 
 
 def obtener_usuario_oficina(usuario: str) -> dict | None:

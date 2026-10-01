@@ -12,6 +12,7 @@ import sqlite3
 import unicodedata
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import openpyxl
@@ -253,10 +254,31 @@ def _agregar_columna_preview(conn) -> None:
     conn.execute("ALTER TABLE rutina_pedidos ADD COLUMN preview TEXT")
 
 
+_tablas_ok: set[str] = set()
+
+
+def _clave_bd() -> str:
+    try:
+        return str(Path(database.DB_PATH).resolve())
+    except OSError:
+        return str(database.DB_PATH)
+
+
+def marcar_tablas_listas() -> None:
+    """El arranque ya creó las tablas: las lecturas de la pantalla no repiten el DDL."""
+    _tablas_ok.add(_clave_bd())
+
+
 def asegurar_tablas() -> None:
+    if not database.ddl_permitido():
+        return
+    clave = _clave_bd()
+    if clave in _tablas_ok:
+        return
     with database.obtener_conexion() as conn:
         inicializar_tablas_rutinas(conn)
         conn.commit()
+    _tablas_ok.add(clave)
 
 
 def _asegurar_indice_abierto(conn) -> None:
@@ -615,11 +637,7 @@ def _validar_quien(solicitado_por: str) -> str:
     return quien
 
 
-def pedido_abierto(rutina: str) -> dict | None:
-    """Pedido PENDIENTE o EN_CURSO de esa rutina, si hay uno."""
-    codigo = str(rutina or "").strip()
-    if not codigo:
-        return None
+def _pedido_abierto_directo(codigo: str) -> dict | None:
     asegurar_tablas()
     with database.obtener_conexion() as conn:
         fila = conn.execute(
@@ -632,6 +650,18 @@ def pedido_abierto(rutina: str) -> dict | None:
             (codigo,),
         ).fetchone()
     return _a_dict(fila) if fila else None
+
+
+def pedido_abierto(rutina: str) -> dict | None:
+    """Pedido PENDIENTE o EN_CURSO de esa rutina, si hay uno."""
+    codigo = str(rutina or "").strip()
+    if not codigo:
+        return None
+    # import local: cache_lecturas importa rutinas (ciclo).
+    import cache_lecturas
+
+    fila = cache_lecturas.pedido_abierto_de_pantalla(codigo)
+    return dict(fila) if fila else None
 
 
 def crear_pedido(rutina: str, solicitado_por: str, parametros: str | None = None) -> dict:
@@ -665,7 +695,7 @@ def crear_pedido(rutina: str, solicitado_por: str, parametros: str | None = None
             ).fetchone()
             conn.commit()
     except sqlite3.IntegrityError as exc:
-        abierto = pedido_abierto(codigo)
+        abierto = _pedido_abierto_directo(codigo)
         if abierto:
             raise PedidoDuplicado(codigo, int(abierto["id"]), str(abierto["estado"])) from exc
         raise ErrorRutina("No se pudo crear el pedido.") from exc
@@ -674,11 +704,7 @@ def crear_pedido(rutina: str, solicitado_por: str, parametros: str | None = None
     return _a_dict(fila)
 
 
-def ultimo_pedido(rutina: str) -> dict | None:
-    """El pedido más nuevo de esa rutina, en cualquier estado."""
-    codigo = str(rutina or "").strip()
-    if not codigo:
-        return None
+def _ultimo_pedido_directo(codigo: str) -> dict | None:
     asegurar_tablas()
     with database.obtener_conexion() as conn:
         fila = conn.execute(
@@ -693,6 +719,18 @@ def ultimo_pedido(rutina: str) -> dict | None:
     return _a_dict(fila) if fila else None
 
 
+def ultimo_pedido(rutina: str) -> dict | None:
+    """El pedido más nuevo de esa rutina, en cualquier estado."""
+    codigo = str(rutina or "").strip()
+    if not codigo:
+        return None
+    # import local: cache_lecturas importa rutinas (ciclo).
+    import cache_lecturas
+
+    fila = cache_lecturas.ultimo_pedido_de_pantalla(codigo)
+    return dict(fila) if fila else None
+
+
 def obtener_pedido(pedido_id: int) -> dict | None:
     asegurar_tablas()
     with database.obtener_conexion() as conn:
@@ -703,10 +741,7 @@ def obtener_pedido(pedido_id: int) -> dict | None:
     return _a_dict(fila) if fila else None
 
 
-def listar_pedidos(*, estado: str | None = None, limite: int = 50) -> list[dict]:
-    if estado is not None and estado not in ESTADOS:
-        raise ErrorRutina(f"Estado desconocido: {estado}.")
-    tope = max(1, int(limite))
+def _listar_pedidos_directo(estado: str | None, tope: int) -> list[dict]:
     asegurar_tablas()
     with database.obtener_conexion() as conn:
         if estado:
@@ -729,6 +764,16 @@ def listar_pedidos(*, estado: str | None = None, limite: int = 50) -> list[dict]
                 (tope,),
             ).fetchall()
     return [_a_dict(fila) for fila in filas]
+
+
+def listar_pedidos(*, estado: str | None = None, limite: int = 50) -> list[dict]:
+    if estado is not None and estado not in ESTADOS:
+        raise ErrorRutina(f"Estado desconocido: {estado}.")
+    tope = max(1, int(limite))
+    # import local: cache_lecturas importa rutinas (ciclo).
+    import cache_lecturas
+
+    return [dict(fila) for fila in cache_lecturas.pedidos_de_pantalla(estado or "", tope)]
 
 
 def cancelar_pedido(pedido_id: int) -> dict:

@@ -296,6 +296,7 @@ def _arrancar_estudio() -> bool:
 
 
 try:
+    db.comenzar_rerun()
     _arrancar_estudio()
 except Exception as _exc_boot:
     st.error("No pudo arrancar la base del estudio.")

@@ -191,15 +191,25 @@ class _CursorCompatTurso:
 
 # Streamlit puede atender varias sesiones en threads del mismo proceso; la
 # conexión de libsql (réplica local + Turso) se comparte, así que serializamos
-# el acceso real con un lock global. El costo de red (sync) solo se paga al
-# abrir la conexión por primera vez en el proceso y al confirmar escrituras,
-# no en cada lectura.
+# el acceso real con un lock global. El sync de red es uno por rerun de
+# Streamlit, no uno por consulta: las lecturas salen de la réplica local.
 _turso_conn_lock = threading.Lock()
 _turso_conn_obj = None
+_turso_es_replica = False
+_sync_hecho_en_rerun = False
+_sync_ok = True
+_generacion_datos = 0
+_ddl_bloqueado = False
+_contadores = {"consultas": 0, "syncs": 0}
+_RE_MUTACION = re.compile(r"^\s*(INSERT|UPDATE|DELETE|REPLACE)\b", re.IGNORECASE)
+_RE_DESTRUYE_CLIENTES = re.compile(
+    r"\b(?:DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?CLIENTES|CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?CLIENTES_NEW|RENAME\s+TO\s+CLIENTES)\b",
+    re.IGNORECASE,
+)
 
 
 def _obtener_conn_turso_singleton():
-    global _turso_conn_obj
+    global _turso_conn_obj, _turso_es_replica
     if _turso_conn_obj is not None:
         return _turso_conn_obj
     url, token = _credenciales_turso()
@@ -209,9 +219,67 @@ def _obtener_conn_turso_singleton():
         if _turso_conn_obj is None:
             try:
                 _turso_conn_obj = _libsql.connect(str(DB_PATH), sync_url=url, auth_token=token)
+                _turso_es_replica = True
             except Exception:
                 _turso_conn_obj = None
+                _turso_es_replica = False
     return _turso_conn_obj
+
+
+def generacion_datos() -> int:
+    """Sube en cada escritura. Las lecturas cacheadas la usan para invalidarse."""
+    return _generacion_datos
+
+
+def contadores() -> dict[str, int]:
+    """Consultas y syncs desde el último `comenzar_rerun`."""
+    return {"consultas": _contadores["consultas"], "syncs": _contadores["syncs"]}
+
+
+def ddl_permitido() -> bool:
+    """False si la réplica no se pudo leer: no se manda DDL a ciegas."""
+    return not _ddl_bloqueado
+
+
+def _invalidar_lecturas() -> None:
+    global _generacion_datos
+    _generacion_datos += 1
+
+
+def sincronizar_replica_una_vez() -> bool:
+    """Un sync por rerun. True si no hay réplica o si este sync salió bien."""
+    global _sync_hecho_en_rerun, _sync_ok
+    if not _turso_es_replica:
+        return True
+    if _sync_hecho_en_rerun:
+        return _sync_ok
+    _sync_hecho_en_rerun = True
+    conn = _turso_conn_obj
+    if conn is None:
+        _sync_ok = False
+        return False
+    try:
+        with _turso_conn_lock:
+            conn.sync()
+        _contadores["syncs"] += 1
+        _sync_ok = True
+        return True
+    except Exception:
+        logging.getLogger(__name__).warning(
+            "No se pudo sincronizar la réplica; no se toma el archivo local como esquema.",
+            exc_info=True,
+        )
+        _sync_ok = False
+        return False
+
+
+def comenzar_rerun() -> None:
+    """Arranque de un rerun de Streamlit: como máximo un sync, y la cuenta en cero."""
+    global _sync_hecho_en_rerun
+    _sync_hecho_en_rerun = False
+    _contadores["consultas"] = 0
+    _contadores["syncs"] = 0
+    sincronizar_replica_una_vez()
 
 
 def _parametros_libsql(parametros):
@@ -265,12 +333,19 @@ class _ConexionCompatTurso:
 
     def __init__(self, conn):
         self._conn = conn
+        self._dirty = False
         self.row_factory = None  # compat: el resto del código no necesita fijarlo
+
+    def _anotar(self, sql) -> None:
+        if _RE_MUTACION.match(str(sql)):
+            self._dirty = True
 
     def _reintentar_si_rota(self, exc):
         _traducir_error_libsql(exc)
 
     def execute(self, sql, parametros=()):
+        _contadores["consultas"] += 1
+        self._anotar(sql)
         with _turso_conn_lock:
             try:
                 return _CursorCompatTurso(self._conn.execute(sql, _parametros_libsql(parametros)))
@@ -283,6 +358,8 @@ class _ConexionCompatTurso:
         El ``executemany`` de libsql hace un ``execute`` por fila y, en Turso,
         cada uno es un viaje de red. Un UPDATE u otro SQL sigue por el driver.
         """
+        _contadores["consultas"] += 1
+        self._anotar(sql)
         with _turso_conn_lock:
             filas = [_parametros_libsql(fila) for fila in secuencia]
             if not filas:
@@ -303,6 +380,8 @@ class _ConexionCompatTurso:
 
         ``Connection.executescript`` traga el error; el del cursor no.
         """
+        _contadores["consultas"] += 1
+        self._anotar(sql)
         with _turso_conn_lock:
             try:
                 return self._conn.cursor().executescript(sql)
@@ -319,10 +398,9 @@ class _ConexionCompatTurso:
                 self._conn.commit()
             except Exception as exc:
                 self._reintentar_si_rota(exc)
-            try:
-                self._conn.sync()
-            except Exception:
-                pass
+        if self._dirty:
+            _invalidar_lecturas()
+            self._dirty = False
 
     def rollback(self):
         with _turso_conn_lock:
@@ -348,6 +426,50 @@ class _ConexionCompatTurso:
         return False
 
 
+class _ConexionLocal:
+    """SQLite del disco. Misma marca de escritura que la réplica, para invalidar el cache."""
+
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
+        self._dirty = False
+
+    def _anotar(self, sql) -> None:
+        if _RE_MUTACION.match(str(sql)):
+            self._dirty = True
+
+    def execute(self, sql, parametros=()):
+        self._anotar(sql)
+        return self._conn.execute(sql, parametros)
+
+    def executemany(self, sql, secuencia):
+        self._anotar(sql)
+        return self._conn.executemany(sql, secuencia)
+
+    def executescript(self, sql):
+        if _RE_MUTACION.search(str(sql)):
+            self._dirty = True
+        return self._conn.executescript(sql)
+
+    def commit(self):
+        self._conn.commit()
+        if self._dirty:
+            _invalidar_lecturas()
+            self._dirty = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, tipo_exc, exc, tb):
+        if tipo_exc is None:
+            self.commit()
+        else:
+            self._conn.rollback()
+        return False
+
+    def __getattr__(self, nombre):
+        return getattr(self._conn, nombre)
+
+
 def obtener_conexion():
     """
     Abre conexión con filas accesibles por nombre de columna.
@@ -355,48 +477,14 @@ def obtener_conexion():
     variables de entorno), reutiliza una réplica local sincronizada con Turso
     (una sola conexión por proceso) para que los datos sobrevivan a un
     reinicio o "dormida" de la app. Si no hay credenciales, usa el SQLite
-    local de siempre (comportamiento sin cambios).
+    local de siempre.
     """
     conn = _obtener_conn_turso_singleton()
     if conn is not None:
         return _ConexionCompatTurso(conn)
     conn2 = sqlite3.connect(DB_PATH)
     conn2.row_factory = sqlite3.Row
-    return conn2
-
-
-def _migrar_tipo_monotributista(conn: sqlite3.Connection) -> None:
-    """Amplía el CHECK de tipo_persona para admitir Monotributista."""
-    fila = conn.execute(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='clientes'"
-    ).fetchone()
-    ddl = fila[0] if fila else ""
-    if "Monotributista" in ddl:
-        return
-    conn.execute(
-        """
-        CREATE TABLE clientes_new (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nombre TEXT NOT NULL,
-            cuit TEXT NOT NULL UNIQUE,
-            tipo_persona TEXT NOT NULL CHECK (
-                tipo_persona IN ('Persona Jurídica', 'Persona Física', 'Monotributista')
-            ),
-            plan_cuentas_path TEXT,
-            mes_cierre_balance INTEGER,
-            creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        """
-    )
-    conn.execute(
-        """
-        INSERT INTO clientes_new (id, nombre, cuit, tipo_persona, plan_cuentas_path, mes_cierre_balance, creado_en)
-        SELECT id, nombre, cuit, tipo_persona, plan_cuentas_path, mes_cierre_balance, creado_en
-        FROM clientes
-        """
-    )
-    conn.execute("DROP TABLE clientes")
-    conn.execute("ALTER TABLE clientes_new RENAME TO clientes")
+    return _ConexionLocal(conn2)
 
 
 def _asegurar_app_meta(conn) -> None:
@@ -540,11 +628,23 @@ def _sql_arranque() -> str:
     return " UNION ALL ".join(partes)
 
 
+def _duda_esquema(columnas: dict, sql_clientes: str) -> bool:
+    """True si clientes dice una cosa y el CREATE otra. Vacío de las dos es una base nueva."""
+    cols = set((columnas or {}).get("clientes") or ())
+    sql = str(sql_clientes or "").strip()
+    if cols and not sql:
+        return True
+    if sql and not cols:
+        return True
+    return False
+
+
 def _leer_arranque(conn):
-    """Devuelve version, columnas, sql de clientes, marcas y conteos.
+    """Devuelve version, columnas, sql de clientes, marcas, conteos y si la lectura es dudosa.
 
     Si todavía no están las tablas, marcas y conteos quedan en None y cada
-    semilla mira la base por su cuenta.
+    semilla mira la base por su cuenta. Si la lectura falla, el último valor
+    es True: no se sabe el esquema y no se toca `clientes`.
     """
     try:
         filas = conn.execute(_sql_arranque()).fetchall()
@@ -552,8 +652,8 @@ def _leer_arranque(conn):
         try:
             columnas, sql_clientes = _leer_estado_esquema(conn)
         except sqlite3.OperationalError:
-            return None, {}, "", None, None
-        return None, columnas, sql_clientes, None, None
+            return None, {}, "", None, None, True
+        return None, columnas, sql_clientes, None, None, _duda_esquema(columnas, sql_clientes)
     version = None
     marcas: dict[str, str] = {}
     columnas: dict[str, set[str]] = {tabla: set() for tabla in _TABLAS_ESQUEMA}
@@ -571,7 +671,7 @@ def _leer_arranque(conn):
             sql_clientes = str(fila[2] or "")
         elif tipo == "n":
             conteos[str(fila[1])] = int(fila[2] or 0)
-    return version, columnas, sql_clientes, marcas, conteos
+    return version, columnas, sql_clientes, marcas, conteos, _duda_esquema(columnas, sql_clientes)
 
 
 _TABLAS_ESQUEMA = (
@@ -750,7 +850,6 @@ def _definir_esquema(conn) -> None:
         )
         """
     )
-    _migrar_tipo_monotributista(conn)
     try:
         conn.execute("ALTER TABLE clientes ADD COLUMN mes_cierre_balance INTEGER")
     except sqlite3.OperationalError:
@@ -850,21 +949,85 @@ def _sembrar_despues_del_ddl(marcas, conteos) -> None:
     inversiones_db.sembrar_tc_bna_default(ya_hay=conteos.get("tc", 0))
 
 
+def _sql_destruye_clientes(sql: str) -> bool:
+    return _RE_DESTRUYE_CLIENTES.search(" ".join(str(sql).split())) is not None
+
+
+def _aplicar_ddl(conn, sentencias: list[str]) -> None:
+    """CREATE/ALTER idempotentes entre BEGIN y COMMIT. Si algo falla, ROLLBACK.
+
+    ``executescript`` de libsql no deshace lo ya aplicado: un ALTER que revienta
+    dejaba a `clientes` reconstruida. Por eso cada sentencia va en la transacción.
+    """
+    limpias = []
+    for sql in sentencias:
+        if _sql_destruye_clientes(sql):
+            logging.getLogger(__name__).error(
+                "Se descartó DDL que reconstruye clientes: %s", sql[:160]
+            )
+            continue
+        limpias.append(sql)
+    if not limpias:
+        return
+    try:
+        conn.execute("BEGIN")
+        for sql in limpias:
+            conn.execute(sql)
+        conn.execute("COMMIT")
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+
+
+def _marcar_modulos_listos() -> None:
+    """Las pantallas no vuelven a correr el DDL de rutinas ni de ARCA en cada lectura."""
+    # import local: rutinas y arca importan database (ciclo).
+    import rutinas as rutinas_cola
+    import arca.persistencia as arca_persistencia
+
+    rutinas_cola.marcar_tablas_listas()
+    arca_persistencia.marcar_tablas_listas()
+
+
 def inicializar_bd() -> None:
-    """Crea tablas y siembras. Con el esquema ya marcado, una sola lectura."""
+    """Crea tablas y siembras. Con el esquema ya marcado, una sola lectura.
+
+    En una réplica, primero `sync()`. Si ese sync falla o el esquema queda
+    inconsistente, no se manda DDL: una réplica nueva y vacía no es una base nueva.
+    """
+    global _ddl_bloqueado
     conn = obtener_conexion()
-    version, columnas, sql_clientes, marcas, conteos = _leer_arranque(conn)
+    if isinstance(conn, _ConexionCompatTurso) and _turso_es_replica:
+        if not sincronizar_replica_una_vez():
+            _ddl_bloqueado = True
+            logging.getLogger(__name__).error(
+                "Réplica sin sincronizar: no se lee el esquema ni se reconstruye clientes."
+            )
+            return
+    else:
+        _ddl_bloqueado = False
+    version, columnas, sql_clientes, marcas, conteos, duda = _leer_arranque(conn)
+    if duda:
+        _ddl_bloqueado = True
+        logging.getLogger(__name__).error(
+            "Lectura de esquema dudosa: no se aplica DDL ni se reconstruye clientes."
+        )
+        return
+    _ddl_bloqueado = False
     if version == SCHEMA_VERSION:
+        _marcar_modulos_listos()
         return
     grabador = _GrabadorDDL(columnas, sql_clientes)
     _definir_esquema(grabador)
     sentencias = [
         sql
         for sql in grabador.sentencias
-        if "idx_rutina_pedidos_abierto" not in sql
+        if "idx_rutina_pedidos_abierto" not in sql and not _sql_destruye_clientes(sql)
     ]
-    if sentencias:
-        conn.executescript(";\n".join(sentencias))
+    _aplicar_ddl(conn, sentencias)
     try:
         conn.execute(
             """
@@ -877,6 +1040,7 @@ def inicializar_bd() -> None:
         pass
     _sembrar_despues_del_ddl(marcas, conteos)
     guardar_semilla(_CLAVE_SCHEMA, SCHEMA_VERSION)
+    _marcar_modulos_listos()
 
 
 def _reglas_cct_basicas() -> dict:
@@ -1278,8 +1442,7 @@ def crear_cliente(
         return int(cursor.lastrowid)
 
 
-def listar_clientes() -> list[dict]:
-    """Devuelve todos los clientes ordenados por nombre."""
+def _listar_clientes_directo() -> list[dict]:
     with obtener_conexion() as conn:
         filas = conn.execute(
             "SELECT * FROM clientes ORDER BY nombre COLLATE NOCASE"
@@ -1287,12 +1450,30 @@ def listar_clientes() -> list[dict]:
     return [dict(fila) for fila in filas]
 
 
-def obtener_cliente(cliente_id: int) -> Optional[dict]:
-    """Obtiene un cliente por ID."""
+def listar_clientes() -> list[dict]:
+    """Devuelve todos los clientes ordenados por nombre. Cache de pantalla con TTL."""
+    # import local: cache_lecturas importa database (ciclo).
+    import cache_lecturas
+
+    return [dict(fila) for fila in cache_lecturas.clientes_de_pantalla()]
+
+
+def _obtener_cliente_directo(cliente_id: int) -> Optional[dict]:
     with obtener_conexion() as conn:
         fila = conn.execute(
             "SELECT * FROM clientes WHERE id = ?", (cliente_id,)
         ).fetchone()
+    return dict(fila) if fila else None
+
+
+def obtener_cliente(cliente_id: int) -> Optional[dict]:
+    """Obtiene un cliente por ID. Cache de pantalla con TTL."""
+    if cliente_id is None:
+        return None
+    # import local: cache_lecturas importa database (ciclo).
+    import cache_lecturas
+
+    fila = cache_lecturas.cliente_de_pantalla(int(cliente_id))
     return dict(fila) if fila else None
 
 
