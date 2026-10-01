@@ -92,7 +92,7 @@ El catálogo (nombre y descripción) está en `rutinas.py`, en la lista `RUTINAS
 
 En la web se elige la rutina en un desplegable. En las rutinas con checklist, **Ejecutar** se habilita cuando están todos los requisitos tildados. **Listo** cierra la vista previa. Mientras esa rutina está `PENDIENTE` o `EN_CURSO`, la vista y el historial se actualizan solos cada 5 segundos; también está el botón **Refrescar**.
 
-**Proyecciones Ganancias por IVA** no usa checklist. Muestra qué se verifica en el servidor (imputación de compras y ventas, Excel de proyección, DDJJ IIBB, F931 si tiene empleados, TISH si corresponde, y papel del ejercicio siguiente si el mes pasó el cierre). Se elige el período `MM-AAAA` y los clientes (o **Todos**). Esos datos van en `parametros` como JSON. La ficha se carga con **Actualizar ficha de clientes (xlsx)** y queda en la base. El asistente la lee con `ficha --json`. La vista previa puede traer una tabla **Por cliente** con una columna por requisito (`OK`, `FALTA`, `NO APLICA`, `FALTA DATO`) y el estado final.
+**Proyecciones Ganancias por IVA** no usa checklist. En la carpeta de Proyecciones de cada cliente, los archivos del mes van en una subcarpeta `MMAAAA` (agosto 2026 = `082026`). Si esa carpeta no existe, el cliente no se procesa: estado `SIN CARPETA MMAAAA` y no se toca nada. Después se verifican imputación de compras y ventas, Excel de proyección, DDJJ IIBB, F931 si tiene empleados, TISH si corresponde, y papel del ejercicio siguiente si el mes pasó el cierre. Se elige el período `MM-AAAA` y los clientes (o **Todos**). En `parametros` el período queda en formato `MMAAAA`. La ficha se carga con **Actualizar ficha de clientes (xlsx)** y queda en la base. El asistente la lee con `ficha --json`. La vista previa puede traer una tabla **Por cliente**. La primera columna es **Carpeta MMAAAA**; después van el cliente, un requisito por columna (`OK`, `FALTA`, `NO APLICA`, `FALTA DATO` o `SIN CARPETA MMAAAA`) y el estado final.
 
 Códigos que viajan en el JSON (`rutina`):
 
@@ -133,7 +133,7 @@ python scripts/cola_rutinas.py terminar 12 --estado OK --resultado "Listo" --arc
 `ficha --json` imprime la ficha cargada (array; `[]` si todavía no hay). Un pedido de proyecciones guarda el período y los clientes así:
 
 ```json
-{"periodo": "10-2026", "todos": false, "clientes": [{"sociedad": "ACME", "cuit": "30712345671"}]}
+{"periodo": "102026", "todos": false, "clientes": [{"sociedad": "ACME", "cuit": "30712345671"}]}
 ```
 
 La vista previa de esa rutina puede incluir la tabla por cliente (el asistente completa cada requisito):
@@ -144,8 +144,11 @@ La vista previa de esa rutina puede incluir la tabla por cliente (el asistente c
   "tablas": [
     {
       "titulo": "Por cliente",
-      "columnas": ["Cliente", "Imputación compras y ventas", "Proyección vigente", "DDJJ IIBB", "F931", "TISH", "Papel ejercicio siguiente", "Estado"],
-      "filas": [["ACME", "OK", "FALTA", "OK", "NO APLICA", "FALTA DATO", "NO APLICA", "FALTA"]]
+      "columnas": ["Carpeta MMAAAA", "Cliente", "Imputación compras y ventas", "Proyección vigente", "DDJJ IIBB", "F931", "TISH", "Papel ejercicio siguiente", "Estado"],
+      "filas": [
+        ["OK", "ACME", "OK", "FALTA", "OK", "NO APLICA", "FALTA DATO", "NO APLICA", "FALTA"],
+        ["SIN CARPETA MMAAAA", "BETA", "", "", "", "", "", "", "SIN CARPETA MMAAAA"]
+      ]
     }
   ],
   "archivos": []

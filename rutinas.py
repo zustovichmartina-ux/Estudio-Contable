@@ -75,20 +75,23 @@ RUTINAS: tuple[dict, ...] = (
         "requisitos": (),
         "ayuda": (
             "Por cada cliente y mes se verifica en el servidor:",
-            "1. Listado de imputación contable resumido de compras y ventas del mes.",
-            "2. Excel de proyección vigente en su carpeta.",
-            "3. PDF DDJJ IIBB del mes.",
-            "4. PDF F931 del mes (no aplica si 'NO TIENE EMPLEADOS').",
-            "5. TISH del mes solo si TISH=Sí.",
-            "6. Si el mes es posterior al cierre del ejercicio, hace falta papel nuevo del ejercicio siguiente.",
+            "1. En la carpeta de Proyecciones tiene que existir la subcarpeta del período en formato MMAAAA (ej. 082026 para agosto 2026), con los archivos del mes. Solo se procesa el cliente si existe esa carpeta; si no existe, el estado es SIN CARPETA MMAAAA y no se toca nada.",
+            "2. Listado de imputación contable resumido de compras y ventas del mes.",
+            "3. Excel de proyección vigente en su carpeta.",
+            "4. PDF DDJJ IIBB del mes.",
+            "5. PDF F931 del mes (no aplica si 'NO TIENE EMPLEADOS').",
+            "6. TISH del mes solo si TISH=Sí.",
+            "7. Si el mes es posterior al cierre del ejercicio, hace falta papel nuevo del ejercicio siguiente.",
         ),
     },
 )
 
 CODIGO_PROYECCION = "proyecciones_ganancias_iva"
 OPCION_TODOS = "Todos"
-ESTADOS_CONTROL = ("OK", "FALTA", "NO APLICA", "FALTA DATO")
+ESTADO_SIN_CARPETA = "SIN CARPETA MMAAAA"
+ESTADOS_CONTROL = ("OK", "FALTA", "NO APLICA", "FALTA DATO", ESTADO_SIN_CARPETA)
 COLUMNAS_RESULTADO_PROYECCION = (
+    "Carpeta MMAAAA",
     "Cliente",
     "Imputación compras y ventas",
     "Proyección vigente",
@@ -389,6 +392,15 @@ def periodo_sugerido() -> str:
     return f"{hoy.month:02d}-{hoy.year}"
 
 
+def periodo_mmaaaa(periodo: str) -> str:
+    """MM-AAAA del selector → carpeta MMAAAA (agosto 2026 = 082026)."""
+    texto = str(periodo or "").strip()
+    coincidencia = _RE_PERIODO.match(texto)
+    if not coincidencia:
+        raise ErrorRutina("El período tiene que ser MM-AAAA.")
+    return f"{coincidencia.group(1)}{coincidencia.group(2)}"
+
+
 def leer_ficha_xlsx(contenido: bytes) -> list[dict]:
     """Lee la ficha. La primera fila son los títulos de COLUMNAS_FICHA."""
     if not contenido:
@@ -505,7 +517,7 @@ def parametros_proyeccion(periodo: str, clientes: list[dict], *, todos: bool) ->
     if not clientes:
         raise ErrorRutina("Elegí al menos un cliente.")
     payload = {
-        "periodo": periodo_txt,
+        "periodo": periodo_mmaaaa(periodo_txt),
         "todos": bool(todos),
         "clientes": [
             {"sociedad": str(fila.get("sociedad") or "").strip(), "cuit": str(fila.get("cuit") or "").strip()}

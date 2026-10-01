@@ -99,10 +99,18 @@ def test_catalogo_requisitos_a_confirmar():
     assert proy is not None
     assert proy["requisitos"] == ()
     ayuda = " ".join(proy["ayuda"])
+    assert proy["ayuda"][1].startswith("1.")
+    assert "082026" in proy["ayuda"][1]
+    assert rutinas.ESTADO_SIN_CARPETA in proy["ayuda"][1]
+    assert proy["ayuda"][2].startswith("2.")
     assert "compras y ventas" in ayuda
     assert "NO TIENE EMPLEADOS" in ayuda
     assert "TISH=Sí" in ayuda
     assert "ejercicio siguiente" in ayuda
+    assert rutinas.COLUMNAS_RESULTADO_PROYECCION[0] == "Carpeta MMAAAA"
+    assert rutinas.COLUMNAS_RESULTADO_PROYECCION[1] == "Cliente"
+    assert rutinas.periodo_mmaaaa("08-2026") == "082026"
+    assert rutinas.periodo_mmaaaa("01-2026") == "012026"
     for item in rutinas.RUTINAS:
         if item["codigo"] == rutinas.CODIGO_PROYECCION:
             continue
@@ -472,15 +480,16 @@ def test_clientes_todos_y_parametros(tmp_path, monkeypatch):
 
     payload = json.loads(rutinas.parametros_proyeccion("10-2026", uno, todos=False))
     assert payload == {
-        "periodo": "10-2026",
+        "periodo": "102026",
         "todos": False,
         "clientes": [{"sociedad": "GAMMA", "cuit": ""}],
     }
     pedido = rutinas.crear_pedido(rutinas.CODIGO_PROYECCION, "Marti", json.dumps(payload, ensure_ascii=False))
-    assert json.loads(pedido["parametros"])["periodo"] == "10-2026"
-    assert rutinas.resumen_parametros(pedido["parametros"]) == "10-2026 · GAMMA"
-    amplio = rutinas.parametros_proyeccion("10-2026", todos, todos=True)
-    assert rutinas.resumen_parametros(amplio).startswith("10-2026 · Todos")
+    assert json.loads(pedido["parametros"])["periodo"] == "102026"
+    assert rutinas.resumen_parametros(pedido["parametros"]) == "102026 · GAMMA"
+    amplio = rutinas.parametros_proyeccion("08-2026", todos, todos=True)
+    assert json.loads(amplio)["periodo"] == "082026"
+    assert rutinas.resumen_parametros(amplio).startswith("082026 · Todos")
     assert rutinas.resumen_parametros("octubre a mano") == "octubre a mano"
     with pytest.raises(rutinas.ErrorRutina):
         rutinas.parametros_proyeccion("2026-10", uno, todos=False)
@@ -495,6 +504,7 @@ def test_tabla_control_proyeccion_en_preview():
         [
             {
                 "Cliente": "ACME",
+                "Carpeta MMAAAA": "OK",
                 "Imputación compras y ventas": "OK",
                 "Proyección vigente": "FALTA",
                 "DDJJ IIBB": "OK",
@@ -502,7 +512,12 @@ def test_tabla_control_proyeccion_en_preview():
                 "TISH": "FALTA DATO",
                 "Papel ejercicio siguiente": "NO APLICA",
                 "Estado": "FALTA",
-            }
+            },
+            {
+                "Cliente": "BETA",
+                "Carpeta MMAAAA": rutinas.ESTADO_SIN_CARPETA,
+                "Estado": rutinas.ESTADO_SIN_CARPETA,
+            },
         ]
     )
     preview = rutinas.normalizar_preview(
@@ -510,9 +525,13 @@ def test_tabla_control_proyeccion_en_preview():
     )
     filas = rutinas.filas_tabla_preview(preview["tablas"][0])
     assert list(filas[0]) == list(rutinas.COLUMNAS_RESULTADO_PROYECCION)
+    assert filas[0]["Carpeta MMAAAA"] == "OK"
     assert filas[0]["F931"] == "NO APLICA"
     assert filas[0]["TISH"] == "FALTA DATO"
     assert filas[0]["Estado"] == "FALTA"
+    assert filas[1]["Carpeta MMAAAA"] == "SIN CARPETA MMAAAA"
+    assert filas[1]["Estado"] == "SIN CARPETA MMAAAA"
+    assert filas[1]["Imputación compras y ventas"] == ""
     assert set(filas[0].values()) <= set(rutinas.ESTADOS_CONTROL) | {"ACME"}
 
 

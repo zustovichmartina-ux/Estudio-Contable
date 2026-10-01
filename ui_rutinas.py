@@ -22,6 +22,7 @@ from rutinas import (
     listar_pedidos,
     parametros_proyeccion,
     pedido_abierto,
+    periodo_mmaaaa,
     periodo_sugerido,
     periodo_valido,
     resolver_clientes,
@@ -177,7 +178,10 @@ def _formulario_proyeccion(item: dict) -> tuple[str, bool]:
     with col_anio:
         anio = st.number_input("Año", min_value=2000, max_value=2100, step=1, key="proy_anio")
     periodo = f"{mes}-{int(anio)}"
-    st.caption(f"Período: {periodo}" if periodo_valido(periodo) else "El período tiene que ser MM-AAAA.")
+    if periodo_valido(periodo):
+        st.caption(f"Período: {periodo} · carpeta {periodo_mmaaaa(periodo)}")
+    else:
+        st.caption("El período tiene que ser MM-AAAA.")
 
     opciones = [OPCION_TODOS] + [etiqueta for etiqueta, _fila in activos]
     elegidos = st.multiselect(
