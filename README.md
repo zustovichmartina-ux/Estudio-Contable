@@ -83,3 +83,33 @@ Los números emitidos, el ticket WSAA (vale unas 12 horas; no hay que pedir otro
 Filas marcadas `EJEMPLO` no salen a producción. Un comprobante ya aprobado con el mismo contenido no se reenvía. Si se corta la conexión, se consulta en ARCA antes de darlo por perdido. La condición de IVA del receptor es obligatoria.
 
 Pruebas sin certificado ni red: `python -m pytest -q tests/test_offline.py tests/test_arca_servicio.py`
+
+## Rutinas (solapa Rutinas)
+
+La oficina pide a mano tareas que el asistente corre en la PC del estudio (ahí están los archivos y ARCA). La web **no** las ejecuta: apretar **Ejecutar** deja un pedido en la tabla `rutina_pedidos`. No hay un segundo paso de aprobación.
+
+El catálogo (nombre y descripción) está en `rutinas.py`, en la lista `RUTINAS`. Cada pedido puede llevar un texto libre de parámetros (período, cliente) y el nombre de quien lo pide.
+
+Códigos que viajan en el JSON (`rutina`):
+
+- `seguimiento_balances_urgencia` — Seguimiento balances urgencia
+- `control_fcc_portal_iva` — Control FCC Portal IVA
+- `fcc_monotributistas` — FCC monotributistas
+- `aviso_bazan_bajar_archivos` — Aviso Bazan bajar archivos
+- `bazan_detalle_items` — Bazan Detalle Items
+
+Estados: `PENDIENTE` → `EN_CURSO` → `OK` o `ERROR`. Un pedido `PENDIENTE` se puede cancelar. Si esa rutina ya tiene uno `PENDIENTE` o `EN_CURSO`, la web avisa y no crea otro.
+
+### Asistente externo
+
+Desde la raíz del repo, con las mismas variables que Streamlit Cloud (`TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN`). Sin esas variables lee el SQLite local y no ve la cola de la web.
+
+```bash
+python scripts/cola_rutinas.py listar --estado PENDIENTE
+python scripts/cola_rutinas.py tomar 12
+python scripts/cola_rutinas.py terminar 12 --estado OK --resultado "Listo" --archivos "C:\ruta\salida.xlsx"
+```
+
+`listar` imprime un array JSON. `tomar` pasa a `EN_CURSO` solo si seguía `PENDIENTE`. `terminar` cierra un `EN_CURSO` en `OK` o `ERROR` (`--resultado` es obligatorio; `--archivos` es opcional, rutas o links). Si la operación no corresponde, sale con código 1 y un JSON `{"ok": false, "error": "..."}`.
+
+Pruebas de la cola, sin Turso: `python -m pytest -q tests/test_rutinas.py`
