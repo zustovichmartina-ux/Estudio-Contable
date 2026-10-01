@@ -15,6 +15,7 @@ circular, ya que database.py llama a funciones de este modulo en runtime.
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 from pathlib import Path
 
@@ -221,27 +222,106 @@ def _secrets_oficina_usuarios() -> list[dict]:
     return out
 
 
-def _aplicar_usuarios_desde_secrets() -> int:
-    """
-    Crea/actualiza usuarios definidos en Secrets (PIN hasheado en SQLite).
-    Devuelve cantidad de usuarios aplicados. No guarda PIN en texto claro en el repo.
-    """
-    definidos = _secrets_oficina_usuarios()
-    if not definidos:
-        return 0
-    aplicados = 0
-    for u in definidos:
-        user = u["usuario"]
+_CLAVE_SECRETS_OFICINA = "oficina_usuarios_secrets"
+# Una corrida por proceso. Streamlit reejecuta el script en cada clic; hashear
+# el PIN (PBKDF2, 600k) y sincronizar Turso en cada rerun trababa el login.
+_SECRETS_USUARIOS_APLICADOS = False
+
+
+def _usuarios_de_secrets_aplicables() -> list[dict]:
+    """Usuarios de Secrets que esta función puede crear. El equipo se siembra aparte."""
+    aplicables: list[dict] = []
+    for u in _secrets_oficina_usuarios():
+        user = str(u.get("usuario") or "").strip().lower()
         if not user or user in _EQUIPO_LOGINS or user in _EQUIPO_ALIASES:
             continue
-        existente = obtener_usuario_oficina(user)
+        aplicables.append(
+            {
+                "usuario": user,
+                "nombre": str(u.get("nombre") or user).strip(),
+                "pin": str(u.get("pin") or "").strip(),
+                "es_admin": bool(u.get("es_admin")),
+            }
+        )
+    return aplicables
+
+
+def _huella_secrets_oficina(usuarios: list[dict]) -> str:
+    """Huella de la config para app_meta. No es el PIN y no se loguea."""
+    partes: list[str] = []
+    for u in sorted(usuarios, key=lambda item: item["usuario"]):
+        pin = u["pin"]
+        pin_marca = hashlib.sha256(pin.encode("utf-8")).hexdigest() if pin else ""
+        partes.append(f"{u['usuario']}|{u['nombre']}|{int(u['es_admin'])}|{pin_marca}")
+    return database.huella_semilla(*partes)
+
+
+def _kwargs_actualizacion(existente: dict, u: dict, *, verificar_pin: bool) -> dict:
+    """Campos que realmente cambian. Sin `pin` no se vuelve a hashear."""
+    kwargs: dict = {}
+    if str(existente.get("nombre") or "").strip() != u["nombre"]:
+        kwargs["nombre"] = u["nombre"]
+    if bool(existente.get("es_admin")) != bool(u["es_admin"]):
+        kwargs["es_admin"] = bool(u["es_admin"])
+    if not bool(existente.get("activo")):
+        kwargs["activo"] = True
+    pin = u["pin"]
+    if not pin:
+        return kwargs
+    guardado = str(existente.get("pin_hash") or "")
+    if not guardado.strip():
+        kwargs["pin"] = pin
+    elif verificar_pin and not _verificar_pin(pin, guardado)[0]:
+        kwargs["pin"] = pin
+    return kwargs
+
+
+def _snapshot_usuarios_oficina() -> tuple[str | None, dict[str, dict]]:
+    """Lee huella y usuarios. Solo SELECT: un CREATE acá marcaría sync en Turso."""
+    with database.obtener_conexion() as conn:
+        fila_huella = conn.execute(
+            "SELECT valor FROM app_meta WHERE clave = ?",
+            (_CLAVE_SECRETS_OFICINA,),
+        ).fetchone()
+        if fila_huella is None:
+            huella = None
+        else:
+            valor = fila_huella["valor"] if hasattr(fila_huella, "keys") else fila_huella[0]
+            huella = None if valor is None else str(valor)
+        filas = conn.execute(
+            "SELECT id, usuario, nombre, pin_hash, es_admin, activo, "
+            "intentos_fallidos, bloqueado_hasta FROM usuarios_oficina"
+        ).fetchall()
+    return huella, {str(fila["usuario"]).lower(): dict(fila) for fila in filas}
+
+
+def _hay_cambios_sin_hashear(aplicables: list[dict], por_login: dict[str, dict]) -> bool:
+    for u in aplicables:
+        existente = por_login.get(u["usuario"])
+        if existente is None:
+            return True
+        if _kwargs_actualizacion(existente, u, verificar_pin=False):
+            return True
+    return False
+
+
+def _aplicar_lista_secrets(aplicables: list[dict]) -> int:
+    huella = _huella_secrets_oficina(aplicables)
+    guardada, por_login = _snapshot_usuarios_oficina()
+    if guardada == huella and not _hay_cambios_sin_hashear(aplicables, por_login):
+        return 0
+    verificar_pin = guardada != huella
+    aplicados = 0
+    for u in aplicables:
+        user = u["usuario"]
+        existente = por_login.get(user)
         if existente is None:
             try:
                 crear_usuario_oficina(
                     user,
                     u["nombre"],
-                    pin=u.get("pin") or "",
-                    es_admin=bool(u.get("es_admin")),
+                    pin=u["pin"],
+                    es_admin=u["es_admin"],
                 )
                 aplicados += 1
                 continue
@@ -249,16 +329,54 @@ def _aplicar_usuarios_desde_secrets() -> int:
                 existente = obtener_usuario_oficina(user)
                 if existente is None:
                     continue
-        kwargs: dict = {
-            "nombre": u["nombre"],
-            "es_admin": bool(u.get("es_admin")),
-            "activo": True,
-        }
-        if u.get("pin"):
-            kwargs["pin"] = u["pin"]
+        kwargs = _kwargs_actualizacion(existente, u, verificar_pin=verificar_pin)
+        if not kwargs:
+            continue
         actualizar_usuario_oficina(int(existente["id"]), **kwargs)
         aplicados += 1
+    if guardada != huella:
+        database.guardar_semilla(_CLAVE_SECRETS_OFICINA, huella)
     return aplicados
+
+
+def _aplicar_usuarios_desde_secrets() -> int:
+    """
+    Crea/actualiza usuarios definidos en Secrets (PIN hasheado en SQLite).
+
+    Como mucho una vez por proceso. Si la huella en app_meta coincide y el
+    usuario ya tiene ese PIN, no hashea ni hace UPDATE/commit/sync.
+    Devuelve cuántos usuarios escribió. No guarda el PIN en el repo ni en el log.
+    No toca intentos_fallidos ni bloqueado_hasta.
+    """
+    global _SECRETS_USUARIOS_APLICADOS
+    if _SECRETS_USUARIOS_APLICADOS:
+        return 0
+    aplicables = _usuarios_de_secrets_aplicables()
+    if not aplicables:
+        return 0
+    _SECRETS_USUARIOS_APLICADOS = True
+    return _aplicar_lista_secrets(aplicables)
+
+
+def _registrar_fallo_secrets(exc: BaseException) -> None:
+    """Deja el fallo en stdout y en el log, sin PIN ni contenido de Secrets."""
+    logging.getLogger(__name__).exception(
+        "No se pudieron aplicar los usuarios de Secrets (%s).",
+        type(exc).__name__,
+    )
+    print(
+        "No se pudieron aplicar los usuarios de Secrets "
+        f"({type(exc).__name__}).",
+        flush=True,
+    )
+
+
+def aplicar_usuarios_desde_secrets_en_login() -> None:
+    """Login en Cloud: aplica Secrets una vez. Si falla, la pantalla sigue."""
+    try:
+        _aplicar_usuarios_desde_secrets()
+    except Exception as exc:
+        _registrar_fallo_secrets(exc)
 
 
 def _marca_equipo(con_pin: bool) -> str:

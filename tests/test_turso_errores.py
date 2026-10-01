@@ -1,6 +1,7 @@
 """Errores de libsql traducidos a sqlite3, sin red ni Turso real."""
 from __future__ import annotations
 
+import logging
 import socket
 import sqlite3
 import subprocess
@@ -486,6 +487,32 @@ def test_cache_de_clientes_no_repite_y_se_invalida(tmp_path, monkeypatch):
     assert llamadas["n"] == 2
     assert any(fila["nombre"] == "Cache SA" for fila in database.listar_clientes())
     assert llamadas["n"] == 2
+
+
+def test_sync_fallido_en_commit_se_registra_y_no_propaga(caplog):
+    """Un push fallido no puede desaparecer: antes el except pasaba en silencio."""
+
+    class _SyncFalla(_ConnFalso):
+        def __init__(self):
+            super().__init__(RuntimeError("no se usa"), donde="ninguno")
+
+        def sync(self):
+            raise RuntimeError("push rechazado")
+
+    conn = database._ConexionCompatTurso(_SyncFalla())
+    with caplog.at_level(logging.ERROR, logger="database"):
+        conn.execute(
+            "UPDATE usuarios_oficina SET nombre = ? WHERE id = ?",
+            ("Admin", 1),
+        )
+        conn.commit()
+    assert any(
+        "sincronizar la réplica" in rec.getMessage()
+        and rec.exc_info is not None
+        and "push rechazado" in str(rec.exc_info[1])
+        for rec in caplog.records
+    )
+    assert "TURSO_AUTH_TOKEN" not in caplog.text
 
 
 def test_commit_sin_escritura_no_sincroniza_y_con_escritura_una_vez():
