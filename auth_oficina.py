@@ -267,7 +267,13 @@ def _marca_equipo(con_pin: bool) -> str:
     return f"equipo-{huella}-pin" if con_pin else f"equipo-{huella}"
 
 
-def sembrar_equipo_oficina(*, forzar_pin: bool = False, crear_admin_si_vacio: bool = False) -> int:
+def sembrar_equipo_oficina(
+    *,
+    forzar_pin: bool = False,
+    crear_admin_si_vacio: bool = False,
+    marca_leida: str | None = None,
+    conocemos_marca: bool = False,
+) -> int:
     """Crea el equipo de la oficina. En Cloud no hace falta Manage app / Secrets.
 
     Si la marca en app_meta coincide, no lee ni escribe usuarios.
@@ -276,8 +282,19 @@ def sembrar_equipo_oficina(*, forzar_pin: bool = False, crear_admin_si_vacio: bo
     aplicar_pin = bool(forzar_pin) and not _EQUIPO_PIN_LISTO
     marca_pin = _marca_equipo(True)
     marca_sin_pin = _marca_equipo(False)
+    if not aplicar_pin and not conocemos_marca:
+        # import local: cache_lecturas importa auth_oficina (ciclo).
+        import cache_lecturas
+
+        actual_cache = cache_lecturas.semilla_de_pantalla("usuarios_equipo")
+        if actual_cache in (marca_pin, marca_sin_pin):
+            return 0
+    if conocemos_marca and (
+        marca_leida == marca_pin or (marca_leida == marca_sin_pin and not aplicar_pin)
+    ):
+        return 0
     with database.obtener_conexion() as conn:
-        actual = database.leer_semilla("usuarios_equipo", conn)
+        actual = marca_leida if conocemos_marca else database.leer_semilla("usuarios_equipo", conn)
         if actual == marca_pin or (actual == marca_sin_pin and not aplicar_pin):
             return 0
         filas = conn.execute(
@@ -308,8 +325,8 @@ def sembrar_equipo_oficina(*, forzar_pin: bool = False, crear_admin_si_vacio: bo
         if inserts:
             conn.executemany(
                 "INSERT INTO usuarios_oficina (usuario, nombre, pin_hash, es_admin, activo) "
-                "VALUES (?, ?, ?, ?, 1)",
-                inserts,
+                "VALUES (?, ?, ?, ?, ?)",
+                [(*fila, 1) for fila in inserts],
             )
         if updates:
             conn.executemany(
@@ -333,16 +350,22 @@ def sembrar_equipo_oficina(*, forzar_pin: bool = False, crear_admin_si_vacio: bo
     return aplicados
 
 
-def sembrar_usuarios_oficina_default() -> None:
+def sembrar_usuarios_oficina_default(
+    *,
+    marca_leida: str | None = None,
+    conocemos_marca: bool = False,
+) -> None:
     """Crea admin si falta, y siempre deja el equipo (Guada, Tobi, …) listo."""
     _aplicar_usuarios_desde_secrets()
     sembrar_equipo_oficina(
         forzar_pin=_exigir_pin_en_entorno(),
         crear_admin_si_vacio=True,
+        marca_leida=marca_leida,
+        conocemos_marca=conocemos_marca,
     )
 
 
-def listar_usuarios_oficina(solo_activos: bool = True) -> list[dict]:
+def _listar_usuarios_directo(solo_activos: bool = True) -> list[dict]:
     with database.obtener_conexion() as conn:
         if solo_activos:
             filas = conn.execute(
@@ -355,6 +378,13 @@ def listar_usuarios_oficina(solo_activos: bool = True) -> list[dict]:
                 "ORDER BY nombre COLLATE NOCASE"
             ).fetchall()
     return [dict(f) for f in filas]
+
+
+def listar_usuarios_oficina(solo_activos: bool = True) -> list[dict]:
+    # import local: cache_lecturas importa auth_oficina (ciclo).
+    import cache_lecturas
+
+    return [dict(fila) for fila in cache_lecturas.usuarios_de_pantalla(bool(solo_activos))]
 
 
 def obtener_usuario_oficina(usuario: str) -> dict | None:
