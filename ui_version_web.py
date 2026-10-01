@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -20,7 +21,11 @@ GITHUB_RAW = (
     "Estudio-Contable/master/data/cambios_web.json"
 )
 STORAGE_KEY = "estudio_web_v"
-_POLL_SEG = 45.0
+# Una consulta a GitHub por proceso, no cada 45s de cada sesión.
+_POLL_SEG = 600.0
+_remoto_lock = threading.Lock()
+_remoto_id = ""
+_remoto_ts = 0.0
 
 
 def cargar_cambios() -> dict[str, Any]:
@@ -91,18 +96,23 @@ def _fetch_version_remota() -> str:
 
 
 def _version_github_cached() -> str:
-    now = time.monotonic()
-    ts = float(st.session_state.get("_ec_remoto_ts") or 0)
-    cached = str(st.session_state.get("_ec_remoto_id") or "")
-    if cached and (now - ts) < _POLL_SEG:
-        return cached
+    """Versión en GitHub, como máximo cada 10 minutos en todo el proceso."""
+    global _remoto_id, _remoto_ts
+    ahora = time.monotonic()
+    with _remoto_lock:
+        if _remoto_ts and (ahora - _remoto_ts) < _POLL_SEG:
+            return _remoto_id
     try:
         remoto = _fetch_version_remota()
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ValueError):
-        remoto = cached
-    st.session_state["_ec_remoto_id"] = remoto
-    st.session_state["_ec_remoto_ts"] = now
-    return remoto
+        remoto = _remoto_id
+    with _remoto_lock:
+        ahora = time.monotonic()
+        if _remoto_ts and (ahora - _remoto_ts) < _POLL_SEG:
+            return _remoto_id
+        _remoto_id = remoto
+        _remoto_ts = ahora
+        return _remoto_id
 
 
 def _inyectar_bridge(version: str, marcar_visto: bool) -> None:

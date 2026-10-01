@@ -90,6 +90,8 @@ def _verificar_pin(pin: str, pin_hash_guardado: str) -> tuple[bool, str | None]:
             _, salt_hex, _hash_hex = guardado.split("$", 2)
         except ValueError:
             return False, None
+        # Un solo usuario: el que está entrando. No se cachea (hash, PIN) → ok,
+        # ni siquiera solo los aciertos: eso acortaría la comparación.
         candidato = _hash_pin(texto, salt=salt_hex)
         return hmac.compare_digest(candidato, guardado), None
     # Legado: sha256 sin salt (versiones anteriores). Si matchea, se migra.
@@ -267,6 +269,11 @@ def _marca_equipo(con_pin: bool) -> str:
     return f"equipo-{huella}-pin" if con_pin else f"equipo-{huella}"
 
 
+def equipo_pin_listo() -> bool:
+    """True si este proceso ya confirmó el equipo y no vuelve a hashear PIN."""
+    return _EQUIPO_PIN_LISTO
+
+
 def sembrar_equipo_oficina(
     *,
     forzar_pin: bool = False,
@@ -277,25 +284,35 @@ def sembrar_equipo_oficina(
     """Crea el equipo de la oficina. En Cloud no hace falta Manage app / Secrets.
 
     Si la marca en app_meta coincide, no lee ni escribe usuarios.
+    No recalcula los 11 PIN en cada arranque: un hash pbkdf2 ya guardado se
+    deja quieto. El PIN se verifica recién cuando esa persona entra.
     """
     global _EQUIPO_PIN_LISTO
-    aplicar_pin = bool(forzar_pin) and not _EQUIPO_PIN_LISTO
+    if _EQUIPO_PIN_LISTO:
+        return 0
+    aplicar_pin = bool(forzar_pin)
     marca_pin = _marca_equipo(True)
     marca_sin_pin = _marca_equipo(False)
-    if not aplicar_pin and not conocemos_marca:
+
+    def _ya_esta(actual: str | None) -> bool:
+        if actual == marca_pin:
+            return True
+        return actual == marca_sin_pin and not aplicar_pin
+
+    if not conocemos_marca:
         # import local: cache_lecturas importa auth_oficina (ciclo).
         import cache_lecturas
 
-        actual_cache = cache_lecturas.semilla_de_pantalla("usuarios_equipo")
-        if actual_cache in (marca_pin, marca_sin_pin):
+        if _ya_esta(cache_lecturas.semilla_de_pantalla("usuarios_equipo")):
+            _EQUIPO_PIN_LISTO = True
             return 0
-    if conocemos_marca and (
-        marca_leida == marca_pin or (marca_leida == marca_sin_pin and not aplicar_pin)
-    ):
+    if conocemos_marca and _ya_esta(marca_leida):
+        _EQUIPO_PIN_LISTO = True
         return 0
     with database.obtener_conexion() as conn:
         actual = marca_leida if conocemos_marca else database.leer_semilla("usuarios_equipo", conn)
-        if actual == marca_pin or (actual == marca_sin_pin and not aplicar_pin):
+        if _ya_esta(actual):
+            _EQUIPO_PIN_LISTO = True
             return 0
         filas = conn.execute(
             "SELECT id, usuario, nombre, pin_hash, es_admin, activo FROM usuarios_oficina"
@@ -313,7 +330,8 @@ def sembrar_equipo_oficina(
                 aplicados += 1
                 continue
             pin_hash = str(existente["pin_hash"] or "")
-            if aplicar_pin or not pin_hash.strip():
+            # Solo quien no tiene hash. No se rehashean los 11 en cada restart.
+            if not pin_hash.strip():
                 pin_hash = _hash_pin(_PIN_EQUIPO_OFICINA)
             updates.append((nombre, pin_hash, 0, 1, int(existente["id"])))
             aplicados += 1
@@ -345,8 +363,7 @@ def sembrar_equipo_oficina(
             nueva = marca_sin_pin
         database.guardar_semilla("usuarios_equipo", nueva, conn)
         conn.commit()
-    if aplicar_pin:
-        _EQUIPO_PIN_LISTO = True
+    _EQUIPO_PIN_LISTO = True
     return aplicados
 
 

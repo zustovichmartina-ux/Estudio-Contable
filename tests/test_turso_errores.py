@@ -9,7 +9,9 @@ from pathlib import Path
 
 import pytest
 
+import auth_oficina
 import database
+import ui_version_web as uv
 
 _DUPLICADO = (
     'Hrana: stream error: Error { message: "SQLite error: duplicate column name: '
@@ -500,3 +502,243 @@ def test_commit_sin_escritura_no_sincroniza_y_con_escritura_una_vez():
     interno.sync_llamado = False
     conn.commit()
     assert interno.sync_llamado is False
+
+
+class _SyncCuenta:
+    def __init__(self):
+        self.n = 0
+        self.dentro_del_lock = False
+
+    def sync(self):
+        self.n += 1
+        self.dentro_del_lock = database._turso_conn_lock.locked()
+
+    def execute(self, sql, parametros=()):
+        return self
+
+    def commit(self):
+        return None
+
+    def fetchall(self):
+        return []
+
+
+def test_comenzar_rerun_no_sincroniza(monkeypatch):
+    """Con sync_interval la pantalla no sale a la red."""
+    replica = _SyncCuenta()
+    monkeypatch.setattr(database, "_turso_conn_obj", replica)
+    monkeypatch.setattr(database, "_turso_es_replica", True)
+    monkeypatch.setattr(database, "_sync_fondo", True)
+    monkeypatch.setattr(database, "_bucket_sesion", lambda: None)
+    database.comenzar_rerun()
+    database.comenzar_rerun()
+    assert replica.n == 0
+
+
+def test_fallback_sincroniza_cada_15s_fuera_del_lock(monkeypatch):
+    replica = _SyncCuenta()
+    monkeypatch.setattr(database, "_turso_conn_obj", replica)
+    monkeypatch.setattr(database, "_turso_es_replica", True)
+    monkeypatch.setattr(database, "_sync_fondo", False)
+    monkeypatch.setattr(database, "_ultimo_sync_periodico", 0.0)
+    monkeypatch.setattr(database, "_bucket_sesion", lambda: None)
+    database.comenzar_rerun()
+    assert replica.n == 1
+    assert replica.dentro_del_lock is False
+    database.comenzar_rerun()
+    assert replica.n == 1
+    monkeypatch.setattr(database, "_ultimo_sync_periodico", time.monotonic() - 16)
+    database.comenzar_rerun()
+    assert replica.n == 2
+    assert replica.dentro_del_lock is False
+
+
+def test_connect_pide_sync_interval(monkeypatch):
+    monkeypatch.setattr(database, "_sync_fondo", False)
+    vistos: dict = {}
+
+    class _Lib:
+        @staticmethod
+        def connect(path, **kwargs):
+            vistos["kwargs"] = kwargs
+            return object()
+
+    monkeypatch.setattr(database, "_libsql", _Lib)
+    conn = database._conectar_libsql("libsql://local", "token")
+    assert conn is not None
+    assert vistos["kwargs"]["sync_interval"] == database._SYNC_INTERVALO_S
+    assert vistos["kwargs"]["sync_url"] == "libsql://local"
+    assert vistos["kwargs"]["auth_token"] == "token"
+    assert database._sync_fondo is True
+
+
+def test_sync_interval_ausente_no_lo_manda(monkeypatch):
+    monkeypatch.setattr(database, "_sync_fondo", True)
+    llamadas: list[dict] = []
+
+    class _Lib:
+        @staticmethod
+        def connect(path, **kwargs):
+            llamadas.append(dict(kwargs))
+            if "sync_interval" in kwargs:
+                raise TypeError("sync_interval")
+            return object()
+
+    monkeypatch.setattr(database, "_libsql", _Lib)
+    assert database._conectar_libsql("libsql://local", "token") is not None
+    assert database._sync_fondo is False
+    assert "sync_interval" not in llamadas[-1]
+
+
+def test_commit_con_escritura_sincroniza_una_vez(monkeypatch):
+    monkeypatch.setattr(database, "_bucket_sesion", lambda: None)
+    database.comenzar_rerun()
+    interno = _SyncCuenta()
+    conn = database._ConexionCompatTurso(interno)
+    conn.execute("SELECT 1")
+    conn.commit()
+    assert interno.n == 0
+    conn.execute("INSERT INTO t (a) VALUES (?)", ("x",))
+    conn.commit()
+    assert interno.n == 1
+    assert database.contadores()["syncs"] == 1
+    conn.commit()
+    assert interno.n == 1
+
+
+def test_contadores_son_por_sesion(monkeypatch):
+    sesiones: dict[str, dict] = {}
+    actual = {"id": "a"}
+
+    def bucket():
+        return sesiones.setdefault(
+            actual["id"],
+            {
+                "sync_hecho": False,
+                "consultas": 0,
+                "syncs": 0,
+                "sync_s": 0.0,
+                "t0": 0.0,
+                "pagina": "",
+            },
+        )
+
+    replica = _SyncCuenta()
+    monkeypatch.setattr(database, "_bucket_sesion", bucket)
+    monkeypatch.setattr(database, "_turso_conn_obj", replica)
+    monkeypatch.setattr(database, "_turso_es_replica", True)
+    monkeypatch.setattr(database, "_sync_fondo", True)
+    monkeypatch.setattr(database, "_sync_ok", True)
+
+    database.comenzar_rerun()
+    assert replica.n == 0
+    conn = database._ConexionCompatTurso(replica)
+    conn.execute("SELECT 1")
+    conn.execute("SELECT 2")
+    assert database.contadores() == {"consultas": 2, "syncs": 0}
+    assert database.sincronizar_replica_una_vez() is True
+    assert replica.n == 1
+    assert database.sincronizar_replica_una_vez() is True
+    assert replica.n == 1
+
+    actual["id"] = "b"
+    database.comenzar_rerun()
+    assert database.contadores() == {"consultas": 0, "syncs": 0}
+    assert database.sincronizar_replica_una_vez() is True
+    assert replica.n == 2
+    conn.execute("SELECT 3")
+    assert database.contadores()["consultas"] == 1
+
+    actual["id"] = "a"
+    assert database.contadores() == {"consultas": 2, "syncs": 1}
+
+
+def test_linea_de_tiempo_del_rerun(capsys, monkeypatch):
+    monkeypatch.setattr(database, "_bucket_sesion", lambda: None)
+    monkeypatch.setattr(database, "_turso_es_replica", False)
+    database.comenzar_rerun()
+    database.anotar_pagina("login")
+    database.cerrar_rerun()
+    linea = capsys.readouterr().out.strip().splitlines()[-1]
+    assert linea.startswith("RERUN ")
+    assert "pagina=login" in linea
+    assert "consultas=0" in linea
+    assert "syncs=0" in linea
+    assert "sync=" in linea
+    assert "total=" in linea
+
+
+def test_equipo_con_hash_no_rehashea_y_el_login_es_de_un_usuario(tmp_path, monkeypatch):
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "oficina.db")
+    monkeypatch.setattr(database, "_turso_conn_obj", None)
+    monkeypatch.setattr(database, "_credenciales_turso", lambda: ("", ""))
+    monkeypatch.setattr(database, "_turso_es_replica", False)
+    monkeypatch.setattr(auth_oficina, "_EQUIPO_PIN_LISTO", False)
+    hashes = {"n": 0}
+
+    def cuenta(pin, salt=None):
+        hashes["n"] += 1
+        return f"pbkdf2${salt or 's'}$ok"
+
+    monkeypatch.setattr(auth_oficina, "_hash_pin", cuenta)
+    with database.obtener_conexion() as conn:
+        auth_oficina.inicializar_tabla_usuarios_oficina(conn)
+        for login, nombre in auth_oficina._EQUIPO_OFICINA:
+            conn.execute(
+                "INSERT INTO usuarios_oficina (usuario, nombre, pin_hash, es_admin, activo) "
+                "VALUES (?, ?, ?, 0, 1)",
+                (login, nombre, "pbkdf2$ab$cd"),
+            )
+        conn.commit()
+    marca = auth_oficina._marca_equipo(True)
+    assert (
+        auth_oficina.sembrar_equipo_oficina(
+            forzar_pin=True, conocemos_marca=True, marca_leida=marca
+        )
+        == 0
+    )
+    assert hashes["n"] == 0
+    assert auth_oficina.equipo_pin_listo() is True
+    monkeypatch.setattr(auth_oficina, "_EQUIPO_PIN_LISTO", False)
+    auth_oficina.sembrar_equipo_oficina(
+        forzar_pin=True, conocemos_marca=True, marca_leida="marca-vieja"
+    )
+    assert hashes["n"] == 0
+
+    monkeypatch.setattr(
+        auth_oficina,
+        "obtener_usuario_oficina",
+        lambda usuario: {
+            "id": 1,
+            "usuario": usuario,
+            "nombre": "Guadi",
+            "pin_hash": "pbkdf2$ab$ok",
+            "es_admin": 0,
+            "activo": 1,
+            "intentos_fallidos": 0,
+            "bloqueado_hasta": None,
+        },
+    )
+    monkeypatch.setattr(auth_oficina, "_limpiar_intentos_fallidos", lambda _usuario_id: None)
+    assert auth_oficina.verificar_login_oficina("guada", "3278") is not None
+    assert auth_oficina.verificar_login_oficina("guada", "3278") is not None
+    # Dos intentos, dos hashes: no se cachea el acierto. Nunca los 11 del equipo.
+    assert hashes["n"] == 2
+
+
+def test_version_github_como_maximo_cada_10_minutos(monkeypatch):
+    llamadas = {"n": 0}
+
+    def fetch():
+        llamadas["n"] += 1
+        return "v9"
+
+    monkeypatch.setattr(uv, "_fetch_version_remota", fetch)
+    monkeypatch.setattr(uv, "_remoto_id", "")
+    monkeypatch.setattr(uv, "_remoto_ts", 0.0)
+    assert uv._version_github_cached() == "v9"
+    assert uv._version_github_cached() == "v9"
+    assert llamadas["n"] == 1
+    monkeypatch.setattr(uv, "_remoto_ts", time.monotonic() - 601)
+    assert uv._version_github_cached() == "v9"
+    assert llamadas["n"] == 2

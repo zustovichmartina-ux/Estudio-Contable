@@ -7,6 +7,7 @@ import os
 import re
 import sqlite3
 import threading
+import time
 import unicodedata
 import warnings
 from pathlib import Path
@@ -191,16 +192,25 @@ class _CursorCompatTurso:
 
 # Streamlit puede atender varias sesiones en threads del mismo proceso; la
 # conexión de libsql (réplica local + Turso) se comparte, así que serializamos
-# el acceso real con un lock global. El sync de red es uno por rerun de
-# Streamlit, no uno por consulta: las lecturas salen de la réplica local.
+# las consultas con un lock global. El refresco de la réplica va en segundo
+# plano (sync_interval): un rerun no sale a la red ni toma ese lock para sync.
 _turso_conn_lock = threading.Lock()
 _turso_conn_obj = None
 _turso_es_replica = False
+_sync_fondo = False  # True si connect() aceptó sync_interval
+_SYNC_INTERVALO_S = 15.0
+_ultimo_sync_periodico = 0.0
+_sync_periodico_lock = threading.Lock()
+# Fuera de Streamlit (tests, scripts) el flag y los contadores son de proceso.
+# Con una sesión, viven en st.session_state: ver _bucket_sesion().
 _sync_hecho_en_rerun = False
 _sync_ok = True
 _generacion_datos = 0
 _ddl_bloqueado = False
 _contadores = {"consultas": 0, "syncs": 0}
+_sync_s = 0.0
+_t0_rerun = 0.0
+_pagina_rerun = "arranque"
 _RE_MUTACION = re.compile(r"^\s*(INSERT|UPDATE|DELETE|REPLACE)\b", re.IGNORECASE)
 _RE_DESTRUYE_CLIENTES = re.compile(
     r"\b(?:DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?CLIENTES|CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?CLIENTES_NEW|RENAME\s+TO\s+CLIENTES)\b",
@@ -218,12 +228,129 @@ def _obtener_conn_turso_singleton():
     with _turso_conn_lock:
         if _turso_conn_obj is None:
             try:
-                _turso_conn_obj = _libsql.connect(str(DB_PATH), sync_url=url, auth_token=token)
-                _turso_es_replica = True
+                _turso_conn_obj = _conectar_libsql(url, token)
+                _turso_es_replica = _turso_conn_obj is not None
             except Exception:
                 _turso_conn_obj = None
                 _turso_es_replica = False
     return _turso_conn_obj
+
+
+def _conectar_libsql(url: str, token: str):
+    """Réplica local. sync_interval refresca en segundo plano (segundos).
+
+    Si esta versión del cliente no acepta el argumento, queda el fallback de
+    `_sync_periodico_si_toca` (como máximo cada 15s, fuera del lock).
+    """
+    global _sync_fondo
+    try:
+        conn = _libsql.connect(
+            str(DB_PATH),
+            sync_url=url,
+            auth_token=token,
+            sync_interval=_SYNC_INTERVALO_S,
+        )
+    except TypeError:
+        _sync_fondo = False
+        return _libsql.connect(str(DB_PATH), sync_url=url, auth_token=token)
+    _sync_fondo = True
+    return conn
+
+
+def _bucket_sesion() -> dict | None:
+    """Estado del rerun de esta sesión, o None si no hay contexto de Streamlit.
+
+    Import perezoso: los tests y scripts usan database.py sin Streamlit.
+    """
+    try:
+        from streamlit.runtime.scriptrunner_utils.script_run_context import (
+            get_script_run_ctx,
+        )
+    except Exception:
+        try:
+            from streamlit.runtime.scriptrunner import get_script_run_ctx
+        except Exception:
+            return None
+    try:
+        ctx = get_script_run_ctx(suppress_warning=True)
+    except TypeError:
+        try:
+            ctx = get_script_run_ctx()
+        except Exception:
+            return None
+    except Exception:
+        return None
+    if ctx is None:
+        return None
+    try:
+        import streamlit as st
+
+        ss = st.session_state
+    except Exception:
+        return None
+    estado = ss.get("_ec_rerun")
+    if not isinstance(estado, dict):
+        estado = {
+            "sync_hecho": False,
+            "consultas": 0,
+            "syncs": 0,
+            "sync_s": 0.0,
+            "t0": 0.0,
+            "pagina": "arranque",
+        }
+        ss["_ec_rerun"] = estado
+    return estado
+
+
+def _sync_ya_hecho() -> bool:
+    bucket = _bucket_sesion()
+    if bucket is None:
+        return bool(_sync_hecho_en_rerun)
+    return bool(bucket.get("sync_hecho"))
+
+
+def _marcar_sync_hecho(valor: bool) -> None:
+    global _sync_hecho_en_rerun
+    bucket = _bucket_sesion()
+    if bucket is None:
+        _sync_hecho_en_rerun = valor
+        return
+    bucket["sync_hecho"] = valor
+
+
+def _sumar_consulta() -> None:
+    bucket = _bucket_sesion()
+    if bucket is None:
+        _contadores["consultas"] += 1
+        return
+    bucket["consultas"] = int(bucket.get("consultas") or 0) + 1
+
+
+def _sumar_sync(segundos: float) -> None:
+    global _sync_s
+    bucket = _bucket_sesion()
+    if bucket is None:
+        _contadores["syncs"] += 1
+        _sync_s += float(segundos)
+        return
+    bucket["syncs"] = int(bucket.get("syncs") or 0) + 1
+    bucket["sync_s"] = float(bucket.get("sync_s") or 0.0) + float(segundos)
+
+
+def metricas_rerun() -> dict[str, float]:
+    """Consultas, syncs y segundos de red acumulados en este rerun."""
+    bucket = _bucket_sesion()
+    if bucket is None:
+        return {
+            "consultas": int(_contadores["consultas"]),
+            "syncs": int(_contadores["syncs"]),
+            "sync_s": float(_sync_s),
+        }
+    return {
+        "consultas": int(bucket.get("consultas") or 0),
+        "syncs": int(bucket.get("syncs") or 0),
+        "sync_s": float(bucket.get("sync_s") or 0.0),
+    }
 
 
 def generacion_datos() -> int:
@@ -232,8 +359,9 @@ def generacion_datos() -> int:
 
 
 def contadores() -> dict[str, int]:
-    """Consultas y syncs desde el último `comenzar_rerun`."""
-    return {"consultas": _contadores["consultas"], "syncs": _contadores["syncs"]}
+    """Consultas y syncs desde el último `comenzar_rerun` (de esta sesión)."""
+    metricas = metricas_rerun()
+    return {"consultas": int(metricas["consultas"]), "syncs": int(metricas["syncs"])}
 
 
 def ddl_permitido() -> bool:
@@ -246,24 +374,16 @@ def _invalidar_lecturas() -> None:
     _generacion_datos += 1
 
 
-def sincronizar_replica_una_vez() -> bool:
-    """Un sync por rerun. True si no hay réplica o si este sync salió bien."""
-    global _sync_hecho_en_rerun, _sync_ok
-    if not _turso_es_replica:
-        return True
-    if _sync_hecho_en_rerun:
-        return _sync_ok
-    _sync_hecho_en_rerun = True
+def _sync_red() -> bool:
+    """Un sync con Turso. No toma `_turso_conn_lock`: la red no frena las otras sesiones."""
+    global _sync_ok
     conn = _turso_conn_obj
     if conn is None:
         _sync_ok = False
         return False
+    t0 = time.perf_counter()
     try:
-        with _turso_conn_lock:
-            conn.sync()
-        _contadores["syncs"] += 1
-        _sync_ok = True
-        return True
+        conn.sync()
     except Exception:
         logging.getLogger(__name__).warning(
             "No se pudo sincronizar la réplica; no se toma el archivo local como esquema.",
@@ -271,15 +391,115 @@ def sincronizar_replica_una_vez() -> bool:
         )
         _sync_ok = False
         return False
+    _sumar_sync(time.perf_counter() - t0)
+    _sync_ok = True
+    return True
+
+
+def sincronizar_replica_una_vez() -> bool:
+    """Como máximo un sync en este rerun. Lo usa el arranque del esquema, no cada pantalla."""
+    if not _turso_es_replica:
+        return True
+    if _sync_ya_hecho():
+        return _sync_ok
+    _marcar_sync_hecho(True)
+    return _sync_red()
+
+
+def sincronizar_cola_rutinas() -> bool:
+    """Trae el estado de rutina_pedidos. Solo el auto-refresh y el botón Refrescar."""
+    if not _turso_es_replica:
+        return True
+    return _sync_red()
+
+
+def _sync_periodico_si_toca() -> None:
+    """Fallback si no hay sync_interval: como máximo un sync cada 15s, fuera del lock."""
+    global _ultimo_sync_periodico
+    if not _turso_es_replica or _turso_conn_obj is None:
+        return
+    ahora = time.monotonic()
+    with _sync_periodico_lock:
+        if ahora - _ultimo_sync_periodico < _SYNC_INTERVALO_S:
+            return
+        _ultimo_sync_periodico = ahora
+    _sync_red()
 
 
 def comenzar_rerun() -> None:
-    """Arranque de un rerun de Streamlit: como máximo un sync, y la cuenta en cero."""
-    global _sync_hecho_en_rerun
-    _sync_hecho_en_rerun = False
-    _contadores["consultas"] = 0
-    _contadores["syncs"] = 0
-    sincronizar_replica_una_vez()
+    """Arranque de un rerun. No sale a la red: la réplica se refresca sola.
+
+    Si el cliente no aceptó sync_interval, un sync como máximo cada 15s y
+    fuera de `_turso_conn_lock`.
+    """
+    global _sync_hecho_en_rerun, _sync_s, _t0_rerun, _pagina_rerun
+    bucket = _bucket_sesion()
+    if bucket is None:
+        _sync_hecho_en_rerun = False
+        _contadores["consultas"] = 0
+        _contadores["syncs"] = 0
+        _sync_s = 0.0
+        _t0_rerun = time.perf_counter()
+        _pagina_rerun = "arranque"
+    else:
+        bucket["sync_hecho"] = False
+        bucket["consultas"] = 0
+        bucket["syncs"] = 0
+        bucket["sync_s"] = 0.0
+        bucket["t0"] = time.perf_counter()
+        bucket["pagina"] = "arranque"
+    if not _sync_fondo:
+        _sync_periodico_si_toca()
+
+
+def anotar_pagina(nombre: str) -> None:
+    """Nombre que va a salir en la línea de tiempo del rerun."""
+    global _pagina_rerun
+    texto = str(nombre or "").strip() or "arranque"
+    bucket = _bucket_sesion()
+    if bucket is None:
+        _pagina_rerun = texto
+        return
+    bucket["pagina"] = texto
+
+
+def imprimir_linea_rerun(
+    *,
+    total: float,
+    sync_s: float,
+    consultas: int,
+    syncs: int,
+    pagina: str,
+) -> None:
+    """Una línea a stdout para Manage app → Logs."""
+    print(
+        f"RERUN total={total:.3f}s sync={sync_s:.3f}s "
+        f"consultas={int(consultas)} syncs={int(syncs)} pagina={pagina}",
+        flush=True,
+    )
+
+
+def cerrar_rerun() -> None:
+    """Imprime el tiempo del rerun que abrió `comenzar_rerun`."""
+    bucket = _bucket_sesion()
+    if bucket is None:
+        total = time.perf_counter() - float(_t0_rerun or time.perf_counter())
+        imprimir_linea_rerun(
+            total=total,
+            sync_s=_sync_s,
+            consultas=_contadores["consultas"],
+            syncs=_contadores["syncs"],
+            pagina=_pagina_rerun or "arranque",
+        )
+        return
+    t0 = float(bucket.get("t0") or time.perf_counter())
+    imprimir_linea_rerun(
+        total=time.perf_counter() - t0,
+        sync_s=float(bucket.get("sync_s") or 0.0),
+        consultas=int(bucket.get("consultas") or 0),
+        syncs=int(bucket.get("syncs") or 0),
+        pagina=str(bucket.get("pagina") or "arranque"),
+    )
 
 
 def _parametros_libsql(parametros):
@@ -335,9 +555,9 @@ class _ConexionCompatTurso:
     Envuelve la conexión compartida de libsql con la misma API que usa el resto
     del código para sqlite3.Connection (execute/commit/with ... as conn).
 
-    Sync con la nube: uno antes de leer, como máximo uno por rerun
-    (`sincronizar_replica_una_vez`), y uno después de un commit solo si hubo
-    una escritura real (``_sucio``). Un commit sin escritura no sale a la red.
+    La réplica se refresca sola (`sync_interval`). Un commit sincroniza con la
+    nube solo si hubo una escritura real (``_sucio``). Un commit sin escritura
+    no sale a la red. La cola de rutinas pide un sync aparte.
     """
 
     def __init__(self, conn):
@@ -357,7 +577,7 @@ class _ConexionCompatTurso:
         _traducir_error_libsql(exc)
 
     def execute(self, sql, parametros=()):
-        _contadores["consultas"] += 1
+        _sumar_consulta()
         self._anotar(sql)
         with _turso_conn_lock:
             try:
@@ -371,7 +591,7 @@ class _ConexionCompatTurso:
         El ``executemany`` de libsql hace un ``execute`` por fila y, en Turso,
         cada uno es un viaje de red. Un UPDATE u otro SQL sigue por el driver.
         """
-        _contadores["consultas"] += 1
+        _sumar_consulta()
         with _turso_conn_lock:
             filas = [_parametros_libsql(fila) for fila in secuencia]
             if not filas:
@@ -394,7 +614,7 @@ class _ConexionCompatTurso:
 
         ``Connection.executescript`` traga el error; el del cursor no.
         """
-        _contadores["consultas"] += 1
+        _sumar_consulta()
         self._anotar(sql)
         if _RE_MUTACION.search(str(sql)):
             self._dirty = True
@@ -410,6 +630,8 @@ class _ConexionCompatTurso:
             return _CursorCompatTurso(self._conn.cursor())
 
     def commit(self):
+        hizo_sync = False
+        sync_s = 0.0
         with _turso_conn_lock:
             try:
                 self._conn.commit()
@@ -418,10 +640,14 @@ class _ConexionCompatTurso:
             if self._sucio:
                 self._sucio = False
                 try:
+                    t0 = time.perf_counter()
                     self._conn.sync()
-                    _contadores["syncs"] += 1
+                    sync_s = time.perf_counter() - t0
+                    hizo_sync = True
                 except Exception:
                     pass
+        if hizo_sync:
+            _sumar_sync(sync_s)
         if self._dirty:
             _invalidar_lecturas()
             self._dirty = False

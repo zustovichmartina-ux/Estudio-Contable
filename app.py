@@ -13066,11 +13066,9 @@ def _pantalla_login_oficina() -> None:
         except Exception:
             pass
         try:
-            if not st.session_state.get("_equipo_oficina_ok"):
+            # Una vez por proceso. No rehashea los PIN del equipo en cada rerun.
+            if not auth_oficina.equipo_pin_listo():
                 auth_oficina.sembrar_equipo_oficina(forzar_pin=True)
-                st.session_state["_equipo_oficina_ok"] = True
-            else:
-                auth_oficina.sembrar_equipo_oficina(forzar_pin=False)
         except Exception:
             pass
 
@@ -13260,6 +13258,8 @@ def main() -> None:
     except Exception as _exc_main:
         st.error("Error al abrir la aplicación.")
         st.exception(_exc_main)
+    finally:
+        db.cerrar_rerun()
 
 
 def _main() -> None:
@@ -13268,6 +13268,7 @@ def _main() -> None:
 
     # Gate de login: sin usuario de oficina no se entra a la app
     if not st.session_state.get("usuario_oficina"):
+        db.anotar_pagina("login")
         _pantalla_login_oficina()
         return
 
@@ -13303,11 +13304,13 @@ def _main() -> None:
     # --- Vista administración (ocupa el área principal) ---
     vista_admin = st.session_state.get("vista_admin")
     if vista_admin == "clientes":
+        db.anotar_pagina("clientes")
         _render_titulo_estudio("clientes")
         _render_barra_superior_cuenta()
         _seccion_clientes()
         return
     if vista_admin == "usuarios_oficina":
+        db.anotar_pagina("usuarios_oficina")
         _render_titulo_estudio("usuarios_oficina")
         _render_barra_superior_cuenta()
         if not st.session_state.get("usuario_oficina_admin"):
@@ -13316,6 +13319,7 @@ def _main() -> None:
         _seccion_usuarios_oficina()
         return
     if vista_admin == "acerca":
+        db.anotar_pagina("acerca")
         _render_titulo_estudio("acerca")
         _render_barra_superior_cuenta()
         st.subheader("Acerca del sistema")
@@ -13342,6 +13346,7 @@ def _main() -> None:
     ventana_activa = str(
         st.session_state.get(_VENTANA_KEY) or _VENTANAS_PRINCIPALES[0]
     )
+    db.anotar_pagina(ventana_activa)
     _detectar_cambio_ventana_y_flush()
     _render_titulo_estudio(ventana_activa)
     _render_barra_superior_cuenta()
