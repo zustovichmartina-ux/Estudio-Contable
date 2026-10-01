@@ -373,6 +373,21 @@ def _norm_header(texto) -> str:
     return re.sub(r"\s+", " ", plano).strip().casefold()
 
 
+def _titulo_ficha(texto) -> str:
+    """Encabezado de la ficha, sin el texto entre paréntesis."""
+    sin_aclaracion = re.sub(r"\([^)]*\)", " ", str(texto or ""))
+    return _norm_header(sin_aclaracion)
+
+
+# Títulos cortos de COLUMNAS_FICHA más los de la hoja Clientes de la oficina.
+_ALIAS_FICHA_EXTRA = {
+    "mes inicio ejercicio": "mes_inicio",
+    "mes cierre ejercicio": "mes_cierre",
+    "dia revision mensual": "dia_revision",
+    "carpeta f931 presentaciones": "carpeta_f931",
+}
+
+
 def _texto_celda(valor) -> str:
     if valor is None:
         return ""
@@ -407,8 +422,22 @@ def periodo_mmaaaa(periodo: str) -> str:
     return f"{coincidencia.group(1)}{coincidencia.group(2)}"
 
 
+def _hoja_ficha(libro):
+    """La hoja Clientes si está; si no, la activa."""
+    for nombre in libro.sheetnames:
+        if str(nombre).strip().casefold() == "clientes":
+            return libro[nombre]
+    return libro.active
+
+
+def _mapa_columnas_ficha() -> dict[str, str]:
+    mapa = {_titulo_ficha(etiqueta): campo for campo, etiqueta in COLUMNAS_FICHA}
+    mapa.update(_ALIAS_FICHA_EXTRA)
+    return mapa
+
+
 def leer_ficha_xlsx(contenido: bytes) -> list[dict]:
-    """Lee la ficha. La primera fila son los títulos de COLUMNAS_FICHA."""
+    """Lee la ficha. La primera fila son los títulos, con o sin la aclaración entre paréntesis."""
     if not contenido:
         raise ErrorRutina("El archivo de la ficha está vacío.")
     try:
@@ -416,15 +445,15 @@ def leer_ficha_xlsx(contenido: bytes) -> list[dict]:
     except Exception as exc:
         raise ErrorRutina("No se pudo leer el Excel de la ficha.") from exc
     try:
-        hoja = libro.active
+        hoja = _hoja_ficha(libro)
         filas = hoja.iter_rows(values_only=True)
         encabezados = next(filas, None)
         if not encabezados:
             raise ErrorRutina("La ficha no tiene encabezados.")
-        alias = {_norm_header(etiqueta): campo for campo, etiqueta in COLUMNAS_FICHA}
+        alias = _mapa_columnas_ficha()
         columnas: list[str | None] = []
         for titulo in encabezados:
-            columnas.append(alias.get(_norm_header(titulo)))
+            columnas.append(alias.get(_titulo_ficha(titulo)))
         if "sociedad" not in columnas:
             raise ErrorRutina("La ficha tiene que tener la columna Sociedad.")
         salida: list[dict] = []

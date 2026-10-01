@@ -456,6 +456,95 @@ def test_importar_ficha_reemplaza_y_exporta(tmp_path, monkeypatch):
     assert exportada[0]["CUIT"] == "27999888776"
 
 
+_ENCABEZADOS_OFICINA = [
+    "Sociedad",
+    "CUIT",
+    "Activa (Sí/No)",
+    "TISH (Sí/No)",
+    "Mes inicio ejercicio (1-12)",
+    "Mes cierre ejercicio (1-12)",
+    "Día revisión mensual (1-28)",
+    "Proyección vigente (nombre archivo o ruta)",
+    "Carpeta Proyecciones (si no es estándar)",
+    "Carpeta IIBB (si no es estándar)",
+    "Carpeta F931 Presentaciones (si no es estándar)",
+    "Último mes cargado (MM-YYYY)",
+    "Notas",
+]
+
+
+def test_ficha_encabezados_oficina(tmp_path, monkeypatch):
+    """La hoja Clientes gana aunque no sea la activa, y los meses llegan como número."""
+    _db(tmp_path, monkeypatch)
+    libro = openpyxl.Workbook()
+    instrucciones = libro.active
+    instrucciones.title = "Instrucciones"
+    instrucciones.append(["Sociedad", "Notas"])
+    instrucciones.append(["TRAMPA", "no leer"])
+    leyenda = libro.create_sheet("Leyenda meses")
+    leyenda.append(["Mes", "Nombre"])
+    leyenda.append([1, "Enero"])
+    clientes = libro.create_sheet("Clientes")
+    clientes.append(_ENCABEZADOS_OFICINA)
+    clientes.append(
+        [
+            "ACME",
+            30712345671,
+            "Sí",
+            "Sí",
+            1,
+            12.0,
+            15.0,
+            "Ganancias 2025.xlsx",
+            r"C:\ACME\Proyecciones",
+            r"C:\ACME\IIBB",
+            r"C:\ACME\F931",
+            "09-2026",
+            "",
+        ]
+    )
+    clientes.append(
+        [
+            "BETA",
+            "20111222333",
+            "No",
+            "No",
+            6.0,
+            6,
+            8,
+            "",
+            r"C:\BETA\Proyecciones",
+            r"C:\BETA\IIBB",
+            r"C:\BETA\F931",
+            "08-2026",
+            "NO TIENE EMPLEADOS",
+        ]
+    )
+    buffer = BytesIO()
+    libro.save(buffer)
+    assert libro.sheetnames[0] == "Instrucciones"
+    assert rutinas.importar_ficha_xlsx(buffer.getvalue()) == 2
+    filas = rutinas.listar_ficha()
+    assert [fila["sociedad"] for fila in filas] == ["ACME", "BETA"]
+    acme = filas[0]
+    assert acme["cuit"] == "30712345671"
+    assert acme["activa"] == "Sí"
+    assert acme["tish"] == "Sí"
+    assert acme["mes_inicio"] == "1"
+    assert acme["mes_cierre"] == "12"
+    assert acme["dia_revision"] == "15"
+    assert acme["proyeccion_vigente"] == "Ganancias 2025.xlsx"
+    assert acme["carpeta_proyecciones"] == r"C:\ACME\Proyecciones"
+    assert acme["carpeta_iibb"] == r"C:\ACME\IIBB"
+    assert acme["carpeta_f931"] == r"C:\ACME\F931"
+    assert acme["ultimo_mes_cargado"] == "09-2026"
+    assert filas[1]["mes_inicio"] == "6"
+    assert filas[1]["notas"] == "NO TIENE EMPLEADOS"
+    assert not rutinas.cliente_activo(filas[1]["activa"])
+    etiquetas = [nombre for nombre, _fila in rutinas.etiquetas_clientes()]
+    assert etiquetas == ["ACME"]
+
+
 def test_ficha_sin_sociedad_falla(tmp_path, monkeypatch):
     _db(tmp_path, monkeypatch)
     with pytest.raises(rutinas.ErrorRutina, match="Sociedad"):
