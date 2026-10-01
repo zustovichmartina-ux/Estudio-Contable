@@ -31,6 +31,28 @@ def _cli():
     return mod
 
 
+class _CursorSinIter:
+    """Cursor de mentira, como el de libsql: tiene fetchall y no es iterable."""
+
+    def __init__(self):
+        self.description = [("cid",), ("name",), ("type",)]
+        self._filas = [(0, "id", "INTEGER"), (1, "preview", "TEXT")]
+
+    def fetchall(self):
+        return list(self._filas)
+
+
+def test_cursor_turso_se_puede_recorrer():
+    crudo = _CursorSinIter()
+    with pytest.raises(TypeError, match="not iterable"):
+        list(crudo)
+    cur = database._CursorCompatTurso(crudo)
+    filas = list(cur)
+    assert [fila[1] for fila in filas] == ["id", "preview"]
+    assert filas[1]["name"] == "preview"
+    assert {fila["name"] for fila in database._CursorCompatTurso(crudo)} == {"id", "preview"}
+
+
 def test_tablas_idempotentes(tmp_path, monkeypatch):
     _db(tmp_path, monkeypatch)
     rutinas.asegurar_tablas()
@@ -43,7 +65,7 @@ def test_tablas_idempotentes(tmp_path, monkeypatch):
         idx = conn.execute(
             "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_rutina_pedidos_abierto'"
         ).fetchone()
-        cols = {fila[1] for fila in conn.execute("PRAGMA table_info(rutina_pedidos)")}
+        cols = {fila[1] for fila in conn.execute("PRAGMA table_info(rutina_pedidos)").fetchall()}
     assert idx is not None
     assert cols == {
         "id",

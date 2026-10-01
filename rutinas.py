@@ -247,7 +247,7 @@ def inicializar_tablas_rutinas(conn) -> None:
 
 def _agregar_columna_preview(conn) -> None:
     """Suma `preview` en bases que ya tenían la tabla (ALTER idempotente)."""
-    columnas = {fila[1] for fila in conn.execute("PRAGMA table_info(rutina_pedidos)")}
+    columnas = {fila[1] for fila in conn.execute("PRAGMA table_info(rutina_pedidos)").fetchall()}
     if "preview" in columnas:
         return
     conn.execute("ALTER TABLE rutina_pedidos ADD COLUMN preview TEXT")
