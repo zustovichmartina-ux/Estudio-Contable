@@ -213,6 +213,49 @@ def _obtener_conn_turso_singleton():
     return _turso_conn_obj
 
 
+def _parametros_libsql(parametros):
+    """libsql solo acepta tuple; sqlite3 también acepta list."""
+    if isinstance(parametros, list):
+        return tuple(parametros)
+    return parametros
+
+
+def _es_error_sql_libsql(exc: BaseException) -> bool:
+    """True si el fallo es de SQLite y no de la red.
+
+    Turso remoto lo envuelve: ``Hrana: stream error: ... "SQLite error: ..." SQLITE_...``.
+    libsql embebido tira el texto pelado (``duplicate column name: ...``).
+    """
+    texto = str(exc)
+    if "SQLite error" in texto or "SQLITE_" in texto:
+        return True
+    if "Hrana" in texto or "stream error" in texto:
+        return False
+    return any(
+        marca in texto
+        for marca in (
+            "duplicate column",
+            "already exists",
+            "no such table",
+            "no such column",
+            "constraint failed",
+            "syntax error",
+        )
+    )
+
+
+def _traducir_error_libsql(exc: BaseException) -> None:
+    """Pasa un error SQL de libsql a sqlite3, o tira la conexión si fue de red."""
+    if _es_error_sql_libsql(exc):
+        texto = str(exc)
+        if any(marca in texto for marca in ("UNIQUE", "constraint", "CONSTRAINT")):
+            raise sqlite3.IntegrityError(texto) from exc
+        raise sqlite3.OperationalError(texto) from exc
+    global _turso_conn_obj
+    _turso_conn_obj = None  # próxima conexión reintenta desde cero
+    raise exc
+
+
 class _ConexionCompatTurso:
     """
     Envuelve la conexión compartida de libsql con la misma API que usa el resto
@@ -224,24 +267,29 @@ class _ConexionCompatTurso:
         self.row_factory = None  # compat: el resto del código no necesita fijarlo
 
     def _reintentar_si_rota(self, exc):
-        global _turso_conn_obj
-        _turso_conn_obj = None  # próxima conexión reintenta desde cero
-        raise exc
+        _traducir_error_libsql(exc)
 
     def execute(self, sql, parametros=()):
         with _turso_conn_lock:
             try:
-                return _CursorCompatTurso(self._conn.execute(sql, parametros))
+                return _CursorCompatTurso(self._conn.execute(sql, _parametros_libsql(parametros)))
             except Exception as exc:
                 self._reintentar_si_rota(exc)
 
     def executemany(self, sql, secuencia):
         with _turso_conn_lock:
-            return _CursorCompatTurso(self._conn.executemany(sql, secuencia))
+            filas = [_parametros_libsql(fila) for fila in secuencia]
+            try:
+                return _CursorCompatTurso(self._conn.executemany(sql, filas))
+            except Exception as exc:
+                self._reintentar_si_rota(exc)
 
     def executescript(self, sql):
         with _turso_conn_lock:
-            return self._conn.executescript(sql)
+            try:
+                return self._conn.executescript(sql)
+            except Exception as exc:
+                self._reintentar_si_rota(exc)
 
     def cursor(self):
         with _turso_conn_lock:
@@ -249,7 +297,10 @@ class _ConexionCompatTurso:
 
     def commit(self):
         with _turso_conn_lock:
-            self._conn.commit()
+            try:
+                self._conn.commit()
+            except Exception as exc:
+                self._reintentar_si_rota(exc)
             try:
                 self._conn.sync()
             except Exception:
