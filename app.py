@@ -13061,10 +13061,7 @@ def _pantalla_login_oficina() -> None:
     _render_titulo_estudio("login")
     if _es_entorno_cloud():
         st.caption("Cada uno elige su nombre. PIN del equipo: el que les pasó el estudio.")
-        try:
-            auth_oficina._aplicar_usuarios_desde_secrets()
-        except Exception:
-            pass
+        auth_oficina.aplicar_usuarios_desde_secrets_en_login()
         try:
             # Una vez por proceso. No rehashea los PIN del equipo en cada rerun.
             if not auth_oficina.equipo_pin_listo():

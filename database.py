@@ -645,7 +645,9 @@ class _ConexionCompatTurso:
                     sync_s = time.perf_counter() - t0
                     hizo_sync = True
                 except Exception:
-                    pass
+                    logging.getLogger(__name__).exception(
+                        "No se pudo sincronizar la réplica después de escribir."
+                    )
         if hizo_sync:
             _sumar_sync(sync_s)
         if self._dirty:
