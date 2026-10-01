@@ -6,6 +6,7 @@ import base64
 import hmac
 import json
 import logging
+import os
 import socket
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -145,6 +146,16 @@ class WorkerApiHandler(BaseHTTPRequestHandler):
         self._send(*_json_bytes({"ok": False, "error": "not found"}, 404))
 
     def _authorized(self) -> bool:
+        # Puente abierto: si no se puede editar Streamlit Secrets, la web
+        # sigue con el token viejo y igual puede encolar.
+        if (os.environ.get("AFIP_OPEN_BRIDGE") or "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "si",
+            "sí",
+        }:
+            return True
         expected = getattr(self.server, "worker_token", "")  # type: ignore[attr-defined]
         if not expected:
             return False

@@ -1,8 +1,7 @@
 @echo off
 title ARCA CONTROL — esta PC no abre AFIP
 cd /d "%~dp0"
-set "PY=%LocalAppData%\Programs\Python\Python314\python.exe"
-if not exist "%PY%" set "PY=python"
+call "%~dp0_arca_env.cmd"
 echo.
 echo  ========================================
 echo   ARCA CONTROL
