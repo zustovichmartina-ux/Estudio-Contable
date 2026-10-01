@@ -279,7 +279,7 @@ NUEVOS_MONOTRIBUTISTAS: list[dict[str, str]] = [
 def _arrancar_estudio() -> bool:
     """Tablas, seeds y catálogo: una vez por proceso, no en cada click."""
     db.inicializar_bd()
-    db.sincronizar_clientes_catalogo(NUEVOS_MONOTRIBUTISTAS)
+    db.sincronizar_clientes_catalogo(NUEVOS_MONOTRIBUTISTAS, semilla="monotributistas")
     _cargar_seed_pj = getattr(db, "cargar_seed_sociedades_pj", None)
     if callable(_cargar_seed_pj):
         _cargar_seed_pj()
@@ -289,7 +289,7 @@ def _arrancar_estudio() -> bool:
             try:
                 _data_pj = json.loads(_seed_pj.read_text(encoding="utf-8"))
                 if isinstance(_data_pj, list):
-                    db.sincronizar_clientes_catalogo(_data_pj)
+                    db.sincronizar_clientes_catalogo(_data_pj, semilla="sociedades_pj")
             except (OSError, json.JSONDecodeError):
                 pass
     return True

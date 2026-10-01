@@ -399,6 +399,7 @@ def inicializar_tablas_inversiones(conn: sqlite3.Connection) -> None:
 
 def sembrar_tc_bna_default() -> None:
     """Carga el historial BNA 2023-2025 una sola vez (no-op si la tabla ya tiene datos)."""
+    # Import local: database.py importa este módulo dentro de inicializar_bd.
     import database as db
 
     if not TC_BNA_SEED_PATH.is_file():
@@ -411,10 +412,14 @@ def sembrar_tc_bna_default() -> None:
             filas = json.loads(TC_BNA_SEED_PATH.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return
-        for fecha, compra, venta in filas:
-            conn.execute(
+        lote = [
+            (str(fecha), float(compra), float(venta))
+            for fecha, compra, venta in filas
+        ]
+        if lote:
+            conn.executemany(
                 "INSERT OR IGNORE INTO inversiones_tc_bna (fecha, compra, venta) VALUES (?, ?, ?)",
-                (fecha, float(compra), float(venta)),
+                lote,
             )
         conn.commit()
 

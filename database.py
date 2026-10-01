@@ -1,5 +1,6 @@
 """Gestión de la base de datos SQLite para clientes del estudio contable."""
 
+import hashlib
 import json
 import logging
 import os
@@ -213,6 +214,49 @@ def _obtener_conn_turso_singleton():
     return _turso_conn_obj
 
 
+def _parametros_libsql(parametros):
+    """libsql solo acepta tuple; sqlite3 también acepta list."""
+    if isinstance(parametros, list):
+        return tuple(parametros)
+    return parametros
+
+
+def _es_error_sql_libsql(exc: BaseException) -> bool:
+    """True si el fallo es de SQLite y no de la red.
+
+    Turso remoto lo envuelve: ``Hrana: stream error: ... "SQLite error: ..." SQLITE_...``.
+    libsql embebido tira el texto pelado (``duplicate column name: ...``).
+    """
+    texto = str(exc)
+    if "SQLite error" in texto or "SQLITE_" in texto:
+        return True
+    if "Hrana" in texto or "stream error" in texto:
+        return False
+    return any(
+        marca in texto
+        for marca in (
+            "duplicate column",
+            "already exists",
+            "no such table",
+            "no such column",
+            "constraint failed",
+            "syntax error",
+        )
+    )
+
+
+def _traducir_error_libsql(exc: BaseException) -> None:
+    """Pasa un error SQL de libsql a sqlite3, o tira la conexión si fue de red."""
+    if _es_error_sql_libsql(exc):
+        texto = str(exc)
+        if any(marca in texto for marca in ("UNIQUE", "constraint", "CONSTRAINT")):
+            raise sqlite3.IntegrityError(texto) from exc
+        raise sqlite3.OperationalError(texto) from exc
+    global _turso_conn_obj
+    _turso_conn_obj = None  # próxima conexión reintenta desde cero
+    raise exc
+
+
 class _ConexionCompatTurso:
     """
     Envuelve la conexión compartida de libsql con la misma API que usa el resto
@@ -224,24 +268,29 @@ class _ConexionCompatTurso:
         self.row_factory = None  # compat: el resto del código no necesita fijarlo
 
     def _reintentar_si_rota(self, exc):
-        global _turso_conn_obj
-        _turso_conn_obj = None  # próxima conexión reintenta desde cero
-        raise exc
+        _traducir_error_libsql(exc)
 
     def execute(self, sql, parametros=()):
         with _turso_conn_lock:
             try:
-                return _CursorCompatTurso(self._conn.execute(sql, parametros))
+                return _CursorCompatTurso(self._conn.execute(sql, _parametros_libsql(parametros)))
             except Exception as exc:
                 self._reintentar_si_rota(exc)
 
     def executemany(self, sql, secuencia):
         with _turso_conn_lock:
-            return _CursorCompatTurso(self._conn.executemany(sql, secuencia))
+            filas = [_parametros_libsql(fila) for fila in secuencia]
+            try:
+                return _CursorCompatTurso(self._conn.executemany(sql, filas))
+            except Exception as exc:
+                self._reintentar_si_rota(exc)
 
     def executescript(self, sql):
         with _turso_conn_lock:
-            return self._conn.executescript(sql)
+            try:
+                return self._conn.executescript(sql)
+            except Exception as exc:
+                self._reintentar_si_rota(exc)
 
     def cursor(self):
         with _turso_conn_lock:
@@ -249,7 +298,10 @@ class _ConexionCompatTurso:
 
     def commit(self):
         with _turso_conn_lock:
-            self._conn.commit()
+            try:
+                self._conn.commit()
+            except Exception as exc:
+                self._reintentar_si_rota(exc)
             try:
                 self._conn.sync()
             except Exception:
@@ -328,6 +380,59 @@ def _migrar_tipo_monotributista(conn: sqlite3.Connection) -> None:
     )
     conn.execute("DROP TABLE clientes")
     conn.execute("ALTER TABLE clientes_new RENAME TO clientes")
+
+
+def _asegurar_app_meta(conn) -> None:
+    """Marcas de siembra (versión o hash). Una fila por semilla, no un flag en disco."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS app_meta (
+            clave TEXT PRIMARY KEY,
+            valor TEXT NOT NULL
+        )
+        """
+    )
+
+
+def _valor_fila(fila, clave: str):
+    if fila is None:
+        return None
+    if hasattr(fila, "keys"):
+        return fila[clave]
+    return fila[0]
+
+
+def leer_semilla(clave: str, conn=None) -> str | None:
+    """Lee la marca de una semilla. Con `conn`, no abre otra conexión."""
+    if conn is None:
+        with obtener_conexion() as propia:
+            return leer_semilla(clave, propia)
+    _asegurar_app_meta(conn)
+    fila = conn.execute(
+        "SELECT valor FROM app_meta WHERE clave = ?",
+        (clave,),
+    ).fetchone()
+    valor = _valor_fila(fila, "valor")
+    return None if valor is None else str(valor)
+
+
+def guardar_semilla(clave: str, valor: str, conn=None) -> None:
+    """Guarda la marca. Si no hay `conn`, confirma sola; si hay, la confirma el llamador."""
+    if conn is None:
+        with obtener_conexion() as propia:
+            guardar_semilla(clave, valor, propia)
+            propia.commit()
+        return
+    _asegurar_app_meta(conn)
+    conn.execute(
+        "INSERT INTO app_meta (clave, valor) VALUES (?, ?) "
+        "ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor",
+        (clave, valor),
+    )
+
+
+def huella_semilla(*partes: str) -> str:
+    return hashlib.sha256("\n".join(partes).encode("utf-8")).hexdigest()
 
 
 def inicializar_bd() -> None:
@@ -426,6 +531,7 @@ def inicializar_bd() -> None:
         import rutinas as rutinas_cola
 
         rutinas_cola.inicializar_tablas_rutinas(conn)
+        _asegurar_app_meta(conn)
         conn.commit()
     auth_oficina.sembrar_usuarios_oficina_default()
     _sembrar_convenios_sueldos_default()
@@ -469,27 +575,25 @@ def _sembrar_convenios_sueldos_default() -> None:
         ("METALURGICOS_260_75", "CCT 260/75 Metalúrgicos", basicas),
         ("OTRO", "Otro / a definir", basicas),
     ]
+    filas: list[tuple[str, str, str]] = []
+    for codigo, nombre, reglas in catalogo:
+        payload = json.dumps(reglas, ensure_ascii=False, sort_keys=True)
+        filas.append((codigo, nombre, payload))
+    marca = huella_semilla(*(f"{codigo}|{nombre}|{payload}" for codigo, nombre, payload in filas))
     with obtener_conexion() as conn:
-        for codigo, nombre, reglas in catalogo:
-            payload = json.dumps(reglas, ensure_ascii=False)
-            row = conn.execute(
-                "SELECT id, reglas_json FROM convenios_colectivos WHERE codigo = ?",
-                (codigo,),
-            ).fetchone()
-            if not row:
-                conn.execute(
-                    """
-                    INSERT INTO convenios_colectivos (codigo, nombre, reglas_json)
-                    VALUES (?, ?, ?)
-                    """,
-                    (codigo, nombre, payload),
-                )
-            elif codigo == "COMERCIO_130_75":
-                # Mantener escala Comercio al día en cada init
-                conn.execute(
-                    "UPDATE convenios_colectivos SET nombre = ?, reglas_json = ? WHERE codigo = ?",
-                    (nombre, payload, codigo),
-                )
+        if leer_semilla("convenios_sueldos", conn) == marca:
+            return
+        conn.executemany(
+            """
+            INSERT INTO convenios_colectivos (codigo, nombre, reglas_json)
+            VALUES (?, ?, ?)
+            ON CONFLICT(codigo) DO UPDATE SET
+                nombre = excluded.nombre,
+                reglas_json = excluded.reglas_json
+            """,
+            filas,
+        )
+        guardar_semilla("convenios_sueldos", marca, conn)
         conn.commit()
 
 
@@ -507,23 +611,27 @@ def _reset_cct_comercio_masivo_si_corresponde() -> None:
     Una sola vez: si casi todos quedaron en COMERCIO por el default erróneo
     de la migración, se limpian para forzar asignación real por sociedad.
     """
-    flag = BASE_DIR / "logs" / "sueldos_cct_reset_v1.flag"
-    if flag.exists():
-        return
     try:
         with obtener_conexion() as conn:
-            total = conn.execute("SELECT COUNT(*) AS n FROM clientes").fetchone()["n"]
-            comercio = conn.execute(
-                "SELECT COUNT(*) AS n FROM clientes WHERE cct_asignado = 'COMERCIO_130_75'"
-            ).fetchone()["n"]
+            if leer_semilla("cct_reset_v1", conn) == "1":
+                return
+            total = int(_valor_fila(conn.execute("SELECT COUNT(*) AS n FROM clientes").fetchone(), "n") or 0)
+            comercio = int(
+                _valor_fila(
+                    conn.execute(
+                        "SELECT COUNT(*) AS n FROM clientes WHERE cct_asignado = 'COMERCIO_130_75'"
+                    ).fetchone(),
+                    "n",
+                )
+                or 0
+            )
             if total > 0 and comercio >= max(1, int(total * 0.8)):
                 conn.execute(
                     "UPDATE clientes SET cct_asignado = NULL "
                     "WHERE cct_asignado = 'COMERCIO_130_75'"
                 )
-                conn.commit()
-        flag.parent.mkdir(parents=True, exist_ok=True)
-        flag.write_text("ok", encoding="utf-8")
+            guardar_semilla("cct_reset_v1", "1", conn)
+            conn.commit()
     except Exception:
         pass
 
@@ -1012,90 +1120,142 @@ def _resolver_plan_path_catalogo(item: dict, cuit: str) -> str | None:
     return None
 
 
-def sincronizar_clientes_catalogo(catalogo: list[dict]) -> dict[str, int]:
-    """Inserta clientes del catálogo estático que aún no existen (por CUIT)."""
+def _fila_catalogo(item: dict) -> tuple[str, str, str, int] | None:
+    """Normaliza un ítem de catálogo. None si no se puede insertar."""
+    nombre = str(item.get("nombre", "")).strip()
+    cuit = re.sub(r"\D", "", str(item.get("cuit", "")))
+    tipo = str(item.get("tipo") or item.get("tipo_persona") or "Monotributista").strip()
+    if tipo == "Monotributista":
+        tipo_persona = "Monotributista"
+    elif tipo in TIPOS_PERSONA:
+        tipo_persona = tipo
+    else:
+        tipo_persona = _categorizar_tipo(nombre)
+    if not nombre or len(cuit) != 11:
+        return None
+    mes_raw = item.get("mes_cierre_balance")
+    try:
+        mes_cierre = int(mes_raw) if mes_raw not in (None, "") else 12
+    except (TypeError, ValueError):
+        mes_cierre = 12
+    if mes_cierre < 1 or mes_cierre > 12:
+        mes_cierre = 12
+    if tipo_persona in ("Persona Física", "Monotributista"):
+        mes_cierre = 12
+    return nombre, cuit, tipo_persona, mes_cierre
+
+
+def _huella_catalogo(catalogo: list[dict]) -> str:
+    partes = []
+    for item in catalogo:
+        nombre = str(item.get("nombre", "")).strip()
+        cuit = re.sub(r"\D", "", str(item.get("cuit", "")))
+        tipo = str(item.get("tipo") or item.get("tipo_persona") or "").strip()
+        mes = item.get("mes_cierre_balance")
+        partes.append(f"{nombre}|{cuit}|{tipo}|{mes}")
+    return huella_semilla(*partes)
+
+
+def sincronizar_clientes_catalogo(
+    catalogo: list[dict],
+    *,
+    semilla: str | None = None,
+) -> dict[str, int]:
+    """Inserta clientes del catálogo estático que aún no existen (por CUIT).
+
+    Con `semilla`, la segunda corrida sale si el contenido no cambió. Esa marca
+    no mira planes en disco: un plan nuevo se vincula al cambiar el catálogo
+    o al llamar sin semilla.
+    """
     inicializar_bd()
     stats = {"insertados": 0, "omitidos": 0, "errores": 0, "planes_vinculados": 0}
+    marca = _huella_catalogo(catalogo) if semilla else ""
+    if semilla and leer_semilla(f"catalogo:{semilla}") == marca:
+        stats["omitidos"] = len(catalogo)
+        return stats
     with obtener_conexion() as conn:
         existentes = {
-            re.sub(r"\D", "", str(row["cuit"])): dict(row)
+            re.sub(r"\D", "", str(row["cuit"])): {
+                "id": row["id"],
+                "cuit": row["cuit"],
+                "plan_cuentas_path": row["plan_cuentas_path"],
+                "plan_cuentas_csv": row["plan_cuentas_csv"],
+            }
             for row in conn.execute(
                 "SELECT id, cuit, plan_cuentas_path, plan_cuentas_csv FROM clientes"
             ).fetchall()
         }
+        inserts: list[tuple] = []
+        upd_path_csv: list[tuple] = []
+        upd_path: list[tuple] = []
+        upd_csv: list[tuple] = []
+        vistos = set(existentes)
         for item in catalogo:
-            nombre = str(item.get("nombre", "")).strip()
-            cuit = re.sub(r"\D", "", str(item.get("cuit", "")))
-            tipo = str(item.get("tipo") or item.get("tipo_persona") or "Monotributista").strip()
-            if tipo == "Monotributista":
-                tipo_persona = "Monotributista"
-            elif tipo in TIPOS_PERSONA:
-                tipo_persona = tipo
-            else:
-                tipo_persona = _categorizar_tipo(nombre)
-            if not nombre or len(cuit) != 11:
+            fila = _fila_catalogo(item)
+            if fila is None:
                 stats["errores"] += 1
                 continue
-            mes_raw = item.get("mes_cierre_balance")
-            try:
-                mes_cierre = int(mes_raw) if mes_raw not in (None, "") else 12
-            except (TypeError, ValueError):
-                mes_cierre = 12
-            if mes_cierre < 1 or mes_cierre > 12:
-                mes_cierre = 12
-            if tipo_persona in ("Persona Física", "Monotributista"):
-                mes_cierre = 12
+            nombre, cuit, tipo_persona, mes_cierre = fila
             plan_path = _resolver_plan_path_catalogo(item, cuit)
             csv_txt = _texto_plan_csv_disco(cuit, plan_path)
-            if cuit in existentes:
-                # En Cloud/repo: si hay plan propio y la BD apunta a un path vacío/inexistente, actualizar.
-                row = existentes[cuit]
-                actual = Path(str(row.get("plan_cuentas_path") or ""))
-                csv_bd = str(row.get("plan_cuentas_csv") or "").strip()
-                if plan_path and (
-                    not _plan_archivo_con_cuentas(actual) or not csv_bd
-                ):
-                    if csv_txt and not csv_bd:
-                        conn.execute(
-                            """
-                            UPDATE clientes
-                            SET plan_cuentas_path = ?, plan_cuentas_csv = ?
-                            WHERE id = ?
-                            """,
-                            (plan_path, csv_txt, row["id"]),
-                        )
-                    else:
-                        conn.execute(
-                            "UPDATE clientes SET plan_cuentas_path = ? WHERE id = ?",
-                            (plan_path, row["id"]),
-                        )
-                    stats["planes_vinculados"] += 1
-                elif csv_txt and not csv_bd:
-                    conn.execute(
-                        "UPDATE clientes SET plan_cuentas_csv = ? WHERE id = ?",
-                        (csv_txt, row["id"]),
-                    )
-                    stats["planes_vinculados"] += 1
+            if cuit in vistos:
+                row = existentes.get(cuit)
+                if row is not None and row.get("id") is not None:
+                    actual = Path(str(row.get("plan_cuentas_path") or ""))
+                    csv_bd = str(row.get("plan_cuentas_csv") or "").strip()
+                    if plan_path and (
+                        not _plan_archivo_con_cuentas(actual) or not csv_bd
+                    ):
+                        if csv_txt and not csv_bd:
+                            upd_path_csv.append((plan_path, csv_txt, row["id"]))
+                        else:
+                            upd_path.append((plan_path, row["id"]))
+                        stats["planes_vinculados"] += 1
+                    elif csv_txt and not csv_bd:
+                        upd_csv.append((csv_txt, row["id"]))
+                        stats["planes_vinculados"] += 1
                 stats["omitidos"] += 1
                 continue
-            try:
-                conn.execute(
-                    """
-                    INSERT INTO clientes (
-                        nombre, cuit, tipo_persona, plan_cuentas_path, mes_cierre_balance, plan_cuentas_csv
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?)
-                    """,
-                    (nombre, cuit, tipo_persona, plan_path, mes_cierre, csv_txt or None),
+            vistos.add(cuit)
+            inserts.append((nombre, cuit, tipo_persona, plan_path, mes_cierre, csv_txt or None))
+            existentes[cuit] = {
+                "id": None,
+                "cuit": cuit,
+                "plan_cuentas_path": plan_path,
+                "plan_cuentas_csv": csv_txt,
+            }
+            stats["insertados"] += 1
+        if inserts:
+            conn.executemany(
+                """
+                INSERT INTO clientes (
+                    nombre, cuit, tipo_persona, plan_cuentas_path, mes_cierre_balance, plan_cuentas_csv
                 )
-                existentes[cuit] = {
-                    "cuit": cuit,
-                    "plan_cuentas_path": plan_path,
-                    "plan_cuentas_csv": csv_txt,
-                }
-                stats["insertados"] += 1
-            except sqlite3.IntegrityError:
-                stats["omitidos"] += 1
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                inserts,
+            )
+        if upd_path_csv:
+            conn.executemany(
+                """
+                UPDATE clientes
+                SET plan_cuentas_path = ?, plan_cuentas_csv = ?
+                WHERE id = ?
+                """,
+                upd_path_csv,
+            )
+        if upd_path:
+            conn.executemany(
+                "UPDATE clientes SET plan_cuentas_path = ? WHERE id = ?",
+                upd_path,
+            )
+        if upd_csv:
+            conn.executemany(
+                "UPDATE clientes SET plan_cuentas_csv = ? WHERE id = ?",
+                upd_csv,
+            )
+        if semilla:
+            guardar_semilla(f"catalogo:{semilla}", marca, conn)
         conn.commit()
     return stats
 
@@ -1124,7 +1284,10 @@ def cargar_seed_sociedades_pj(ruta: str | Path | None = None) -> dict[str, int]:
         warnings.warn(msg, UserWarning, stacklevel=2)
         logging.getLogger(__name__).warning(msg)
         return {"insertados": 0, "omitidos": 0, "errores": 1, "planes_vinculados": 0}
-    return sincronizar_clientes_catalogo(data)
+    return sincronizar_clientes_catalogo(
+        data,
+        semilla="sociedades_pj" if ruta is None else None,
+    )
 
 
 def eliminar_cliente(cliente_id: int) -> None:
@@ -1711,21 +1874,34 @@ def _inicializar_tablas_conciliacion(conn: sqlite3.Connection) -> None:
 
 
 def sembrar_reglas_conciliacion_default() -> None:
-    """Inserta el diccionario del prompt solo si la tabla esta vacia."""
+    """Inserta el diccionario del prompt solo si la tabla esta vacia.
+
+    Si ya hay filas (aunque sean reglas editadas a mano) no se tocan.
+    """
     from motor_conciliacion import REGLAS_SEED
 
     with obtener_conexion() as conn:
-        n = conn.execute("SELECT COUNT(*) AS n FROM clasificacion_reglas").fetchone()["n"]
-        if n and int(n) > 0:
-            return
-        for i, (patron, categoria, tipo) in enumerate(REGLAS_SEED):
-            conn.execute(
-                """
-                INSERT INTO clasificacion_reglas (patron, categoria, tipo, orden, activo)
-                VALUES (?, ?, ?, ?, 1)
-                """,
-                (patron, categoria, tipo, i),
+        n = int(
+            _valor_fila(
+                conn.execute("SELECT COUNT(*) AS n FROM clasificacion_reglas").fetchone(),
+                "n",
             )
+            or 0
+        )
+        if n > 0:
+            return
+        if not REGLAS_SEED:
+            return
+        conn.executemany(
+            """
+            INSERT INTO clasificacion_reglas (patron, categoria, tipo, orden, activo)
+            VALUES (?, ?, ?, ?, 1)
+            """,
+            [
+                (patron, categoria, tipo, i)
+                for i, (patron, categoria, tipo) in enumerate(REGLAS_SEED)
+            ],
+        )
         conn.commit()
 
 
