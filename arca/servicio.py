@@ -16,7 +16,7 @@ import openpyxl
 from openpyxl import Workbook
 
 from arca.codigos import ETIQUETA_CBTE, TIPOS_CBTE
-from arca.comprobante import COLUMNAS, solo_digitos
+from arca.comprobante import COLUMNAS, a_fecha, solo_digitos
 from arca.constancia import consultar_categoria
 from arca.pdf import generar_pdf
 from arca.persistencia import (
@@ -208,24 +208,31 @@ def _snapshot(cb) -> dict | None:
     }
 
 
+def _inicio_txt(valor) -> str:
+    if valor in (None, ""):
+        return ""
+    try:
+        return a_fecha(valor).strftime("%d/%m/%Y")
+    except ValueError:
+        return str(valor)
+
+
 def _recordar_emisor(cb) -> None:
+    """Después de un APROBADO, deja la ficha del emisor como quedó en el comprobante."""
     if cb is None or not getattr(cb, "cuit", None):
         return
-    if cargar_emisor(cb.cuit):
-        return
     f0 = cb.f0 or {}
-    inicio = f0.get("inicio_act")
-    if isinstance(inicio, dt.datetime):
-        inicio = inicio.date().isoformat()
-    elif isinstance(inicio, dt.date):
-        inicio = inicio.isoformat()
+    tipo = str(f0.get("tipo") or ETIQUETA_CBTE.get(getattr(cb, "cbte_tipo", None)) or "")
+    pto = getattr(cb, "pto_vta", None)
     guardar_emisor(
         cb.cuit,
         razon_social=str(f0.get("razon_emisor") or ""),
         domicilio=str(f0.get("dom_emisor") or ""),
         condicion_iva=str(f0.get("cond_iva_emisor") or ""),
         iibb=str(f0.get("iibb_emisor") or ""),
-        inicio_actividades=str(inicio or ""),
+        inicio_actividades=_inicio_txt(f0.get("inicio_act")),
+        pto_vta=str(pto) if pto not in (None, "") else None,
+        tipo=tipo or None,
     )
 
 

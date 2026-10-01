@@ -198,6 +198,110 @@ def test_solapa_facturacion_conectada():
     assert callable(ui_arca_facturacion.render_facturacion_arca)
 
 
+def test_cuit_en_vivo_y_monotributo():
+    from arca.formulario import campos_desde_emisor, mensaje_cuit, tipos_para_condicion
+
+    assert mensaje_cuit("") is None
+    assert mensaje_cuit("23422843434") is None
+    assert "11 dígitos" in mensaje_cuit("201234")
+    assert "dígito verificador" in mensaje_cuit("23422843435")
+    assert tipos_para_condicion("Responsable Monotributo") == ["C", "NC C", "ND C"]
+    assert "A" in tipos_para_condicion("")
+    assert campos_desde_emisor(None) == {}
+    vacio = campos_desde_emisor({"razon_social": "X", "condicion_iva": ""})
+    assert vacio["cond"] == ""
+    assert "tipo" not in vacio
+    mono = campos_desde_emisor({
+        "razon_social": "Mono", "domicilio": "Güemes 1", "iibb": "1",
+        "inicio_actividades": "2019-03-01", "condicion_iva": "Responsable Monotributo",
+        "pto_vta": "7", "tipo": "A",
+    })
+    assert mono["cond"] == "Responsable Monotributo"
+    assert mono["tipo"] == "C"
+    assert mono["pto"] == 7
+    assert mono["inicio"] == "01/03/2019"
+    assert mono["razon"] == "Mono"
+
+
+def test_emisor_recuerda_punto_y_tipo(tmp_path, monkeypatch):
+    _db(tmp_path, monkeypatch)
+    with database.obtener_conexion() as conn:
+        conn.execute("DROP TABLE IF EXISTS arca_emisores")
+        conn.execute(
+            """
+            CREATE TABLE arca_emisores (
+                cuit TEXT PRIMARY KEY, razon_social TEXT, domicilio TEXT,
+                condicion_iva TEXT, iibb TEXT, inicio_actividades TEXT,
+                actualizado_en TIMESTAMP
+            )
+            """
+        )
+    guardar_emisor(
+        "27301234568", "Mono", "Güemes 1", "Responsable Monotributo", "1", "01/03/2019",
+        pto_vta="7", tipo="C",
+    )
+    em = cargar_emisor("27301234568")
+    assert str(em["pto_vta"]) == "7"
+    assert em["tipo"] == "C"
+    guardar_emisor("27301234568", "Mono SA", "Güemes 2", "Responsable Monotributo", "1", "01/03/2019")
+    em = cargar_emisor("27301234568")
+    assert em["razon_social"] == "Mono SA"
+    assert str(em["pto_vta"]) == "7"
+    assert em["tipo"] == "C"
+
+
+def test_emitir_ok_actualiza_emisor_existente(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from arca.servicio import _recordar_emisor
+
+    _db(tmp_path, monkeypatch)
+    guardar_emisor("27301234568", "Viejo", "Calle 1", "Responsable Monotributo", "1", "01/01/2018", pto_vta="3", tipo="C")
+    _recordar_emisor(SimpleNamespace(
+        cuit="27301234568", pto_vta=4, cbte_tipo=11,
+        f0={
+            "razon_emisor": "Nuevo", "dom_emisor": "Calle 2",
+            "cond_iva_emisor": "Responsable Monotributo", "iibb_emisor": "9",
+            "inicio_act": dt.date(2019, 3, 1), "tipo": "C",
+        },
+    ))
+    em = cargar_emisor("27301234568")
+    assert em["razon_social"] == "Nuevo"
+    assert em["domicilio"] == "Calle 2"
+    assert em["inicio_actividades"] == "01/03/2019"
+    assert str(em["pto_vta"]) == "4"
+    assert em["tipo"] == "C"
+
+
+def test_nc_toma_receptor_e_importe_del_comprobante_guardado():
+    from arca.formulario import campos_desde_asociado, candidatos_asociados, etiqueta_asociado
+
+    factura = {
+        "id": 8, "estado": "APROBADO", "tipo": "C", "pto_vta": "3", "numero": "12",
+        "fecha_cbte": "20261001", "total": 1500,
+        "payload_json": (
+            '{"f0": {"doc_tipo": "DNI", "doc_nro": "30111222", "nombre_rec": "Juan Pérez",'
+            ' "dom_rec": "Colón 1", "cond_iva": "Consumidor Final", "detalle": "Honorarios",'
+            ' "neto": 1500, "alicuota": "No corresponde (C)", "tipo": "C"},'
+            ' "items": [{"neto": 1500}]}'
+        ),
+    }
+    nc = {**factura, "id": 9, "tipo": "NC C", "estado": "APROBADO"}
+    seco = {**factura, "id": 10, "estado": "OK-DRYRUN"}
+    otra = {**factura, "id": 11, "tipo": "A"}
+    assert [r["id"] for r in candidatos_asociados([nc, seco, otra, factura], "NC C")] == [8]
+    campos = campos_desde_asociado(factura)
+    assert campos["nombre_rec"] == "Juan Pérez"
+    assert campos["doc_nro"] == "30111222"
+    assert campos["neto"] == 1500
+    assert campos["asoc_tipo"] == "C"
+    assert campos["asoc_pto"] == 3
+    assert campos["asoc_nro"] == 12
+    assert campos["asoc_fecha"] == "01/10/2026"
+    assert campos["asoc_id"] == ""
+    assert "Juan Pérez" in etiqueta_asociado(factura)
+
+
 def test_modulo_arca_sin_ejecutor():
     """La UI de ARCA no muestra ni consulta la máquina ejecutor."""
     raiz = os.path.dirname(os.path.dirname(__file__))
