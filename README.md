@@ -90,7 +90,11 @@ La oficina pide a mano tareas que el asistente corre en la PC del estudio (ahí 
 
 El catálogo (nombre y descripción) está en `rutinas.py`, en la lista `RUTINAS`. Cada pedido puede llevar un texto libre de parámetros (período, cliente) y el nombre de quien lo pide.
 
-En la web se elige la rutina en un desplegable. Abajo están la descripción y los requisitos (checklist en `RUTINAS`, fácil de editar). **Ejecutar** se habilita cuando están todos tildados: apretarlo crea el pedido. **Listo** cierra la vista previa. Mientras esa rutina está `PENDIENTE` o `EN_CURSO`, la vista y el historial se actualizan solos cada 5 segundos; también está el botón **Refrescar**.
+En la web se elige la rutina en un desplegable. En las rutinas con checklist, **Ejecutar** se habilita cuando están todos los requisitos tildados. **Listo** cierra la vista previa. Mientras esa rutina está `PENDIENTE` o `EN_CURSO`, la vista y el historial se actualizan solos cada 5 segundos; también está el botón **Refrescar**.
+
+**Proyecciones Ganancias por IVA** tiene 4 tildes: listado de imputación contable resumido, copia del F931, copia de IIBB y copia de TISH. La ayuda dice que todo va en una carpeta `MMAAAA` (agosto 2026 = `082026`) dentro de la carpeta de Proyecciones del cliente. **Ejecutar** se habilita con las 4 tildes, el período y al menos un cliente. En `parametros` el período queda en formato `MMAAAA`. La ficha se carga con **Actualizar ficha de clientes (xlsx)** desde la hoja **Clientes** (si no está, se usa la hoja activa). Los encabezados pueden traer una aclaración entre paréntesis, como `Activa (Sí/No)` o `Mes inicio ejercicio (1-12)`; los meses 1 a 12 pueden venir como número. El asistente la lee con `ficha --json`.
+
+En el servidor el asistente confirma que esa carpeta exista y tenga los 4 archivos. Si no existe, `Carpeta` y `Estado` quedan en `SIN CARPETA MMAAAA` y no se toca nada. F931 es `NO APLICA` si dice `NO TIENE EMPLEADOS`. TISH es `NO APLICA` si TISH no es Sí. La vista previa trae una tabla por cliente con columnas **Cliente, Carpeta, Imputación, F931, IIBB, TISH y Estado**. El cierre del ejercicio no es una tilde: la vista previa avisa que, si el mes es posterior al cierre, hace falta papel nuevo del ejercicio siguiente.
 
 Códigos que viajan en el JSON (`rutina`):
 
@@ -108,6 +112,7 @@ Estados: `PENDIENTE` → `EN_CURSO` → `OK` o `ERROR`. Un pedido `PENDIENTE` se
 Desde la raíz del repo, con las mismas variables que Streamlit Cloud (`TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN`). Sin esas variables lee el SQLite local y no ve la cola de la web.
 
 ```bash
+python scripts/cola_rutinas.py ficha --json
 python scripts/cola_rutinas.py listar --estado PENDIENTE
 python scripts/cola_rutinas.py tomar 12
 python scripts/cola_rutinas.py terminar 12 --estado OK --resultado "Listo" --archivos "C:\ruta\salida.xlsx" --preview-json preview.json
@@ -126,5 +131,30 @@ python scripts/cola_rutinas.py terminar 12 --estado OK --resultado "Listo" --arc
 ```
 
 `archivos` son rutas del servidor de archivos, no links. Si la operación no corresponde, sale con código 1 y un JSON `{"ok": false, "error": "..."}`.
+
+`ficha --json` imprime la ficha cargada (array; `[]` si todavía no hay). Un pedido de proyecciones guarda el período y los clientes así:
+
+```json
+{"periodo": "102026", "todos": false, "clientes": [{"sociedad": "ACME", "cuit": "30712345671"}]}
+```
+
+La vista previa de esa rutina puede incluir la tabla por cliente (el asistente completa cada requisito):
+
+```json
+{
+  "resumen_md": "Falta la proyección de **ACME**.",
+  "tablas": [
+    {
+      "titulo": "Por cliente",
+      "columnas": ["Cliente", "Carpeta", "Imputación", "F931", "IIBB", "TISH", "Estado"],
+      "filas": [
+        ["ACME", "OK", "OK", "NO APLICA", "OK", "OK", "FALTA"],
+        ["BETA", "SIN CARPETA MMAAAA", "", "", "", "", "SIN CARPETA MMAAAA"]
+      ]
+    }
+  ],
+  "archivos": []
+}
+```
 
 Pruebas de la cola, sin Turso: `python -m pytest -q tests/test_rutinas.py`
