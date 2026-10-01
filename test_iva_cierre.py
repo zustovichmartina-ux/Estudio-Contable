@@ -1890,29 +1890,6 @@ def test_arca_dryrun_portal_iva_no_abre_chrome():
   print("OK test_arca_dryrun_portal_iva_no_abre_chrome")
 
 
-def test_arca_ui_helpers_prefijan_sin_json_crudo():
-  from datetime import date as _date
-
-  from afip_worker.ui_streamlit import (
-      _digits,
-      _fmt_dt,
-      _parse_cuit_label,
-      _ruta_sugerida,
-  )
-
-  assert _digits("30-70898249-7") == "30708982497"
-  assert _parse_cuit_label("27-42043034-0 — Camila Rocio Albarello") == (
-      "27-42043034-0",
-      "Camila Rocio Albarello",
-  )
-  ruta = _ruta_sugerida("4 GOMAS SA", _date(2026, 9, 14))
-  assert ruta.endswith(r"\4 GOMAS SA\Facturas\09-2026")
-  portal = _ruta_sugerida("4 GOMAS SA", _date(2026, 8, 31), "bajar_portal_iva")
-  assert portal.endswith(r"\4 GOMAS SA\Impuestos\Portal IVA\08-2026")
-  assert _fmt_dt("2026-09-14T09:02:00") == "14/09/2026 09:02"
-  print("OK test_arca_ui_helpers_prefijan_sin_json_crudo")
-
-
 def test_gate_asiento_bloquea_desbalance_y_99999():
   from capa_revision import gate_asiento, resolver_codigo_plan
 
@@ -2050,7 +2027,6 @@ if __name__ == "__main__":
     test_conceptos_bancos_debito_no_toma_regla_credito()
     test_arca_dryrun_analizar_monotributo_deja_nota()
     test_arca_dryrun_portal_iva_no_abre_chrome()
-    test_arca_ui_helpers_prefijan_sin_json_crudo()
     test_gate_asiento_bloquea_desbalance_y_99999()
     test_motor_match_debil_no_queda_ok()
     print("\nTodos los tests pasaron.")

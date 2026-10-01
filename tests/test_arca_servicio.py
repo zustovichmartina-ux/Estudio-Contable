@@ -1,6 +1,5 @@
 """Facturación web: validación, persistencia y ticket, sin llamar a ARCA."""
 import datetime as dt
-import inspect
 import os
 import subprocess
 from argparse import Namespace
@@ -194,22 +193,24 @@ def test_pdf_desde_consulta(tmp_path):
 def test_solapa_facturacion_conectada():
     texto = open(os.path.join(os.path.dirname(os.path.dirname(__file__)), "afip_worker", "ui_streamlit.py"), encoding="utf-8").read()
     assert "Facturación" in texto and "render_facturacion_arca" in texto
+    assert "Consulta" in texto and "Próximamente" in texto
     import ui_arca_facturacion
     assert callable(ui_arca_facturacion.render_facturacion_arca)
 
 
-def test_facturacion_no_consulta_el_ejecutor():
-    """Abrir Facturación no llama al ejecutor ni arma el cartel rojo."""
-    from afip_worker.ui_streamlit import _aviso_estado_ejecutor, render_arca_module
-
-    src = inspect.getsource(render_arca_module)
-    rama = src.split('if seccion == "Facturación":', 1)[1].split("_seccion_ejecutor", 1)[0]
-    assert "render_facturacion_arca()" in rama
-    assert "return" in rama
-    assert "_remote(" not in rama
-    assert "_remote_health" not in rama
-    assert "ejecutor_arca.bat" not in rama
-    aviso = inspect.getsource(_aviso_estado_ejecutor)
-    assert "ejecutor_arca.bat" in aviso
-    assert "_seccion_ejecutor" in src
-    assert src.index("render_facturacion_arca()") < src.index("_seccion_ejecutor")
+def test_modulo_arca_sin_ejecutor():
+    """La UI de ARCA no muestra ni consulta la máquina ejecutor."""
+    raiz = os.path.dirname(os.path.dirname(__file__))
+    texto = open(os.path.join(raiz, "afip_worker", "ui_streamlit.py"), encoding="utf-8").read()
+    for marca in (
+        "ejecutor_arca.bat",
+        "máquina ejecutor",
+        "Encolar",
+        "CUITs",
+        "RemoteWorker",
+        "AFIP_WORKER",
+        "túnel",
+        "_remote(",
+    ):
+        assert marca not in texto, marca
+    assert 'st.tabs(["Facturación", "Consulta"])' in texto
