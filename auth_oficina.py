@@ -14,6 +14,7 @@ circular, ya que database.py llama a funciones de este modulo en runtime.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from pathlib import Path
 
@@ -258,30 +259,75 @@ def _aplicar_usuarios_desde_secrets() -> int:
     return aplicados
 
 
-def sembrar_equipo_oficina(*, forzar_pin: bool = False) -> int:
-    """Crea el equipo de la oficina. En Cloud no hace falta Manage app / Secrets."""
+def _marca_equipo(con_pin: bool) -> str:
+    """Cambia si cambia el padrón (login o nombre), así se vuelve a sembrar una vez."""
+    roster = "|".join(f"{login}:{nombre}" for login, nombre in _EQUIPO_OFICINA)
+    extras = "|".join(_ROLES_GENERICOS_OFICINA) + "|" + "|".join(sorted(_EQUIPO_ALIASES))
+    huella = hashlib.sha256(f"{roster}|{extras}".encode("utf-8")).hexdigest()[:16]
+    return f"equipo-{huella}-pin" if con_pin else f"equipo-{huella}"
+
+
+def sembrar_equipo_oficina(*, forzar_pin: bool = False, crear_admin_si_vacio: bool = False) -> int:
+    """Crea el equipo de la oficina. En Cloud no hace falta Manage app / Secrets.
+
+    Si la marca en app_meta coincide, no lee ni escribe usuarios.
+    """
     global _EQUIPO_PIN_LISTO
     aplicar_pin = bool(forzar_pin) and not _EQUIPO_PIN_LISTO
-    aplicados = 0
-    for login, nombre in _EQUIPO_OFICINA:
-        existente = obtener_usuario_oficina(login)
-        if existente is None:
-            crear_usuario_oficina(login, nombre, pin=_PIN_EQUIPO_OFICINA, es_admin=False)
+    marca_pin = _marca_equipo(True)
+    marca_sin_pin = _marca_equipo(False)
+    with database.obtener_conexion() as conn:
+        actual = database.leer_semilla("usuarios_equipo", conn)
+        if actual == marca_pin or (actual == marca_sin_pin and not aplicar_pin):
+            return 0
+        filas = conn.execute(
+            "SELECT id, usuario, nombre, pin_hash, es_admin, activo FROM usuarios_oficina"
+        ).fetchall()
+        por_login = {str(fila["usuario"]).lower(): fila for fila in filas}
+        inserts: list[tuple] = []
+        updates: list[tuple] = []
+        if crear_admin_si_vacio and not por_login:
+            inserts.append(("admin", "Administrador", "", 1))
+        aplicados = 0
+        for login, nombre in _EQUIPO_OFICINA:
+            existente = por_login.get(login)
+            if existente is None:
+                inserts.append((login, nombre, _hash_pin(_PIN_EQUIPO_OFICINA), 0))
+                aplicados += 1
+                continue
+            pin_hash = str(existente["pin_hash"] or "")
+            if aplicar_pin or not pin_hash.strip():
+                pin_hash = _hash_pin(_PIN_EQUIPO_OFICINA)
+            updates.append((nombre, pin_hash, 0, 1, int(existente["id"])))
             aplicados += 1
-            continue
-        kwargs: dict = {
-            "nombre": nombre,
-            "es_admin": False,
-            "activo": True,
-        }
-        if aplicar_pin or not str(existente.get("pin_hash") or "").strip():
-            kwargs["pin"] = _PIN_EQUIPO_OFICINA
-        actualizar_usuario_oficina(int(existente["id"]), **kwargs)
-        aplicados += 1
-    for extra in (*_ROLES_GENERICOS_OFICINA, *_EQUIPO_ALIASES):
-        viejo = obtener_usuario_oficina(extra)
-        if viejo and viejo.get("activo"):
-            actualizar_usuario_oficina(int(viejo["id"]), activo=False)
+        desactivar = [
+            (int(por_login[extra]["id"]),)
+            for extra in (*_ROLES_GENERICOS_OFICINA, *_EQUIPO_ALIASES)
+            if extra in por_login and por_login[extra]["activo"]
+        ]
+        if inserts:
+            conn.executemany(
+                "INSERT INTO usuarios_oficina (usuario, nombre, pin_hash, es_admin, activo) "
+                "VALUES (?, ?, ?, ?, 1)",
+                inserts,
+            )
+        if updates:
+            conn.executemany(
+                "UPDATE usuarios_oficina SET nombre = ?, pin_hash = ?, es_admin = ?, activo = ? "
+                "WHERE id = ?",
+                updates,
+            )
+        if desactivar:
+            conn.executemany(
+                "UPDATE usuarios_oficina SET activo = 0 WHERE id = ?",
+                desactivar,
+            )
+        if aplicar_pin or actual == marca_pin:
+            nueva = marca_pin
+        else:
+            nueva = marca_sin_pin
+        database.guardar_semilla("usuarios_equipo", nueva, conn)
+        conn.commit()
     if aplicar_pin:
         _EQUIPO_PIN_LISTO = True
     return aplicados
@@ -290,13 +336,10 @@ def sembrar_equipo_oficina(*, forzar_pin: bool = False) -> int:
 def sembrar_usuarios_oficina_default() -> None:
     """Crea admin si falta, y siempre deja el equipo (Guada, Tobi, …) listo."""
     _aplicar_usuarios_desde_secrets()
-    existentes = listar_usuarios_oficina(solo_activos=False)
-    if not existentes:
-        try:
-            crear_usuario_oficina("admin", "Administrador", pin="", es_admin=True)
-        except ValueError:
-            pass
-    sembrar_equipo_oficina(forzar_pin=_exigir_pin_en_entorno())
+    sembrar_equipo_oficina(
+        forzar_pin=_exigir_pin_en_entorno(),
+        crear_admin_si_vacio=True,
+    )
 
 
 def listar_usuarios_oficina(solo_activos: bool = True) -> list[dict]:

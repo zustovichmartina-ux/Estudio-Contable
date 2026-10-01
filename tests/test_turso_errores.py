@@ -121,14 +121,52 @@ def test_parametros_en_lista_pasan_como_tupla():
     assert interno.many == [("uno",), ("dos",)]
 
 
-def test_inicializar_bd_dos_veces_en_libsql_local(tmp_path, monkeypatch):
-    """La misma base libsql local tiene que arrancar dos veces sin caer en el ALTER."""
+class _ContadorSentencias:
+    """Cuenta llamadas a execute/executemany, no los commits."""
+
+    def __init__(self, conn):
+        self._conn = conn
+        self.execute_n = 0
+        self.executemany_n = 0
+        self.insert_execute = 0
+
+    def execute(self, sql, parametros=()):
+        self.execute_n += 1
+        if str(sql).lstrip().upper().startswith("INSERT"):
+            self.insert_execute += 1
+        return self._conn.execute(sql, parametros)
+
+    def executemany(self, sql, secuencia):
+        self.executemany_n += 1
+        return self._conn.executemany(sql, secuencia)
+
+    def __getattr__(self, nombre):
+        return getattr(self._conn, nombre)
+
+    @property
+    def sentencias(self) -> int:
+        return self.execute_n + self.executemany_n
+
+
+def test_inicializar_bd_dos_veces_en_libsql_local(tmp_path, monkeypatch, capsys):
+    """La misma base libsql local arranca dos veces, y la segunda no resiembra."""
     libsql = pytest.importorskip("libsql_experimental")
     monkeypatch.setattr(database, "DB_PATH", tmp_path / "estudio.db")
     monkeypatch.setattr(database, "_credenciales_turso", lambda: ("", ""))
-    monkeypatch.setattr(database, "_turso_conn_obj", libsql.connect(str(tmp_path / "x.db")))
+    contador = _ContadorSentencias(libsql.connect(str(tmp_path / "x.db")))
+    monkeypatch.setattr(database, "_turso_conn_obj", contador)
     database.inicializar_bd()
+    primera = contador.sentencias
+    many_1 = contador.executemany_n
+    insert_1 = contador.insert_execute
+    contador.execute_n = 0
+    contador.executemany_n = 0
+    contador.insert_execute = 0
     database.inicializar_bd()
+    segunda = contador.sentencias
+    many_2 = contador.executemany_n
+    with capsys.disabled():
+        print(f"SENTENCIAS inicializar_bd 1={primera} 2={segunda} executemany_1={many_1} executemany_2={many_2}")
     with database.obtener_conexion() as conn:
         columnas = {fila[1] for fila in conn.execute("PRAGMA table_info(clientes)").fetchall()}
         tablas = {
@@ -137,6 +175,8 @@ def test_inicializar_bd_dos_veces_en_libsql_local(tmp_path, monkeypatch):
                 "SELECT name FROM sqlite_master WHERE type = 'table'"
             ).fetchall()
         }
+        n_tc = conn.execute("SELECT COUNT(*) AS n FROM inversiones_tc_bna").fetchone()["n"]
+        n_reglas = conn.execute("SELECT COUNT(*) AS n FROM clasificacion_reglas").fetchone()["n"]
     assert "mes_cierre_balance" in columnas
     for nombre in (
         "usuarios_oficina",
@@ -144,5 +184,12 @@ def test_inicializar_bd_dos_veces_en_libsql_local(tmp_path, monkeypatch):
         "rutina_ficha_proyecciones",
         "arca_emisores",
         "inversiones_operaciones",
+        "app_meta",
     ):
         assert nombre in tablas
+    assert int(n_tc) > 100
+    assert int(n_reglas) > 0
+    assert many_1 >= 3
+    assert many_2 == 0
+    assert insert_1 < 30
+    assert segunda < primera
