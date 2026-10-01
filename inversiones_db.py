@@ -397,11 +397,13 @@ def inicializar_tablas_inversiones(conn: sqlite3.Connection) -> None:
     )
 
 
-def sembrar_tc_bna_default() -> None:
+def sembrar_tc_bna_default(*, ya_hay: int | None = None) -> None:
     """Carga el historial BNA 2023-2025 una sola vez (no-op si la tabla ya tiene datos)."""
     # Import local: database.py importa este módulo dentro de inicializar_bd.
     import database as db
 
+    if ya_hay is not None and ya_hay > 0:
+        return
     if not TC_BNA_SEED_PATH.is_file():
         return
     with db.obtener_conexion() as conn:

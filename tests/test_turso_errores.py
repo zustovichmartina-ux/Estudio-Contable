@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sqlite3
+import time
 
 import pytest
 
@@ -75,11 +76,18 @@ def test_unique_es_integrity_error(monkeypatch):
     sentinel = object()
     monkeypatch.setattr(database, "_turso_conn_obj", sentinel)
     causa = ValueError(_UNICO)
+    # El INSERT masivo sale por execute; un UPDATE sigue por executemany.
     with pytest.raises(sqlite3.IntegrityError) as exc:
-        _envolver(causa, "executemany").executemany("INSERT INTO clientes (cuit) VALUES (?)", [("1",)])
+        _envolver(causa, "execute").executemany(
+            "INSERT INTO clientes (cuit) VALUES (?)", [("1",), ("2",)]
+        )
     assert "UNIQUE constraint failed" in str(exc.value)
     assert exc.value.__cause__ is causa
     assert database._turso_conn_obj is sentinel
+    with pytest.raises(sqlite3.IntegrityError):
+        _envolver(causa, "executemany").executemany(
+            "UPDATE clientes SET cuit = ? WHERE id = ?", [("1", 1)]
+        )
     with pytest.raises(sqlite3.IntegrityError):
         _envolver(causa, "commit").commit()
     assert database._turso_conn_obj is sentinel
@@ -100,10 +108,14 @@ def test_parametros_en_lista_pasan_como_tupla():
     class _Graba:
         def __init__(self):
             self.params = None
+            self.sql = ""
             self.many = None
+            self.ejecutados: list = []
 
         def execute(self, sql, parametros=()):
             self.params = parametros
+            self.sql = sql
+            self.ejecutados.append(parametros)
             return self
 
         def executemany(self, sql, secuencia):
@@ -116,23 +128,28 @@ def test_parametros_en_lista_pasan_como_tupla():
     interno = _Graba()
     conn = database._ConexionCompatTurso(interno)
     conn.execute("UPDATE t SET a = ? WHERE id = ?", ["nombre", 1])
-    conn.executemany("INSERT INTO t (a) VALUES (?)", [["uno"], ["dos"]])
-    assert interno.params == ("nombre", 1)
-    assert interno.many == [("uno",), ("dos",)]
+    conn.executemany("UPDATE t SET a = ? WHERE id = ?", [["uno", 1], ["dos", 2]])
+    conn.executemany("INSERT INTO t (a) VALUES (?)", [["uno"], ["dos"], ["tres"]])
+    assert interno.ejecutados[0] == ("nombre", 1)
+    assert interno.params == ("uno", "dos", "tres")
+    assert "(?),(?),(?)".replace(" ", "") in interno.sql.replace(" ", "")
+    assert interno.many == [("uno", 1), ("dos", 2)]
 
 
 class _ContadorSentencias:
-    """Cuenta llamadas a execute/executemany, no los commits."""
+    """Cuenta viajes: execute, executemany y executescript (el batch cuenta 1)."""
 
     def __init__(self, conn):
         self._conn = conn
         self.execute_n = 0
         self.executemany_n = 0
+        self.executescript_n = 0
         self.insert_execute = 0
 
     def execute(self, sql, parametros=()):
         self.execute_n += 1
-        if str(sql).lstrip().upper().startswith("INSERT"):
+        texto = str(sql).lstrip().upper()
+        if texto.startswith("INSERT"):
             self.insert_execute += 1
         return self._conn.execute(sql, parametros)
 
@@ -140,12 +157,26 @@ class _ContadorSentencias:
         self.executemany_n += 1
         return self._conn.executemany(sql, secuencia)
 
+    def cursor(self):
+        contador = self
+        real = self._conn.cursor()
+
+        class _Cursor:
+            def executescript(self, sql):
+                contador.executescript_n += 1
+                return real.executescript(sql)
+
+            def __getattr__(self, nombre):
+                return getattr(real, nombre)
+
+        return _Cursor()
+
     def __getattr__(self, nombre):
         return getattr(self._conn, nombre)
 
     @property
     def sentencias(self) -> int:
-        return self.execute_n + self.executemany_n
+        return self.execute_n + self.executemany_n + self.executescript_n
 
 
 def test_inicializar_bd_dos_veces_en_libsql_local(tmp_path, monkeypatch, capsys):
@@ -155,18 +186,27 @@ def test_inicializar_bd_dos_veces_en_libsql_local(tmp_path, monkeypatch, capsys)
     monkeypatch.setattr(database, "_credenciales_turso", lambda: ("", ""))
     contador = _ContadorSentencias(libsql.connect(str(tmp_path / "x.db")))
     monkeypatch.setattr(database, "_turso_conn_obj", contador)
+    t0 = time.perf_counter()
     database.inicializar_bd()
+    local_1 = time.perf_counter() - t0
     primera = contador.sentencias
     many_1 = contador.executemany_n
-    insert_1 = contador.insert_execute
+    batch_1 = contador.executescript_n
     contador.execute_n = 0
     contador.executemany_n = 0
+    contador.executescript_n = 0
     contador.insert_execute = 0
+    t1 = time.perf_counter()
     database.inicializar_bd()
+    local_2 = time.perf_counter() - t1
     segunda = contador.sentencias
-    many_2 = contador.executemany_n
     with capsys.disabled():
-        print(f"SENTENCIAS inicializar_bd 1={primera} 2={segunda} executemany_1={many_1} executemany_2={many_2}")
+        print(
+            f"SENTENCIAS inicializar_bd 1={primera} 2={segunda} "
+            f"executemany_1={many_1} batch_1={batch_1} "
+            f"local_s 1={local_1:.3f} 2={local_2:.3f} "
+            f"estimado_turso_s 1={primera * 0.35:.2f} 2={segunda * 0.35:.2f}"
+        )
     with database.obtener_conexion() as conn:
         columnas = {fila[1] for fila in conn.execute("PRAGMA table_info(clientes)").fetchall()}
         tablas = {
@@ -189,7 +229,25 @@ def test_inicializar_bd_dos_veces_en_libsql_local(tmp_path, monkeypatch, capsys)
         assert nombre in tablas
     assert int(n_tc) > 100
     assert int(n_reglas) > 0
-    assert many_1 >= 3
-    assert many_2 == 0
-    assert insert_1 < 30
-    assert segunda < primera
+    assert many_1 == 0
+    assert batch_1 == 1
+    assert segunda == 1
+    assert primera < 40
+    contador.execute_n = 0
+    contador.executemany_n = 0
+    contador.executescript_n = 0
+    catalogo = [
+        {"nombre": f"MONO {i}", "cuit": f"20{i:09d}", "tipo": "Monotributista"}
+        for i in range(139)
+    ]
+    t2 = time.perf_counter()
+    stats = database.sincronizar_clientes_catalogo(catalogo, semilla="monotributistas")
+    local_cat = time.perf_counter() - t2
+    with capsys.disabled():
+        print(
+            f"CATALOGO 139 sentencias={contador.sentencias} executemany={contador.executemany_n} "
+            f"local_s={local_cat:.3f} estimado_turso_s={contador.sentencias * 0.35:.2f} stats={stats}"
+        )
+    assert stats["insertados"] == 139
+    assert contador.executemany_n == 0
+    assert contador.sentencias < 15

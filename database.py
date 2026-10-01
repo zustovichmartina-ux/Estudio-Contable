@@ -278,17 +278,34 @@ class _ConexionCompatTurso:
                 self._reintentar_si_rota(exc)
 
     def executemany(self, sql, secuencia):
+        """Un INSERT de muchas filas sale en un solo execute (varios VALUES).
+
+        El ``executemany`` de libsql hace un ``execute`` por fila y, en Turso,
+        cada uno es un viaje de red. Un UPDATE u otro SQL sigue por el driver.
+        """
         with _turso_conn_lock:
             filas = [_parametros_libsql(fila) for fila in secuencia]
+            if not filas:
+                return None
+            masivo = _insert_masivo(sql, filas)
             try:
-                return _CursorCompatTurso(self._conn.executemany(sql, filas))
+                if masivo is None:
+                    return _CursorCompatTurso(self._conn.executemany(sql, filas))
+                ultimo = None
+                for sentencia, parametros in masivo:
+                    ultimo = self._conn.execute(sentencia, parametros)
+                return _CursorCompatTurso(ultimo) if ultimo is not None else None
             except Exception as exc:
                 self._reintentar_si_rota(exc)
 
     def executescript(self, sql):
+        """Un script entero en un batch de Hrana (``cursor().executescript``).
+
+        ``Connection.executescript`` traga el error; el del cursor no.
+        """
         with _turso_conn_lock:
             try:
-                return self._conn.executescript(sql)
+                return self._conn.cursor().executescript(sql)
             except Exception as exc:
                 self._reintentar_si_rota(exc)
 
@@ -435,109 +452,431 @@ def huella_semilla(*partes: str) -> str:
     return hashlib.sha256("\n".join(partes).encode("utf-8")).hexdigest()
 
 
+# Subir este número cuando cambie el DDL (columna o tabla nueva). Si coincide
+# con app_meta, inicializar_bd no vuelve a mandar CREATE/ALTER ni siembras.
+SCHEMA_VERSION = "1"
+_CLAVE_SCHEMA = "schema_version"
+
+# Tope de SQLite (32766) y de un request de Turso. Un INSERT masivo se parte.
+_MAX_PARAMS_INSERT = 900
+_MAX_BYTES_INSERT = 350_000
+
+_RE_INSERT_VALORES = re.compile(
+    r"^(?P<head>INSERT\b.+?)\s+VALUES\s*\(\s*\?(?:\s*,\s*\?)*\s*\)\s*(?P<tail>ON\s+CONFLICT\b.*)?$",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _peso_parametro(valor) -> int:
+    if isinstance(valor, str):
+        return len(valor)
+    if isinstance(valor, bytes):
+        return len(valor)
+    return 8
+
+
+def _insert_masivo(sql: str, filas: list) -> list[tuple[str, tuple]] | None:
+    """Arma uno o más INSERT con varios VALUES. None si el SQL no es un INSERT simple."""
+    plano = " ".join(str(sql).split()).rstrip(";").strip()
+    coincidencia = _RE_INSERT_VALORES.match(plano)
+    if not coincidencia:
+        return None
+    if not filas or not isinstance(filas[0], (tuple, list)):
+        return None
+    ancho = len(filas[0])
+    if ancho < 1 or any(len(fila) != ancho for fila in filas):
+        return None
+    cabeza = coincidencia.group("head").strip()
+    cola = (coincidencia.group("tail") or "").strip()
+    marca_fila = "(" + ",".join(["?"] * ancho) + ")"
+    lotes: list[tuple[str, tuple]] = []
+    lote: list = []
+    peso = 0
+
+    def cerrar() -> None:
+        nonlocal lote, peso
+        if not lote:
+            return
+        valores = ",".join([marca_fila] * len(lote))
+        sentencia = f"{cabeza} VALUES {valores}"
+        if cola:
+            sentencia = f"{sentencia} {cola}"
+        parametros: list = []
+        for fila in lote:
+            parametros.extend(fila)
+        lotes.append((sentencia, tuple(parametros)))
+        lote = []
+        peso = 0
+
+    for fila in filas:
+        suma = sum(_peso_parametro(valor) for valor in fila)
+        if lote and (
+            (len(lote) + 1) * ancho > _MAX_PARAMS_INSERT or peso + suma > _MAX_BYTES_INSERT
+        ):
+            cerrar()
+        lote.append(fila)
+        peso += suma
+    cerrar()
+    return lotes
+
+
+def _sql_arranque() -> str:
+    """Versión, columnas, CREATE de clientes y conteos de semilla, en una lectura."""
+    partes = ["SELECT 'meta' AS tipo, clave AS a, valor AS b FROM app_meta"]
+    partes.extend(
+        f"SELECT 'col' AS tipo, '{tabla}' AS a, name AS b FROM pragma_table_info('{tabla}')"
+        for tabla in _TABLAS_ESQUEMA
+    )
+    partes.append(
+        "SELECT 'sql' AS tipo, 'clientes' AS a, ifnull(sql, '') AS b FROM sqlite_master "
+        "WHERE type = 'table' AND name = 'clientes'"
+    )
+    partes.append(
+        "SELECT 'n' AS tipo, 'reglas' AS a, CAST(COUNT(*) AS TEXT) AS b FROM clasificacion_reglas"
+    )
+    partes.append(
+        "SELECT 'n' AS tipo, 'tc' AS a, CAST(COUNT(*) AS TEXT) AS b FROM inversiones_tc_bna"
+    )
+    return " UNION ALL ".join(partes)
+
+
+def _leer_arranque(conn):
+    """Devuelve version, columnas, sql de clientes, marcas y conteos.
+
+    Si todavía no están las tablas, marcas y conteos quedan en None y cada
+    semilla mira la base por su cuenta.
+    """
+    try:
+        filas = conn.execute(_sql_arranque()).fetchall()
+    except sqlite3.OperationalError:
+        try:
+            columnas, sql_clientes = _leer_estado_esquema(conn)
+        except sqlite3.OperationalError:
+            return None, {}, "", None, None
+        return None, columnas, sql_clientes, None, None
+    version = None
+    marcas: dict[str, str] = {}
+    columnas: dict[str, set[str]] = {tabla: set() for tabla in _TABLAS_ESQUEMA}
+    sql_clientes = ""
+    conteos = {"reglas": 0, "tc": 0}
+    for fila in filas:
+        tipo = str(fila[0])
+        if tipo == "meta":
+            marcas[str(fila[1])] = "" if fila[2] is None else str(fila[2])
+            if str(fila[1]) == _CLAVE_SCHEMA:
+                version = marcas[str(fila[1])]
+        elif tipo == "col" and fila[2]:
+            columnas.setdefault(str(fila[1]), set()).add(str(fila[2]))
+        elif tipo == "sql":
+            sql_clientes = str(fila[2] or "")
+        elif tipo == "n":
+            conteos[str(fila[1])] = int(fila[2] or 0)
+    return version, columnas, sql_clientes, marcas, conteos
+
+
+_TABLAS_ESQUEMA = (
+    "clientes",
+    "asientos_generados",
+    "usuarios_oficina",
+    "bank_transactions",
+    "proveedores_pendientes",
+    "arca_emisores",
+    "rutina_pedidos",
+    "inversiones_operaciones",
+)
+
+
+def _leer_estado_esquema(conn) -> tuple[dict[str, set[str]], str]:
+    """Columnas reales y el CREATE de clientes, en una sola lectura.
+
+    El nombre de tabla va literal (lista fija): pragma_table_info no toma placeholder.
+    """
+    partes = [
+        f"SELECT 'col' AS tipo, '{tabla}' AS a, name AS b FROM pragma_table_info('{tabla}')"
+        for tabla in _TABLAS_ESQUEMA
+    ]
+    partes.append(
+        "SELECT 'sql' AS tipo, name AS a, ifnull(sql, '') AS b FROM sqlite_master "
+        "WHERE type = 'table' AND name = 'clientes'"
+    )
+    columnas: dict[str, set[str]] = {tabla: set() for tabla in _TABLAS_ESQUEMA}
+    sql_clientes = ""
+    for fila in conn.execute(" UNION ALL ".join(partes)).fetchall():
+        tipo = str(fila[0])
+        if tipo == "col" and fila[2]:
+            columnas.setdefault(str(fila[1]), set()).add(str(fila[2]))
+        elif tipo == "sql":
+            sql_clientes = str(fila[2] or "")
+    return columnas, sql_clientes
+
+
+def _anotar_parte_columna(parte: str, columnas: set[str]) -> None:
+    parte = parte.strip()
+    if not parte:
+        return
+    if parte.upper().startswith(("PRIMARY", "UNIQUE", "FOREIGN", "CHECK", "CONSTRAINT")):
+        return
+    nombre = parte.split()[0].strip('"`[]')
+    if nombre:
+        columnas.add(nombre)
+
+
+def _columnas_de_create(sql: str) -> tuple[str, set[str]] | None:
+    coincidencia = re.search(
+        r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s*\(",
+        sql,
+        re.IGNORECASE,
+    )
+    if not coincidencia:
+        return None
+    tabla = coincidencia.group(1)
+    indice = coincidencia.end()
+    profundidad = 1
+    cuerpo: list[str] = []
+    while indice < len(sql) and profundidad:
+        caracter = sql[indice]
+        if caracter == "(":
+            profundidad += 1
+            cuerpo.append(caracter)
+        elif caracter == ")":
+            profundidad -= 1
+            if profundidad:
+                cuerpo.append(caracter)
+        else:
+            cuerpo.append(caracter)
+        indice += 1
+    columnas: set[str] = set()
+    buffer: list[str] = []
+    profundidad = 0
+    for caracter in "".join(cuerpo):
+        if caracter == "(":
+            profundidad += 1
+            buffer.append(caracter)
+        elif caracter == ")":
+            profundidad -= 1
+            buffer.append(caracter)
+        elif caracter == "," and profundidad == 0:
+            _anotar_parte_columna("".join(buffer), columnas)
+            buffer = []
+        else:
+            buffer.append(caracter)
+    _anotar_parte_columna("".join(buffer), columnas)
+    return tabla, columnas
+
+
+class _CursorGrabado:
+    def __init__(self, filas: list):
+        self._filas = filas
+        self._i = 0
+
+    def fetchone(self):
+        if self._i >= len(self._filas):
+            return None
+        fila = self._filas[self._i]
+        self._i += 1
+        return fila
+
+    def fetchall(self):
+        resto = self._filas[self._i :]
+        self._i = len(self._filas)
+        return resto
+
+
+class _GrabadorDDL:
+    """Corre el mismo DDL de siempre en memoria y junta el SQL que sí hay que mandar."""
+
+    def __init__(self, columnas: dict[str, set[str]], sql_clientes: str):
+        self.columnas = {tabla: set(cols) for tabla, cols in columnas.items()}
+        self.sql_clientes = sql_clientes
+        self.sentencias: list[str] = []
+
+    def execute(self, sql, parametros=()):
+        compacto = " ".join(str(sql).split())
+        arriba = compacto.upper()
+        if arriba.startswith("SELECT SQL FROM SQLITE_MASTER"):
+            if not self.sql_clientes:
+                return _CursorGrabado([])
+            return _CursorGrabado([_FilaCompat(("sql",), (self.sql_clientes,))])
+        if arriba.startswith("PRAGMA TABLE_INFO"):
+            hallado = re.search(r"TABLE_INFO\(\s*['\"]?(\w+)", compacto, re.IGNORECASE)
+            tabla = hallado.group(1) if hallado else ""
+            nombres = sorted(self.columnas.get(tabla, ()))
+            filas = [
+                _FilaCompat(
+                    ("cid", "name", "type", "notnull", "dflt_value", "pk"),
+                    (i, nombre, "", 0, None, 0),
+                )
+                for i, nombre in enumerate(nombres)
+            ]
+            return _CursorGrabado(filas)
+        if arriba.startswith("ALTER"):
+            hallado = re.search(
+                r"ALTER\s+TABLE\s+(\w+)\s+ADD\s+COLUMN\s+(\w+)",
+                compacto,
+                re.IGNORECASE,
+            )
+            if hallado:
+                tabla, columna = hallado.group(1), hallado.group(2)
+                if columna in self.columnas.get(tabla, set()):
+                    raise sqlite3.OperationalError(f"duplicate column name: {columna}")
+                self.columnas.setdefault(tabla, set()).add(columna)
+            self.sentencias.append(compacto)
+            return _CursorGrabado([])
+        if arriba.startswith("CREATE"):
+            anotado = _columnas_de_create(compacto)
+            if anotado:
+                tabla, nuevas = anotado
+                self.columnas.setdefault(tabla, set()).update(nuevas)
+            self.sentencias.append(compacto)
+            return _CursorGrabado([])
+        self.sentencias.append(compacto)
+        return _CursorGrabado([])
+
+
+def _definir_esquema(conn) -> None:
+    """El DDL histórico. Sirve contra la base o contra un grabador en memoria."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS clientes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT NOT NULL,
+            cuit TEXT NOT NULL UNIQUE,
+            tipo_persona TEXT NOT NULL CHECK (
+                tipo_persona IN ('Persona Jurídica', 'Persona Física', 'Monotributista')
+            ),
+            plan_cuentas_path TEXT,
+            mes_cierre_balance INTEGER,
+            creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    _migrar_tipo_monotributista(conn)
+    try:
+        conn.execute("ALTER TABLE clientes ADD COLUMN mes_cierre_balance INTEGER")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        conn.execute("ALTER TABLE clientes ADD COLUMN plan_cuentas_csv TEXT")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        conn.execute("ALTER TABLE clientes ADD COLUMN balance_devengamiento_bytes BLOB")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        conn.execute("ALTER TABLE clientes ADD COLUMN balance_devengamiento_nombre TEXT")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        conn.execute("ALTER TABLE clientes ADD COLUMN balance_devengamiento_actualizado TIMESTAMP")
+    except sqlite3.OperationalError:
+        pass
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS devengamientos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cliente_id INTEGER NOT NULL,
+            mes INTEGER NOT NULL,
+            anio INTEGER NOT NULL,
+            datos_json TEXT NOT NULL,
+            creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (cliente_id) REFERENCES clientes(id),
+            UNIQUE(cliente_id, mes, anio)
+        )
+        """
+    )
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS asientos_generados (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            cliente_id   INTEGER NOT NULL REFERENCES clientes(id),
+            mes          INTEGER NOT NULL,
+            anio         INTEGER NOT NULL,
+            tipo         TEXT NOT NULL,
+            asiento_json TEXT NOT NULL,
+            intentos     INTEGER DEFAULT 1,
+            estado       TEXT DEFAULT 'Ingresado',
+            creado_en    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    try:
+        conn.execute(
+            "ALTER TABLE asientos_generados ADD COLUMN estado TEXT DEFAULT 'Ingresado'"
+        )
+    except Exception:
+        pass
+
+    import auth_oficina  # import local: evita ciclo de imports con database.py
+
+    auth_oficina.inicializar_tabla_usuarios_oficina(conn)
+    _inicializar_tablas_sueldos(conn)
+    _inicializar_tablas_conciliacion(conn)
+    import inversiones_db
+
+    inversiones_db.inicializar_tablas_inversiones(conn)
+    import arca.persistencia as arca_persistencia
+
+    arca_persistencia.inicializar_tablas_arca(conn)
+    import rutinas as rutinas_cola
+
+    rutinas_cola.inicializar_tablas_rutinas(conn)
+    _asegurar_app_meta(conn)
+
+
+def _sembrar_despues_del_ddl(marcas, conteos) -> None:
+    import auth_oficina
+    import inversiones_db
+
+    if marcas is None or conteos is None:
+        auth_oficina.sembrar_usuarios_oficina_default()
+        _sembrar_convenios_sueldos_default()
+        _reset_cct_comercio_masivo_si_corresponde()
+        sembrar_reglas_conciliacion_default()
+        inversiones_db.sembrar_tc_bna_default()
+        return
+    auth_oficina.sembrar_usuarios_oficina_default(
+        marca_leida=marcas.get("usuarios_equipo"),
+        conocemos_marca=True,
+    )
+    _sembrar_convenios_sueldos_default(
+        marca_leida=marcas.get("convenios_sueldos"),
+        conocemos_marca=True,
+    )
+    _reset_cct_comercio_masivo_si_corresponde(ya_hecho=marcas.get("cct_reset_v1") == "1")
+    sembrar_reglas_conciliacion_default(ya_hay=conteos.get("reglas", 0))
+    inversiones_db.sembrar_tc_bna_default(ya_hay=conteos.get("tc", 0))
+
+
 def inicializar_bd() -> None:
-    """Crea la tabla de clientes si no existe."""
-    with obtener_conexion() as conn:
+    """Crea tablas y siembras. Con el esquema ya marcado, una sola lectura."""
+    conn = obtener_conexion()
+    version, columnas, sql_clientes, marcas, conteos = _leer_arranque(conn)
+    if version == SCHEMA_VERSION:
+        return
+    grabador = _GrabadorDDL(columnas, sql_clientes)
+    _definir_esquema(grabador)
+    sentencias = [
+        sql
+        for sql in grabador.sentencias
+        if "idx_rutina_pedidos_abierto" not in sql
+    ]
+    if sentencias:
+        conn.executescript(";\n".join(sentencias))
+    try:
         conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS clientes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nombre TEXT NOT NULL,
-                cuit TEXT NOT NULL UNIQUE,
-                tipo_persona TEXT NOT NULL CHECK (
-                    tipo_persona IN ('Persona Jurídica', 'Persona Física', 'Monotributista')
-                ),
-                plan_cuentas_path TEXT,
-                mes_cierre_balance INTEGER,
-                creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_rutina_pedidos_abierto
+            ON rutina_pedidos(rutina)
+            WHERE estado IN ('PENDIENTE', 'EN_CURSO')
             """
         )
-        _migrar_tipo_monotributista(conn)
-        # Migrate schema if needed
-        try:
-            conn.execute("ALTER TABLE clientes ADD COLUMN mes_cierre_balance INTEGER")
-        except sqlite3.OperationalError:
-            pass
-        try:
-            conn.execute("ALTER TABLE clientes ADD COLUMN plan_cuentas_csv TEXT")
-        except sqlite3.OperationalError:
-            pass
-        try:
-            conn.execute("ALTER TABLE clientes ADD COLUMN balance_devengamiento_bytes BLOB")
-        except sqlite3.OperationalError:
-            pass
-        try:
-            conn.execute("ALTER TABLE clientes ADD COLUMN balance_devengamiento_nombre TEXT")
-        except sqlite3.OperationalError:
-            pass
-        try:
-            conn.execute("ALTER TABLE clientes ADD COLUMN balance_devengamiento_actualizado TIMESTAMP")
-        except sqlite3.OperationalError:
-            pass
-
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS devengamientos (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                cliente_id INTEGER NOT NULL,
-                mes INTEGER NOT NULL,
-                anio INTEGER NOT NULL,
-                datos_json TEXT NOT NULL,
-                creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (cliente_id) REFERENCES clientes(id),
-                UNIQUE(cliente_id, mes, anio)
-            )
-            """
-        )
-
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS asientos_generados (
-                id           INTEGER PRIMARY KEY AUTOINCREMENT,
-                cliente_id   INTEGER NOT NULL REFERENCES clientes(id),
-                mes          INTEGER NOT NULL,
-                anio         INTEGER NOT NULL,
-                tipo         TEXT NOT NULL,
-                asiento_json TEXT NOT NULL,
-                intentos     INTEGER DEFAULT 1,
-                estado       TEXT DEFAULT 'Ingresado',
-                creado_en    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-        # Migración no destructiva: agregar columna estado a tablas existentes
-        try:
-            conn.execute(
-                "ALTER TABLE asientos_generados ADD COLUMN estado TEXT DEFAULT 'Ingresado'"
-            )
-        except Exception:
-            pass  # columna ya existe
-
-        import auth_oficina  # import local: evita ciclo de imports con database.py
-
-        auth_oficina.inicializar_tabla_usuarios_oficina(conn)
-        _inicializar_tablas_sueldos(conn)
-        _inicializar_tablas_conciliacion(conn)
-        # Import local: evita ciclo de imports con database.py
-        import inversiones_db
-
-        inversiones_db.inicializar_tablas_inversiones(conn)
-        # Facturación ARCA: CAE, ticket WSAA y datos de emisor en la misma base.
-        import arca.persistencia as arca_persistencia
-
-        arca_persistencia.inicializar_tablas_arca(conn)
-        # Cola de rutinas: la web encola, el asistente externo ejecuta.
-        import rutinas as rutinas_cola
-
-        rutinas_cola.inicializar_tablas_rutinas(conn)
-        _asegurar_app_meta(conn)
-        conn.commit()
-    auth_oficina.sembrar_usuarios_oficina_default()
-    _sembrar_convenios_sueldos_default()
-    _reset_cct_comercio_masivo_si_corresponde()
-    sembrar_reglas_conciliacion_default()
-    inversiones_db.sembrar_tc_bna_default()
+    except sqlite3.OperationalError:
+        pass
+    _sembrar_despues_del_ddl(marcas, conteos)
+    guardar_semilla(_CLAVE_SCHEMA, SCHEMA_VERSION)
 
 
 def _reglas_cct_basicas() -> dict:
@@ -546,7 +885,11 @@ def _reglas_cct_basicas() -> dict:
     return reglas_comercio_julio_2026()
 
 
-def _sembrar_convenios_sueldos_default() -> None:
+def _sembrar_convenios_sueldos_default(
+    *,
+    marca_leida: str | None = None,
+    conocemos_marca: bool = False,
+) -> None:
     """Catálogo inicial de CCTs. Comercio trae escala FAECYS julio 2026."""
     from cct_escalas import reglas_comercio_julio_2026
 
@@ -580,8 +923,10 @@ def _sembrar_convenios_sueldos_default() -> None:
         payload = json.dumps(reglas, ensure_ascii=False, sort_keys=True)
         filas.append((codigo, nombre, payload))
     marca = huella_semilla(*(f"{codigo}|{nombre}|{payload}" for codigo, nombre, payload in filas))
+    if conocemos_marca and marca_leida == marca:
+        return
     with obtener_conexion() as conn:
-        if leer_semilla("convenios_sueldos", conn) == marca:
+        if not conocemos_marca and leer_semilla("convenios_sueldos", conn) == marca:
             return
         conn.executemany(
             """
@@ -606,11 +951,13 @@ def actualizar_reglas_convenio(codigo: str, reglas: dict) -> None:
         conn.commit()
 
 
-def _reset_cct_comercio_masivo_si_corresponde() -> None:
+def _reset_cct_comercio_masivo_si_corresponde(*, ya_hecho: bool = False) -> None:
     """
     Una sola vez: si casi todos quedaron en COMERCIO por el default erróneo
     de la migración, se limpian para forzar asignación real por sociedad.
     """
+    if ya_hecho:
+        return
     try:
         with obtener_conexion() as conn:
             if leer_semilla("cct_reset_v1", conn) == "1":
@@ -1873,11 +2220,13 @@ def _inicializar_tablas_conciliacion(conn: sqlite3.Connection) -> None:
     )
 
 
-def sembrar_reglas_conciliacion_default() -> None:
+def sembrar_reglas_conciliacion_default(*, ya_hay: int | None = None) -> None:
     """Inserta el diccionario del prompt solo si la tabla esta vacia.
 
     Si ya hay filas (aunque sean reglas editadas a mano) no se tocan.
     """
+    if ya_hay is not None and ya_hay > 0:
+        return
     from motor_conciliacion import REGLAS_SEED
 
     with obtener_conexion() as conn:
@@ -1895,10 +2244,10 @@ def sembrar_reglas_conciliacion_default() -> None:
         conn.executemany(
             """
             INSERT INTO clasificacion_reglas (patron, categoria, tipo, orden, activo)
-            VALUES (?, ?, ?, ?, 1)
+            VALUES (?, ?, ?, ?, ?)
             """,
             [
-                (patron, categoria, tipo, i)
+                (patron, categoria, tipo, i, 1)
                 for i, (patron, categoria, tipo) in enumerate(REGLAS_SEED)
             ],
         )
