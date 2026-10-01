@@ -1,5 +1,6 @@
 """Facturación web: validación, persistencia y ticket, sin llamar a ARCA."""
 import datetime as dt
+import inspect
 import os
 import subprocess
 from argparse import Namespace
@@ -195,3 +196,20 @@ def test_solapa_facturacion_conectada():
     assert "Facturación" in texto and "render_facturacion_arca" in texto
     import ui_arca_facturacion
     assert callable(ui_arca_facturacion.render_facturacion_arca)
+
+
+def test_facturacion_no_consulta_el_ejecutor():
+    """Abrir Facturación no llama al ejecutor ni arma el cartel rojo."""
+    from afip_worker.ui_streamlit import _aviso_estado_ejecutor, render_arca_module
+
+    src = inspect.getsource(render_arca_module)
+    rama = src.split('if seccion == "Facturación":', 1)[1].split("_seccion_ejecutor", 1)[0]
+    assert "render_facturacion_arca()" in rama
+    assert "return" in rama
+    assert "_remote(" not in rama
+    assert "_remote_health" not in rama
+    assert "ejecutor_arca.bat" not in rama
+    aviso = inspect.getsource(_aviso_estado_ejecutor)
+    assert "ejecutor_arca.bat" in aviso
+    assert "_seccion_ejecutor" in src
+    assert src.index("render_facturacion_arca()") < src.index("_seccion_ejecutor")

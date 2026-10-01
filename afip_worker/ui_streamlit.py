@@ -238,14 +238,11 @@ def _cuit_rows(remote: RemoteWorker | None) -> list[dict[str, Any]]:
     return sorted(by_cuit.values(), key=lambda r: str(r.get("cuit") or ""))
 
 
-def render_arca_module() -> None:
-    """Módulo top-level ARCA: facturación por web service y cola del ejecutor."""
-    st.caption(
-        "Facturación emite por Web Service con el certificado del estudio (Secrets). "
-        "Encolar, Cola y CUITs solo arman trabajos: AFIP lo abre otra máquina. "
-        "Las claves fiscales no se cargan en esta web."
-    )
-    remote = _remote()
+_SECCIONES_ARCA = ("Facturación", "Encolar", "Cola", "CUITs")
+
+
+def _aviso_estado_ejecutor(remote: RemoteWorker | None) -> None:
+    """Cartel del ejecutor. Solo lo llaman Encolar, Cola y CUITs."""
     if remote:
         if _remote_health(remote):
             host = str(st.session_state.get("_arca_health_host") or "").strip()
@@ -261,20 +258,42 @@ def render_arca_module() -> None:
             "Sin ejecutor en la nube: hace falta `AFIP_WORKER_TOKEN` en Secrets."
         )
 
+
+def _seccion_ejecutor(seccion: str, remote: RemoteWorker | None) -> None:
+    _aviso_estado_ejecutor(remote)
     _watch_tareas()
-
-    tab_fe, tab_encolar, tab_cola, tab_cuits = st.tabs(
-        ["Facturación", "Encolar", "Cola", "CUITs"]
-    )
-
-    with tab_fe:
-        render_facturacion_arca()
-    with tab_encolar:
+    if seccion == "Encolar":
         _render_encolar(remote)
-    with tab_cola:
+    elif seccion == "Cola":
         _render_cola()
-    with tab_cuits:
+    else:
         _render_registry(remote)
+
+
+def render_arca_module() -> None:
+    """Módulo top-level ARCA: facturación por web service y cola del ejecutor.
+
+    Facturación no espera al ejecutor: el chequeo de conexión corre recién
+    cuando se abre Encolar, Cola o CUITs. st.tabs ejecuta todas las solapas
+    en cada recarga, así que la sección se elige con un radio y solo corre
+    la que está abierta.
+    """
+    st.caption(
+        "Facturación electrónica por Web Service. "
+        "Encolar, Cola y CUITs usan la máquina ejecutor. "
+        "Las claves fiscales no se cargan en esta web."
+    )
+    seccion = st.radio(
+        "Sección de ARCA",
+        _SECCIONES_ARCA,
+        horizontal=True,
+        label_visibility="collapsed",
+        key="arca_seccion",
+    )
+    if seccion == "Facturación":
+        render_facturacion_arca()
+        return
+    _seccion_ejecutor(str(seccion), _remote())
 
 
 def render_afip_cola_admin() -> None:
