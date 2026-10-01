@@ -90,7 +90,9 @@ La oficina pide a mano tareas que el asistente corre en la PC del estudio (ahí 
 
 El catálogo (nombre y descripción) está en `rutinas.py`, en la lista `RUTINAS`. Cada pedido puede llevar un texto libre de parámetros (período, cliente) y el nombre de quien lo pide.
 
-En la web se elige la rutina en un desplegable. Abajo están la descripción y los requisitos (checklist en `RUTINAS`, fácil de editar). **Ejecutar** se habilita cuando están todos tildados: apretarlo crea el pedido. **Listo** cierra la vista previa. Mientras esa rutina está `PENDIENTE` o `EN_CURSO`, la vista y el historial se actualizan solos cada 5 segundos; también está el botón **Refrescar**.
+En la web se elige la rutina en un desplegable. En las rutinas con checklist, **Ejecutar** se habilita cuando están todos los requisitos tildados. **Listo** cierra la vista previa. Mientras esa rutina está `PENDIENTE` o `EN_CURSO`, la vista y el historial se actualizan solos cada 5 segundos; también está el botón **Refrescar**.
+
+**Proyecciones Ganancias por IVA** no usa checklist. Muestra qué se verifica en el servidor (imputación de compras y ventas, Excel de proyección, DDJJ IIBB, F931 si tiene empleados, TISH si corresponde, y papel del ejercicio siguiente si el mes pasó el cierre). Se elige el período `MM-AAAA` y los clientes (o **Todos**). Esos datos van en `parametros` como JSON. La ficha se carga con **Actualizar ficha de clientes (xlsx)** y queda en la base. El asistente la lee con `ficha --json`. La vista previa puede traer una tabla **Por cliente** con una columna por requisito (`OK`, `FALTA`, `NO APLICA`, `FALTA DATO`) y el estado final.
 
 Códigos que viajan en el JSON (`rutina`):
 
@@ -108,6 +110,7 @@ Estados: `PENDIENTE` → `EN_CURSO` → `OK` o `ERROR`. Un pedido `PENDIENTE` se
 Desde la raíz del repo, con las mismas variables que Streamlit Cloud (`TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN`). Sin esas variables lee el SQLite local y no ve la cola de la web.
 
 ```bash
+python scripts/cola_rutinas.py ficha --json
 python scripts/cola_rutinas.py listar --estado PENDIENTE
 python scripts/cola_rutinas.py tomar 12
 python scripts/cola_rutinas.py terminar 12 --estado OK --resultado "Listo" --archivos "C:\ruta\salida.xlsx" --preview-json preview.json
@@ -126,5 +129,27 @@ python scripts/cola_rutinas.py terminar 12 --estado OK --resultado "Listo" --arc
 ```
 
 `archivos` son rutas del servidor de archivos, no links. Si la operación no corresponde, sale con código 1 y un JSON `{"ok": false, "error": "..."}`.
+
+`ficha --json` imprime la ficha cargada (array; `[]` si todavía no hay). Un pedido de proyecciones guarda el período y los clientes así:
+
+```json
+{"periodo": "10-2026", "todos": false, "clientes": [{"sociedad": "ACME", "cuit": "30712345671"}]}
+```
+
+La vista previa de esa rutina puede incluir la tabla por cliente (el asistente completa cada requisito):
+
+```json
+{
+  "resumen_md": "Falta la proyección de **ACME**.",
+  "tablas": [
+    {
+      "titulo": "Por cliente",
+      "columnas": ["Cliente", "Imputación compras y ventas", "Proyección vigente", "DDJJ IIBB", "F931", "TISH", "Papel ejercicio siguiente", "Estado"],
+      "filas": [["ACME", "OK", "FALTA", "OK", "NO APLICA", "FALTA DATO", "NO APLICA", "FALTA"]]
+    }
+  ],
+  "archivos": []
+}
+```
 
 Pruebas de la cola, sin Turso: `python -m pytest -q tests/test_rutinas.py`

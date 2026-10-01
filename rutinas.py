@@ -7,15 +7,21 @@ el SQLite local.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
+import unicodedata
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
 from zoneinfo import ZoneInfo
+
+import openpyxl
 
 import database
 
 # Catálogo editable. `codigo` es lo que se guarda en rutina_pedidos.rutina.
 # `requisitos` es la checklist de la web: hay que tildarlos todos para ejecutar.
 # Van marcados A CONFIRMAR hasta que la oficina ajuste el texto.
+# Proyecciones no usa checklist: `requisitos` va vacío y el texto está en `ayuda`.
 RUTINAS: tuple[dict, ...] = (
     {
         "codigo": "seguimiento_balances_urgencia",
@@ -66,12 +72,50 @@ RUTINAS: tuple[dict, ...] = (
         "codigo": "proyecciones_ganancias_iva",
         "nombre": "Proyecciones Ganancias por IVA",
         "descripcion": "Arma o actualiza la proyección de Ganancias de cada cliente desde las compras y ventas descargadas.",
-        "requisitos": (
-            "A CONFIRMAR: están descargados los archivos de compras y ventas del período en la carpeta del cliente.",
-            "A CONFIRMAR: el período y los clientes a proyectar están definidos.",
+        "requisitos": (),
+        "ayuda": (
+            "Por cada cliente y mes se verifica en el servidor:",
+            "1. Listado de imputación contable resumido de compras y ventas del mes.",
+            "2. Excel de proyección vigente en su carpeta.",
+            "3. PDF DDJJ IIBB del mes.",
+            "4. PDF F931 del mes (no aplica si 'NO TIENE EMPLEADOS').",
+            "5. TISH del mes solo si TISH=Sí.",
+            "6. Si el mes es posterior al cierre del ejercicio, hace falta papel nuevo del ejercicio siguiente.",
         ),
     },
 )
+
+CODIGO_PROYECCION = "proyecciones_ganancias_iva"
+OPCION_TODOS = "Todos"
+ESTADOS_CONTROL = ("OK", "FALTA", "NO APLICA", "FALTA DATO")
+COLUMNAS_RESULTADO_PROYECCION = (
+    "Cliente",
+    "Imputación compras y ventas",
+    "Proyección vigente",
+    "DDJJ IIBB",
+    "F931",
+    "TISH",
+    "Papel ejercicio siguiente",
+    "Estado",
+)
+# Campo interno, título de la columna en la ficha xlsx / en el JSON exportado.
+COLUMNAS_FICHA = (
+    ("sociedad", "Sociedad"),
+    ("cuit", "CUIT"),
+    ("activa", "Activa"),
+    ("tish", "TISH"),
+    ("mes_inicio", "Mes inicio"),
+    ("mes_cierre", "Mes cierre"),
+    ("dia_revision", "Día revisión"),
+    ("proyeccion_vigente", "Proyección vigente"),
+    ("carpeta_proyecciones", "Carpeta Proyecciones"),
+    ("carpeta_iibb", "Carpeta IIBB"),
+    ("carpeta_f931", "Carpeta F931"),
+    ("ultimo_mes_cargado", "Último mes cargado"),
+    ("notas", "Notas"),
+)
+_RE_PERIODO = re.compile(r"^(0[1-9]|1[0-2])-(\d{4})$")
+_INACTIVOS = frozenset({"no", "n", "0", "false", "inactiva", "inactivo"})
 
 ESTADOS = ("PENDIENTE", "EN_CURSO", "OK", "ERROR", "CANCELADO")
 ESTADOS_ABIERTOS = ("PENDIENTE", "EN_CURSO")
@@ -105,6 +149,26 @@ _DDL = (
     """
     CREATE INDEX IF NOT EXISTS idx_rutina_pedidos_estado
     ON rutina_pedidos(estado, id DESC)
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS rutina_ficha_proyecciones (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sociedad TEXT NOT NULL,
+        cuit TEXT,
+        activa TEXT,
+        tish TEXT,
+        mes_inicio TEXT,
+        mes_cierre TEXT,
+        dia_revision TEXT,
+        proyeccion_vigente TEXT,
+        carpeta_proyecciones TEXT,
+        carpeta_iibb TEXT,
+        carpeta_f931 TEXT,
+        ultimo_mes_cargado TEXT,
+        notas TEXT,
+        orden INTEGER NOT NULL DEFAULT 0,
+        actualizado_en TEXT
+    )
     """,
 )
 
@@ -288,6 +352,206 @@ def filas_tabla_preview(tabla: dict) -> list[dict]:
             continue
         salida.append({"valor": fila})
     return salida
+
+
+def es_proyeccion(codigo: str) -> bool:
+    return str(codigo or "").strip() == CODIGO_PROYECCION
+
+
+def _norm_header(texto) -> str:
+    plano = unicodedata.normalize("NFKD", str(texto or ""))
+    plano = "".join(c for c in plano if not unicodedata.combining(c))
+    return re.sub(r"\s+", " ", plano).strip().casefold()
+
+
+def _texto_celda(valor) -> str:
+    if valor is None:
+        return ""
+    if isinstance(valor, datetime):
+        return valor.strftime("%m-%Y")
+    if isinstance(valor, float) and valor.is_integer():
+        return str(int(valor))
+    if isinstance(valor, int) and not isinstance(valor, bool):
+        return str(valor)
+    return str(valor).strip()
+
+
+def cliente_activo(valor) -> bool:
+    return _norm_header(valor) not in _INACTIVOS
+
+
+def periodo_valido(periodo: str) -> bool:
+    return bool(_RE_PERIODO.match(str(periodo or "").strip()))
+
+
+def periodo_sugerido() -> str:
+    hoy = datetime.now(_TZ_AR)
+    return f"{hoy.month:02d}-{hoy.year}"
+
+
+def leer_ficha_xlsx(contenido: bytes) -> list[dict]:
+    """Lee la ficha. La primera fila son los títulos de COLUMNAS_FICHA."""
+    if not contenido:
+        raise ErrorRutina("El archivo de la ficha está vacío.")
+    try:
+        libro = openpyxl.load_workbook(BytesIO(contenido), data_only=True, read_only=True)
+    except Exception as exc:
+        raise ErrorRutina("No se pudo leer el Excel de la ficha.") from exc
+    try:
+        hoja = libro.active
+        filas = hoja.iter_rows(values_only=True)
+        encabezados = next(filas, None)
+        if not encabezados:
+            raise ErrorRutina("La ficha no tiene encabezados.")
+        alias = {_norm_header(etiqueta): campo for campo, etiqueta in COLUMNAS_FICHA}
+        columnas: list[str | None] = []
+        for titulo in encabezados:
+            columnas.append(alias.get(_norm_header(titulo)))
+        if "sociedad" not in columnas:
+            raise ErrorRutina("La ficha tiene que tener la columna Sociedad.")
+        salida: list[dict] = []
+        for cruda in filas:
+            registro = {campo: "" for campo, _etiqueta in COLUMNAS_FICHA}
+            for indice, campo in enumerate(columnas):
+                if campo is None or indice >= len(cruda):
+                    continue
+                registro[campo] = _texto_celda(cruda[indice])
+            if not registro["sociedad"]:
+                continue
+            salida.append(registro)
+        return salida
+    finally:
+        libro.close()
+
+
+def listar_ficha() -> list[dict]:
+    asegurar_tablas()
+    campos = ", ".join(campo for campo, _etiqueta in COLUMNAS_FICHA)
+    with database.obtener_conexion() as conn:
+        filas = conn.execute(
+            f"SELECT {campos} FROM rutina_ficha_proyecciones ORDER BY orden, id"
+        ).fetchall()
+    return [{campo: fila[campo] or "" for campo, _etiqueta in COLUMNAS_FICHA} for fila in filas]
+
+
+def reemplazar_ficha(filas: list[dict]) -> int:
+    """Reemplaza la ficha entera. La planilla es la fuente."""
+    asegurar_tablas()
+    momento = ahora_utc()
+    campos = [campo for campo, _etiqueta in COLUMNAS_FICHA]
+    marcas = ", ".join("?" for _ in campos)
+    with database.obtener_conexion() as conn:
+        conn.execute("DELETE FROM rutina_ficha_proyecciones")
+        for orden, fila in enumerate(filas):
+            sociedad = str(fila.get("sociedad") or "").strip()
+            if not sociedad:
+                continue
+            valores = [sociedad if campo == "sociedad" else str(fila.get(campo) or "").strip() for campo in campos]
+            conn.execute(
+                f"""
+                INSERT INTO rutina_ficha_proyecciones ({", ".join(campos)}, orden, actualizado_en)
+                VALUES ({marcas}, ?, ?)
+                """,
+                (*valores, orden, momento),
+            )
+        conn.commit()
+    return len([fila for fila in filas if str(fila.get("sociedad") or "").strip()])
+
+
+def importar_ficha_xlsx(contenido: bytes) -> int:
+    return reemplazar_ficha(leer_ficha_xlsx(contenido))
+
+
+def exportar_ficha() -> list[dict]:
+    """Ficha con los títulos de la planilla, para `ficha --json`."""
+    return [
+        {etiqueta: fila.get(campo) or "" for campo, etiqueta in COLUMNAS_FICHA}
+        for fila in listar_ficha()
+    ]
+
+
+def etiquetas_clientes(filas: list[dict] | None = None) -> list[tuple[str, dict]]:
+    """Clientes activos con una etiqueta única para el multiselect."""
+    activos = [fila for fila in (filas if filas is not None else listar_ficha()) if cliente_activo(fila.get("activa"))]
+    repetidos: dict[str, int] = {}
+    for fila in activos:
+        repetidos[fila["sociedad"]] = repetidos.get(fila["sociedad"], 0) + 1
+    salida: list[tuple[str, dict]] = []
+    for fila in activos:
+        nombre = fila["sociedad"]
+        if repetidos[nombre] > 1 and fila.get("cuit"):
+            etiqueta = f"{nombre} ({fila['cuit']})"
+        else:
+            etiqueta = nombre
+        salida.append((etiqueta, fila))
+    return salida
+
+
+def resolver_clientes(elegidos: list[str], filas: list[dict] | None = None) -> tuple[list[dict], bool]:
+    """Devuelve (clientes, todos). 'Todos' expande a los activos."""
+    pares = etiquetas_clientes(filas)
+    if not elegidos:
+        return [], False
+    if OPCION_TODOS in elegidos:
+        return [fila for _etiqueta, fila in pares], True
+    por_etiqueta = {etiqueta: fila for etiqueta, fila in pares}
+    return [por_etiqueta[nombre] for nombre in elegidos if nombre in por_etiqueta], False
+
+
+def parametros_proyeccion(periodo: str, clientes: list[dict], *, todos: bool) -> str:
+    periodo_txt = str(periodo or "").strip()
+    if not periodo_valido(periodo_txt):
+        raise ErrorRutina("El período tiene que ser MM-AAAA.")
+    if not clientes:
+        raise ErrorRutina("Elegí al menos un cliente.")
+    payload = {
+        "periodo": periodo_txt,
+        "todos": bool(todos),
+        "clientes": [
+            {"sociedad": str(fila.get("sociedad") or "").strip(), "cuit": str(fila.get("cuit") or "").strip()}
+            for fila in clientes
+            if str(fila.get("sociedad") or "").strip()
+        ],
+    }
+    if not payload["clientes"]:
+        raise ErrorRutina("Elegí al menos un cliente.")
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def resumen_parametros(texto: str | None) -> str:
+    """Texto corto para el historial. Si no es el JSON de proyecciones, se deja igual."""
+    crudo = str(texto or "").strip()
+    if not crudo:
+        return ""
+    try:
+        data = json.loads(crudo)
+    except json.JSONDecodeError:
+        return crudo
+    if not isinstance(data, dict) or "periodo" not in data:
+        return crudo
+    nombres = []
+    for cliente in data.get("clientes") or []:
+        if isinstance(cliente, dict):
+            nombres.append(str(cliente.get("sociedad") or cliente.get("cuit") or "").strip())
+        else:
+            nombres.append(str(cliente).strip())
+    nombres = [nombre for nombre in nombres if nombre]
+    if data.get("todos"):
+        quienes = "Todos"
+    elif len(nombres) <= 3:
+        quienes = ", ".join(nombres)
+    else:
+        quienes = ", ".join(nombres[:3]) + f" y {len(nombres) - 3} más"
+    return f"{data.get('periodo')} · {quienes}".strip(" ·")
+
+
+def tabla_control_proyeccion(filas: list[dict]) -> dict:
+    """Tabla de preview: una fila por cliente y una columna por requisito, más el estado."""
+    columnas = list(COLUMNAS_RESULTADO_PROYECCION)
+    salida = []
+    for fila in filas:
+        salida.append([fila.get(columna, "") for columna in columnas])
+    return {"titulo": "Por cliente", "columnas": columnas, "filas": salida}
 
 
 def _validar_codigo(rutina: str) -> str:

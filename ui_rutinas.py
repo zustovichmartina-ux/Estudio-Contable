@@ -1,20 +1,31 @@
 """Solapa Rutinas: la oficina encola tareas. No se ejecutan en esta web."""
 from __future__ import annotations
 
+import hashlib
 from datetime import timedelta
 
 import streamlit as st
 
 from rutinas import (
+    OPCION_TODOS,
     RUTINAS,
     ErrorRutina,
     PedidoDuplicado,
     cancelar_pedido,
     crear_pedido,
+    es_proyeccion,
+    etiquetas_clientes,
+    exportar_ficha,
     filas_tabla_preview,
     formatear_fecha_ar,
+    importar_ficha_xlsx,
     listar_pedidos,
+    parametros_proyeccion,
     pedido_abierto,
+    periodo_sugerido,
+    periodo_valido,
+    resolver_clientes,
+    resumen_parametros,
     ultimo_pedido,
 )
 
@@ -38,7 +49,7 @@ _ESTADOS_CERRADOS = ("OK", "ERROR", "CANCELADO")
 def render_rutinas() -> None:
     st.markdown("##### Rutinas de oficina")
     st.caption(
-        "Elegí la rutina, tildá los requisitos y apretá Ejecutar. "
+        "Elegí la rutina y apretá Ejecutar. "
         "Eso la deja en la cola: la corre el asistente (archivos y ARCA), no esta web."
     )
     aviso = st.session_state.pop("rutina_flash", None)
@@ -51,12 +62,10 @@ def render_rutinas() -> None:
     codigo = item["codigo"]
     st.write(item["descripcion"])
 
-    st.markdown("##### Requisitos")
-    st.caption("Tildá cada uno. Ejecutar se habilita cuando están todos. Los que dicen A CONFIRMAR se van a ajustar.")
-    tildes = []
-    for indice, texto in enumerate(item["requisitos"]):
-        tildes.append(st.checkbox(texto, key=f"rutina_req_{codigo}_{indice}"))
-    requisitos_ok = all(tildes)
+    if es_proyeccion(codigo):
+        parametros, requisitos_ok = _formulario_proyeccion(item)
+    else:
+        parametros, requisitos_ok = _formulario_checklist(item)
 
     if "rutinas_solicitado_por" not in st.session_state:
         st.session_state["rutinas_solicitado_por"] = _nombre_sesion()
@@ -65,11 +74,6 @@ def render_rutinas() -> None:
         key="rutinas_solicitado_por",
         placeholder="Nombre de quien pide la rutina",
         help="Queda asentado en el pedido. Es obligatorio.",
-    )
-    parametros = st.text_input(
-        "Parámetros (opcional)",
-        key=f"rutina_param_{codigo}",
-        placeholder="Período o cliente, si hace falta",
     )
 
     abierto = pedido_abierto(codigo)
@@ -85,7 +89,9 @@ def render_rutinas() -> None:
             _marcar_visto(int(ultimo["id"]))
             st.rerun()
 
-    if not requisitos_ok:
+    if not requisitos_ok and es_proyeccion(codigo):
+        st.caption("Elegí el período y al menos un cliente para poder ejecutar.")
+    elif not requisitos_ok:
         st.caption("Tildá todos los requisitos para poder ejecutar.")
     elif not str(quien or "").strip():
         st.caption("Escribí quién pide la rutina.")
@@ -106,6 +112,91 @@ def render_rutinas() -> None:
         _zona_viva(codigo, str(abierto["estado"]))
     else:
         _zona(codigo)
+
+
+def _formulario_checklist(item: dict) -> tuple[str, bool]:
+    st.markdown("##### Requisitos")
+    st.caption("Tildá cada uno. Ejecutar se habilita cuando están todos. Los que dicen A CONFIRMAR se van a ajustar.")
+    tildes = []
+    for indice, texto in enumerate(item["requisitos"]):
+        tildes.append(st.checkbox(texto, key=f"rutina_req_{item['codigo']}_{indice}"))
+    parametros = st.text_input(
+        "Parámetros (opcional)",
+        key=f"rutina_param_{item['codigo']}",
+        placeholder="Período o cliente, si hace falta",
+    )
+    return str(parametros or "").strip(), all(tildes)
+
+
+def _formulario_proyeccion(item: dict) -> tuple[str, bool]:
+    st.markdown("##### Qué se verifica")
+    st.caption("Texto de ayuda. No hay que tildar nada: el asistente lo controla en el servidor.")
+    for linea in item.get("ayuda") or ():
+        if str(linea).startswith("Por cada"):
+            st.markdown(linea)
+        else:
+            st.markdown(f"- {linea}")
+
+    st.markdown("##### Ficha de clientes")
+    archivo = st.file_uploader(
+        "Actualizar ficha de clientes (xlsx)",
+        type=["xlsx"],
+        key="rutina_ficha_uploader",
+        help="Columnas: Sociedad, CUIT, Activa, TISH, Mes inicio, Mes cierre, Día revisión, Proyección vigente, Carpeta Proyecciones, Carpeta IIBB, Carpeta F931, Último mes cargado, Notas.",
+    )
+    if archivo is not None:
+        datos = archivo.getvalue()
+        firma = hashlib.sha256(datos).hexdigest()
+        if st.session_state.get("_ficha_hash") != firma:
+            try:
+                cantidad = importar_ficha_xlsx(datos)
+            except ErrorRutina as exc:
+                st.error(str(exc))
+            else:
+                st.session_state["_ficha_hash"] = firma
+                st.session_state["rutina_flash"] = f"Ficha actualizada: {cantidad} cliente(s)."
+                st.rerun()
+
+    ficha = exportar_ficha()
+    activos = etiquetas_clientes()
+    st.caption(f"{len(ficha)} cliente(s) en la ficha · {len(activos)} activo(s).")
+    if ficha:
+        with st.expander("Ver ficha cargada", expanded=False):
+            st.dataframe(ficha, use_container_width=True, hide_index=True)
+    else:
+        st.info("Todavía no hay ficha. Subí el Excel para poder elegir clientes.")
+
+    sugerido = periodo_sugerido()
+    if "proy_mes" not in st.session_state:
+        st.session_state["proy_mes"] = sugerido[:2]
+    if "proy_anio" not in st.session_state:
+        st.session_state["proy_anio"] = int(sugerido[3:])
+    col_mes, col_anio = st.columns(2)
+    with col_mes:
+        mes = st.selectbox("Mes", [f"{numero:02d}" for numero in range(1, 13)], key="proy_mes")
+    with col_anio:
+        anio = st.number_input("Año", min_value=2000, max_value=2100, step=1, key="proy_anio")
+    periodo = f"{mes}-{int(anio)}"
+    st.caption(f"Período: {periodo}" if periodo_valido(periodo) else "El período tiene que ser MM-AAAA.")
+
+    opciones = [OPCION_TODOS] + [etiqueta for etiqueta, _fila in activos]
+    elegidos = st.multiselect(
+        "Clientes",
+        opciones,
+        key="proy_clientes",
+        placeholder="Elegí clientes o Todos",
+        disabled=not activos,
+    )
+    clientes, todos = resolver_clientes(list(elegidos))
+    if todos:
+        st.caption(f"Todos: {len(clientes)} cliente(s) activo(s).")
+    if not clientes or not periodo_valido(periodo):
+        return "", False
+    try:
+        return parametros_proyeccion(periodo, clientes, todos=todos), True
+    except ErrorRutina as exc:
+        st.error(str(exc))
+        return "", False
 
 
 def _nombre_sesion() -> str:
@@ -250,7 +341,7 @@ def _historial() -> None:
         {
             "Nro": pedido["id"],
             "Rutina": pedido.get("nombre") or pedido["rutina"],
-            "Parámetros": pedido.get("parametros") or "",
+            "Parámetros": resumen_parametros(pedido.get("parametros")),
             "Pidió": pedido.get("solicitado_por") or "",
             "Estado": pedido.get("estado") or "",
             "Creado": formatear_fecha_ar(pedido.get("creado_en")),

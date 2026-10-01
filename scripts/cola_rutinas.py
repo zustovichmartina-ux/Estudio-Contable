@@ -10,6 +10,7 @@ Ejemplos (desde la raíz del repo):
     python scripts/cola_rutinas.py tomar 12
     python scripts/cola_rutinas.py terminar 12 --estado OK --resultado "Listo" --archivos "C:\\ruta\\salida.xlsx"
     python scripts/cola_rutinas.py terminar 12 --estado OK --resultado "Listo" --preview-json preview.json
+    python scripts/cola_rutinas.py ficha --json
 """
 from __future__ import annotations
 
@@ -26,6 +27,7 @@ from rutinas import (  # noqa: E402
     ESTADOS,
     ESTADOS_CIERRE,
     ErrorRutina,
+    exportar_ficha,
     listar_pedidos,
     normalizar_preview,
     tomar_pedido,
@@ -72,6 +74,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
 
+    p_ficha = sub.add_parser("ficha", help="Exporta la ficha de clientes de Proyecciones")
+    p_ficha.add_argument("--json", action="store_true", required=True, help="Imprime la ficha en JSON")
+
     p_listar = sub.add_parser("listar", help="Lista pedidos en JSON")
     p_listar.add_argument("--estado", required=True, choices=ESTADOS)
     p_listar.add_argument("--limite", type=int, default=200)
@@ -92,6 +97,8 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     try:
+        if args.cmd == "ficha":
+            return _imprimir(exportar_ficha())
         if args.cmd == "listar":
             pedidos = listar_pedidos(estado=args.estado, limite=args.limite)
             return _imprimir([_pedido_json(p) for p in pedidos])

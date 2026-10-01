@@ -3,8 +3,11 @@ from __future__ import annotations
 
 import importlib.util
 import json
+from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 
+import openpyxl
 import pytest
 
 import database
@@ -92,13 +95,18 @@ def test_agrega_preview_si_la_tabla_era_vieja(tmp_path, monkeypatch):
 
 
 def test_catalogo_requisitos_a_confirmar():
-    codigos = [item["codigo"] for item in rutinas.RUTINAS]
-    assert "proyecciones_ganancias_iva" in codigos
-    proy = rutinas.rutina_por_codigo("proyecciones_ganancias_iva")
+    proy = rutinas.rutina_por_codigo(rutinas.CODIGO_PROYECCION)
     assert proy is not None
-    assert any("compras y ventas" in texto for texto in proy["requisitos"])
+    assert proy["requisitos"] == ()
+    ayuda = " ".join(proy["ayuda"])
+    assert "compras y ventas" in ayuda
+    assert "NO TIENE EMPLEADOS" in ayuda
+    assert "TISH=Sí" in ayuda
+    assert "ejercicio siguiente" in ayuda
     for item in rutinas.RUTINAS:
-        assert item["nombre"] and item["descripcion"] and item["requisitos"]
+        if item["codigo"] == rutinas.CODIGO_PROYECCION:
+            continue
+        assert item["requisitos"]
         for texto in item["requisitos"]:
             assert str(texto).startswith("A CONFIRMAR")
 
@@ -365,3 +373,158 @@ def test_cli_listar_tomar_terminar(tmp_path, monkeypatch, capsys):
 
     assert cli.main(["listar", "--estado", "PENDIENTE"]) == 0
     assert json.loads(capsys.readouterr().out) == []
+
+
+def _xlsx(filas: list[list], encabezados: list[str] | None = None) -> bytes:
+    libro = openpyxl.Workbook()
+    hoja = libro.active
+    hoja.append(encabezados or [etiqueta for _campo, etiqueta in rutinas.COLUMNAS_FICHA])
+    for fila in filas:
+        hoja.append(fila)
+    buffer = BytesIO()
+    libro.save(buffer)
+    return buffer.getvalue()
+
+
+def _fila_acme(**extra) -> list:
+    base = {
+        "sociedad": "ACME",
+        "cuit": 30712345671,
+        "activa": "Sí",
+        "tish": "Sí",
+        "mes_inicio": "01-2020",
+        "mes_cierre": datetime(2025, 12, 1),
+        "dia_revision": 15,
+        "proyeccion_vigente": "Ganancias 2025.xlsx",
+        "carpeta_proyecciones": r"C:\ACME\Proyecciones",
+        "carpeta_iibb": r"C:\ACME\IIBB",
+        "carpeta_f931": r"C:\ACME\F931",
+        "ultimo_mes_cargado": "09-2026",
+        "notas": "",
+    }
+    base.update(extra)
+    return [base[campo] for campo, _etiqueta in rutinas.COLUMNAS_FICHA]
+
+
+def test_importar_ficha_reemplaza_y_exporta(tmp_path, monkeypatch):
+    _db(tmp_path, monkeypatch)
+    primera = _xlsx(
+        [
+            _fila_acme(),
+            _fila_acme(sociedad="BETA", cuit="20111222333", activa="No", tish="No", notas="NO TIENE EMPLEADOS"),
+        ]
+    )
+    assert rutinas.importar_ficha_xlsx(primera) == 2
+    assert len(rutinas.listar_ficha()) == 2
+    acme = rutinas.listar_ficha()[0]
+    assert acme["cuit"] == "30712345671"
+    assert acme["mes_cierre"] == "12-2025"
+    assert acme["dia_revision"] == "15"
+    assert rutinas.cliente_activo(acme["activa"])
+    assert not rutinas.cliente_activo("No")
+    assert not rutinas.cliente_activo("inactiva")
+    assert rutinas.cliente_activo("")
+
+    segunda = _xlsx([_fila_acme(sociedad="GAMMA", cuit="27999888776", activa="Sí", tish="")])
+    assert rutinas.importar_ficha_xlsx(segunda) == 1
+    sociedades = [fila["sociedad"] for fila in rutinas.listar_ficha()]
+    assert sociedades == ["GAMMA"]
+
+    exportada = rutinas.exportar_ficha()
+    assert list(exportada[0]) == [etiqueta for _campo, etiqueta in rutinas.COLUMNAS_FICHA]
+    assert exportada[0]["Sociedad"] == "GAMMA"
+    assert exportada[0]["CUIT"] == "27999888776"
+
+
+def test_ficha_sin_sociedad_falla(tmp_path, monkeypatch):
+    _db(tmp_path, monkeypatch)
+    with pytest.raises(rutinas.ErrorRutina, match="Sociedad"):
+        rutinas.importar_ficha_xlsx(_xlsx([["x"]], encabezados=["CUIT", "Activa"]))
+    with pytest.raises(rutinas.ErrorRutina, match="vacío"):
+        rutinas.leer_ficha_xlsx(b"")
+    assert rutinas.exportar_ficha() == []
+
+
+def test_clientes_todos_y_parametros(tmp_path, monkeypatch):
+    _db(tmp_path, monkeypatch)
+    rutinas.importar_ficha_xlsx(
+        _xlsx(
+            [
+                _fila_acme(),
+                _fila_acme(sociedad="ACME", cuit="20999888776", activa="Sí"),
+                _fila_acme(sociedad="BETA", cuit="20111222333", activa="inactiva", notas="NO TIENE EMPLEADOS"),
+                _fila_acme(sociedad="GAMMA", cuit="", activa="Sí", tish="No"),
+            ]
+        )
+    )
+    etiquetas = [nombre for nombre, _fila in rutinas.etiquetas_clientes()]
+    assert "BETA" not in etiquetas
+    assert "ACME (30712345671)" in etiquetas
+    assert "ACME (20999888776)" in etiquetas
+    assert "GAMMA" in etiquetas
+
+    todos, es_todos = rutinas.resolver_clientes(["Todos"])
+    assert es_todos
+    assert {fila["sociedad"] for fila in todos} == {"ACME", "GAMMA"}
+    uno, es_todos = rutinas.resolver_clientes(["GAMMA"])
+    assert not es_todos
+    assert [fila["sociedad"] for fila in uno] == ["GAMMA"]
+
+    payload = json.loads(rutinas.parametros_proyeccion("10-2026", uno, todos=False))
+    assert payload == {
+        "periodo": "10-2026",
+        "todos": False,
+        "clientes": [{"sociedad": "GAMMA", "cuit": ""}],
+    }
+    pedido = rutinas.crear_pedido(rutinas.CODIGO_PROYECCION, "Marti", json.dumps(payload, ensure_ascii=False))
+    assert json.loads(pedido["parametros"])["periodo"] == "10-2026"
+    assert rutinas.resumen_parametros(pedido["parametros"]) == "10-2026 · GAMMA"
+    amplio = rutinas.parametros_proyeccion("10-2026", todos, todos=True)
+    assert rutinas.resumen_parametros(amplio).startswith("10-2026 · Todos")
+    assert rutinas.resumen_parametros("octubre a mano") == "octubre a mano"
+    with pytest.raises(rutinas.ErrorRutina):
+        rutinas.parametros_proyeccion("2026-10", uno, todos=False)
+    with pytest.raises(rutinas.ErrorRutina):
+        rutinas.parametros_proyeccion("10-2026", [], todos=False)
+    assert not rutinas.periodo_valido("13-2026")
+    assert rutinas.periodo_valido("01-2026")
+
+
+def test_tabla_control_proyeccion_en_preview():
+    tabla = rutinas.tabla_control_proyeccion(
+        [
+            {
+                "Cliente": "ACME",
+                "Imputación compras y ventas": "OK",
+                "Proyección vigente": "FALTA",
+                "DDJJ IIBB": "OK",
+                "F931": "NO APLICA",
+                "TISH": "FALTA DATO",
+                "Papel ejercicio siguiente": "NO APLICA",
+                "Estado": "FALTA",
+            }
+        ]
+    )
+    preview = rutinas.normalizar_preview(
+        {"resumen_md": "Control de **octubre**.", "tablas": [tabla], "archivos": []}
+    )
+    filas = rutinas.filas_tabla_preview(preview["tablas"][0])
+    assert list(filas[0]) == list(rutinas.COLUMNAS_RESULTADO_PROYECCION)
+    assert filas[0]["F931"] == "NO APLICA"
+    assert filas[0]["TISH"] == "FALTA DATO"
+    assert filas[0]["Estado"] == "FALTA"
+    assert set(filas[0].values()) <= set(rutinas.ESTADOS_CONTROL) | {"ACME"}
+
+
+def test_cli_ficha_json(tmp_path, monkeypatch, capsys):
+    _db(tmp_path, monkeypatch)
+    cli = _cli()
+    assert cli.main(["ficha", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out) == []
+    rutinas.importar_ficha_xlsx(_xlsx([_fila_acme(notas="NO TIENE EMPLEADOS")]))
+    assert cli.main(["ficha", "--json"]) == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data[0]["Sociedad"] == "ACME"
+    assert data[0]["Notas"] == "NO TIENE EMPLEADOS"
+    assert data[0]["Día revisión"] == "15"
+    assert data[0]["TISH"] == "Sí"
