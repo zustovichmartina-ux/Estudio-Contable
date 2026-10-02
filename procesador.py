@@ -42,6 +42,7 @@ from extracto_layout import (
     truncar_paginas_cuerpo_extracto,
 )
 from excel_formato_estudio import exportar_informe_excel
+import monotributo_facturas as mono_facturas
 
 BASE_DIR = Path(__file__).resolve().parent
 RUTA_RAIZ_CLIENTES = BASE_DIR / "clientes"
@@ -4103,12 +4104,10 @@ _CODIGOS_AFIP_FC = {
 }
 
 COLUMNAS_MONOTRIBUTO = [
-    "Archivo",
+    *mono_facturas.COLUMNAS_PAPEL,
     "Tipo",
     "Código AFIP",
     "Fecha Emisión",
-    "Período Desde",
-    "Período Hasta",
     "Concepto",
     "Importe Total",
     "Importe Dólares",
@@ -4118,6 +4117,7 @@ COLUMNAS_MONOTRIBUTO = [
     "CUIT Emisor",
     "Supuesto período",
 ]
+COLUMNAS_PAPEL_MONOTRIBUTO = mono_facturas.COLUMNAS_PAPEL
 
 
 def iter_pdfs_desde_uploads(archivos) -> list[tuple[str, bytes]]:
@@ -4150,14 +4150,12 @@ def iter_pdfs_desde_uploads(archivos) -> list[tuple[str, bytes]]:
 
 
 def extraer_texto_factura_afip(pdf_bytes: bytes) -> str:
-    """Texto plano del comprobante AFIP vía pdfplumber."""
+    """Texto plano del comprobante AFIP vía pdfplumber, una copia por página."""
     partes: list[str] = []
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
         for pagina in pdf.pages:
-            texto = pagina.extract_text() or ""
-            if texto.strip():
-                partes.append(texto)
-    return "\n".join(partes)
+            partes.append(pagina.extract_text() or "")
+    return "\f".join(partes)
 
 
 def formatear_comprobante_tango(punto_venta: str | int, nro_cmp: str | int) -> str:
@@ -4358,153 +4356,74 @@ def _extraer_usd_afip(texto: str, importe_total: float) -> tuple[float, float]:
 
 def parsear_factura_afip_texto(texto: str, archivo: str = "") -> dict | None:
     """
-    Extrae campos clave de un comprobante electrónico AFIP desde texto PDF.
-    Notas de crédito quedan con Importe Total negativo.
-    Recibos se cargan (positivo). El mes es Período Facturado, no Fecha de Emisión.
-    Retorna None si faltan datos mínimos (período desde + importe).
+    Extrae un comprobante ARCA (Factura C / Nota de Crédito C y equivalentes).
+
+    El papel de trabajo guarda el importe impreso y deja FALTA DATO si un campo
+    no está. Importe Total (para la categoría) resta las notas de crédito y,
+    si la moneda es extranjera, multiplica por el tipo de cambio impreso.
+    No inventa el período con la fecha de emisión.
     """
-    if not texto or not str(texto).strip():
+    base = mono_facturas.parsear_texto_recat(texto, archivo)
+    if not base:
         return None
 
-    bloque = re.sub(r"[ \t]+", " ", texto)
-    bloque = re.sub(r"\n{2,}", "\n", bloque)
-    tipo, codigo_afip, signo = detectar_tipo_comprobante_afip(texto)
-
-    fecha_emision = _buscar_fecha_afip(
-        bloque,
-        rf"Fecha\s+de\s+Emisi[oó]n[:\s]*{_RE_FECHA_AFIP}",
+    _tipo_det, codigo_afip, signo_det = detectar_tipo_comprobante_afip(texto)
+    pref = str(base.get("_pref") or "")
+    monto = base.get("Monto")
+    monto_num = monto if isinstance(monto, (int, float)) and not isinstance(monto, bool) else None
+    firmado, dolares, tc_num = mono_facturas.importe_recategorizacion(
+        monto_num,
+        pref or None,
+        str(base.get("_moneda_afip") or ""),
+        str(base.get("Tipo de cambio") or ""),
     )
-    periodo_desde = _buscar_fecha_afip(
-        bloque,
-        rf"Per[ií]odo\s+Facturado\s+Desde[:\s]*{_RE_FECHA_AFIP}",
-    )
-    periodo_hasta = ""
-    m_hasta = re.search(
-        rf"Per[ií]odo\s+Facturado\s+Desde[:\s]*{_RE_FECHA_AFIP}\s*(?:Hasta|al)[:\s]*{_RE_FECHA_AFIP}",
-        bloque,
-        flags=re.IGNORECASE | re.DOTALL,
-    )
-    if m_hasta:
-        periodo_desde = m_hasta.group(1)
-        periodo_hasta = m_hasta.group(2)
-    else:
-        periodo_hasta = _buscar_fecha_afip(
-            bloque,
-            rf"Per[ií]odo\s+Facturado\s+Hasta[:\s]*{_RE_FECHA_AFIP}",
-        )
-        if not periodo_hasta:
-            periodo_hasta = _buscar_fecha_afip(
-                bloque,
-                rf"(?:Hasta|al)[:\s]*{_RE_FECHA_AFIP}",
-            )
+    if not pref and signo_det < 0 and firmado > 0:
+        firmado = -firmado
 
-    if not periodo_desde:
-        periodo_desde = _buscar_fecha_afip(
-            bloque,
-            rf"Fecha\s+Servicio\s+Desde[:\s]*{_RE_FECHA_AFIP}",
-        )
-        if periodo_desde:
-            periodo_hasta = periodo_hasta or _buscar_fecha_afip(
-                bloque,
-                rf"Fecha\s+Servicio\s+Hasta[:\s]*{_RE_FECHA_AFIP}",
-            )
-
-    tenia_periodo_impreso = bool(periodo_desde)
-    supuesto = ""
-    if not periodo_desde and fecha_emision:
-        periodo_desde = fecha_emision
-        supuesto = "Fecha de emisión (PDF sin Período Facturado)"
-    if not periodo_hasta and periodo_desde:
-        periodo_hasta = periodo_desde
+    partes = mono_facturas.partes_numero(str(base.get("N° Factura") or ""))
+    comprobante = ""
+    if partes:
+        comprobante = formatear_comprobante_tango(partes[2], partes[3])
 
     concepto = ""
     m_conc = re.search(
         r"Concepto[:\s]*(\d+\s*-\s*(?:Productos|Servicios|Productos\s+y\s+Servicios))",
-        bloque,
+        texto or "",
         flags=re.IGNORECASE,
     )
     if m_conc:
         concepto = re.sub(r"\s+", " ", m_conc.group(1)).strip()
 
-    punto_venta = ""
-    m_pv = re.search(r"Punto\s+de\s+Venta[:\s]*(\d{1,5})", bloque, flags=re.IGNORECASE)
-    if m_pv:
-        punto_venta = m_pv.group(1)
-
-    nro_cmp = ""
-    for patron_nro in (
-        r"Comp(?:\.|\s)*Nro[:\s\.]*(\d+)",
-        r"Nro\.?\s*(?:de\s+)?Comprobante[:\s]*(\d+)",
-        r"N[uú]mero[:\s]*(\d{6,})",
-    ):
-        m_nro = re.search(patron_nro, bloque, flags=re.IGNORECASE)
-        if m_nro:
-            nro_cmp = m_nro.group(1)
-            break
-
-    importe_total = 0.0
-    m_imp = re.search(
-        r"Importe\s+Total[:\s]*\$?\s*([\d][\d.,]*)",
-        bloque,
-        flags=re.IGNORECASE,
-    )
-    if m_imp:
-        importe_total = _limpiar_monto(m_imp.group(1))
-    if importe_total <= 0:
-        m_imp2 = re.search(
-            r"(?:^|\n)\s*Total[:\s]*\$?\s*([\d][\d.,]*)",
-            bloque,
-            flags=re.IGNORECASE,
-        )
-        if m_imp2:
-            importe_total = _limpiar_monto(m_imp2.group(1))
-
-    importe_dolares, tipo_cambio = _extraer_usd_afip(texto, importe_total)
-    if importe_dolares > 0 and tipo_cambio > 0:
-        importe_total = round(importe_dolares * tipo_cambio, 2)
-
-    comprobante = ""
-    if punto_venta and nro_cmp:
-        comprobante = formatear_comprobante_tango(punto_venta, nro_cmp)
-
-    cae = _extraer_cae_afip(bloque)
-    cuit_emisor = _extraer_cuit_emisor_afip(texto)
-
-    if not periodo_desde or importe_total <= 0:
-        return None
-
-    if (
-        tenia_periodo_impreso
-        and fecha_emision
-        and periodo_desde == fecha_emision
-        and "Servicios" in concepto
-    ):
-        supuesto = supuesto or "Revisar: Fecha Desde = Fecha de Emisión en factura de servicios"
-
-    # NC siempre resta en el consolidado de facturación.
-    importe_firmado = round(abs(importe_total) * signo, 2)
-
     return {
+        "Fecha": base.get("Fecha") or "",
+        "Período Desde": base.get("Período Desde") or "",
+        "Período Hasta": base.get("Período Hasta") or "",
+        "Monto": monto_num,
+        "N° Factura": base.get("N° Factura") or "",
+        "Tipo de cambio": base.get("Tipo de cambio") or "",
+        "Moneda": base.get("Moneda") or "",
+        "Denominación del comprador": base.get("Denominación del comprador") or "",
         "Archivo": archivo,
-        "Tipo": tipo,
+        "CUIT emisor": base.get("CUIT emisor") or "",
+        "Emisor": base.get("Emisor") or "",
+        "Tipo": base.get("Tipo") or _tipo_det,
         "Código AFIP": codigo_afip,
-        "Fecha Emisión": fecha_emision,
-        "Período Desde": periodo_desde,
-        "Período Hasta": periodo_hasta,
+        "Fecha Emisión": base.get("Fecha") or "",
         "Concepto": concepto,
-        "Importe Total": importe_firmado,
-        "Importe Dólares": importe_dolares if importe_dolares else "",
-        "Tipo de Cambio": tipo_cambio if tipo_cambio else "",
+        "Importe Total": firmado,
+        "Importe Dólares": dolares if dolares else "",
+        "Tipo de Cambio": tc_num if tc_num else "",
         "Comprobante": comprobante,
-        "CAE": cae,
-        "CUIT Emisor": cuit_emisor,
-        "Supuesto período": supuesto,
+        "CAE": _extraer_cae_afip(texto or ""),
+        "CUIT Emisor": base.get("_cuit_digitos") or _extraer_cuit_emisor_afip(texto or ""),
+        "Supuesto período": "",
+        "_avisos_copias": list(base.get("_avisos_copias") or []),
     }
 
 
 def auditar_correlatividad_monotributo(filas: list[dict]) -> list[str]:
-    """Saltos de numeración por serie (Facturas / NC / Recibos) y punto de venta."""
-    grupos: dict[tuple[str, str], list[int]] = {}
+    """Saltos de numeración por emisor, serie (Facturas / NC / Recibos) y punto de venta."""
+    grupos: dict[tuple[str, str, str], list[int]] = {}
     for fila in filas or []:
         cmpte = str(fila.get("Comprobante") or "").strip()
         m = re.match(r"^(\d{1,5})-(\d+)$", cmpte)
@@ -4515,10 +4434,15 @@ def auditar_correlatividad_monotributo(filas: list[dict]) -> list[str]:
             str(fila.get("Tipo") or ""),
             str(fila.get("Código AFIP") or ""),
         )
-        grupos.setdefault((familia, pv), []).append(nro)
+        cuit = re.sub(
+            r"\D",
+            "",
+            str(fila.get("CUIT emisor") or fila.get("CUIT Emisor") or ""),
+        )
+        grupos.setdefault((familia, pv, cuit), []).append(nro)
 
     avisos: list[str] = []
-    for (familia, pv), numeros in sorted(grupos.items()):
+    for (familia, pv, cuit), numeros in sorted(grupos.items()):
         unicos = sorted(set(numeros))
         if len(unicos) < 2:
             continue
@@ -4526,8 +4450,9 @@ def auditar_correlatividad_monotributo(filas: list[dict]) -> list[str]:
         if faltan:
             muestra = ", ".join(str(n) for n in faltan[:8])
             extra = f" (+{len(faltan) - 8})" if len(faltan) > 8 else ""
+            quien = f" CUIT {cuit}" if cuit else ""
             avisos.append(
-                f"{familia} PV {int(pv)}: falta nro {muestra}{extra} "
+                f"{familia} PV {int(pv)}{quien}: falta nro {muestra}{extra} "
                 f"(rango {unicos[0]}–{unicos[-1]})."
             )
     return avisos
@@ -4538,45 +4463,49 @@ def procesar_facturas_monotributo(
     cuit_cliente: str | None = None,
 ) -> tuple[pd.DataFrame, list[dict]]:
     """
-    Procesa PDFs sueltos y/o ZIP con facturas AFIP.
-    NC van en negativo; Recibos se cargan; elimina duplicados (mismo CAE/comprobante).
-    Si se pasa cuit_cliente, descarta PDFs de otro emisor.
-    Retorna DataFrame ordenado por Período Desde y lista de errores por archivo.
+    Procesa PDFs sueltos y/o ZIP con facturas AFIP, de cualquier emisor.
+
+    No depende del cliente seleccionado: cuit_cliente se ignora.
+    NC van en negativo en Importe Total; el papel guarda el importe impreso.
+    Duplicados: mismo emisor + tipo + punto de venta + número.
     """
+    del cuit_cliente
     filas: list[dict] = []
     errores: list[dict] = []
-    cuit_limpio = re.sub(r"\D", "", str(cuit_cliente or ""))
+    avisos_copias: list[str] = []
 
     for nombre, pdf_bytes in iter_pdfs_desde_uploads(archivos):
+        nombre_pdf = Path(str(nombre).split("::")[-1]).name or str(nombre)
         try:
             texto = extraer_texto_factura_afip(pdf_bytes)
-            parsed = parsear_factura_afip_texto(texto, nombre)
+            parsed = parsear_factura_afip_texto(texto, nombre_pdf)
             if parsed:
-                emisor = re.sub(r"\D", "", str(parsed.get("CUIT Emisor") or ""))
-                if cuit_limpio and emisor and emisor != cuit_limpio:
-                    errores.append({
-                        "archivo": nombre,
-                        "motivo": (
-                            f"CUIT emisor {emisor} distinto del cliente {cuit_limpio}. "
-                            "No se cargó."
-                        ),
-                    })
-                    continue
+                for aviso in parsed.pop("_avisos_copias", []):
+                    avisos_copias.append(str(aviso))
+                    errores.append({"archivo": nombre, "motivo": str(aviso)})
                 filas.append(parsed)
             else:
                 errores.append({
                     "archivo": nombre,
-                    "motivo": "No se detectaron período devengado e importe total en el PDF.",
+                    "motivo": "No se reconoció un comprobante ARCA en el PDF.",
                 })
         except Exception as exc:
             errores.append({"archivo": nombre, "motivo": str(exc)})
 
-    filas, n_dupes = deduplicar_comprobantes_monotributo(filas)
-    if n_dupes:
+    filas, duplicados = mono_facturas.deduplicar_filas_recat(filas)
+    if duplicados:
         errores.append({
             "archivo": "(consolidado)",
-            "motivo": f"Se descartaron {n_dupes} comprobante(s) duplicado(s).",
+            "motivo": f"Se descartaron {len(duplicados)} comprobante(s) duplicado(s).",
         })
+        for dup in duplicados:
+            errores.append({
+                "archivo": dup.get("descartado") or "(duplicado)",
+                "motivo": (
+                    f"Duplicado de {dup.get('nro') or 'comprobante'} "
+                    f"(se conserva {dup.get('conservado') or 'la primera'})."
+                ),
+            })
 
     for aviso in auditar_correlatividad_monotributo(filas):
         errores.append({"archivo": "(correlatividad)", "motivo": aviso})
@@ -4589,11 +4518,14 @@ def procesar_facturas_monotributo(
         if col not in df.columns:
             df[col] = ""
     df = df[COLUMNAS_MONOTRIBUTO]
-    df["_sort_desde"] = df["Período Desde"].map(
-        lambda x: _parsear_fecha(str(x)) or date.min
+    df["_sort_fecha"] = df["Fecha"].map(lambda x: _parsear_fecha(str(x or "")) or date.max)
+    df["_sort_nf"] = df["N° Factura"].map(lambda x: str(x or ""))
+    df = df.sort_values(["_sort_fecha", "_sort_nf"], kind="stable").drop(
+        columns=["_sort_fecha", "_sort_nf"]
     )
-    df = df.sort_values("_sort_desde", kind="stable").drop(columns=["_sort_desde"])
-    return df.reset_index(drop=True), errores
+    df = df.reset_index(drop=True)
+    df.attrs["notas_control"] = {"duplicados": duplicados, "copias": avisos_copias}
+    return df, errores
 
 
 def analizar_comprobantes_monotributo_rutas(
@@ -4650,70 +4582,11 @@ def analizar_comprobantes_monotributo_rutas(
 
 
 def exportar_monotributo_excel(df: pd.DataFrame) -> bytes:
-    """Excel de trabajo monotributo en formato estándar del Estudio."""
-    from excel_formato_estudio import construir_informe_excel, informe_a_bytes
-    from openpyxl.utils import get_column_letter
-
-    df_export = df.copy() if df is not None else pd.DataFrame()
-    total = float(df_export["Importe Total"].sum()) if not df_export.empty and "Importe Total" in df_export.columns else 0.0
-    facturas = (
-        float(df_export.loc[df_export["Importe Total"] > 0, "Importe Total"].sum())
-        if not df_export.empty and "Importe Total" in df_export.columns
-        else 0.0
-    )
-    notas = (
-        float(df_export.loc[df_export["Importe Total"] < 0, "Importe Total"].sum())
-        if not df_export.empty and "Importe Total" in df_export.columns
-        else 0.0
-    )
-    n_recibos = 0
-    if not df_export.empty and "Tipo" in df_export.columns:
-        n_recibos = int(df_export["Tipo"].astype(str).str.upper().str.startswith("RECIBO").sum())
-    resumen = pd.DataFrame(
-        [
-            {"Concepto": "Facturas / ND / Recibos (positivos)", "Importe": round(facturas, 2)},
-            {"Concepto": "Notas de crédito (negativos)", "Importe": round(notas, 2)},
-            {"Concepto": "Neto facturado", "Importe": round(total, 2)},
-        ]
-    )
-    wb = construir_informe_excel(
-        titulo="Monotributo — Facturas devengadas",
-        subtitulo="Análisis de períodos · Estudio Contable",
-        kpis=[
-            ("Neto facturado", round(total, 2), "money"),
-            ("Cantidad de comprobantes", len(df_export), "int"),
-            ("Recibos cargados", n_recibos, "int"),
-        ],
-        resumenes=[("Resumen FC / NC / Recibos", resumen)],
-        detalle=df_export,
-        hoja_detalle="Facturas Devengadas",
-        col_moneda=["Importe", "Importe Total", "Importe Dólares", "Tipo de Cambio"],
-        col_fecha=["Fecha", "Fecha Emisión", "Fecha Contable", "Período Desde", "Período Hasta"],
-        total_col="Importe Total" if "Importe Total" in df_export.columns else None,
-    )
-    if "Facturas Devengadas" in wb.sheetnames and not df_export.empty:
-        ws = wb["Facturas Devengadas"]
-        headers = [str(c.value or "") for c in ws[1]]
-        try:
-            col_tot = headers.index("Importe Total") + 1
-            col_usd = headers.index("Importe Dólares") + 1
-            col_tc = headers.index("Tipo de Cambio") + 1
-        except ValueError:
-            col_tot = col_usd = col_tc = 0
-        if col_tot and col_usd and col_tc:
-            for i, (_, row) in enumerate(df_export.iterrows(), start=2):
-                try:
-                    usd = float(row.get("Importe Dólares") or 0)
-                    tc = float(row.get("Tipo de Cambio") or 0)
-                except (TypeError, ValueError):
-                    continue
-                if usd > 0 and tc > 0:
-                    letra_usd = get_column_letter(col_usd)
-                    letra_tc = get_column_letter(col_tc)
-                    signo = -1 if float(row.get("Importe Total") or 0) < 0 else 1
-                    prefijo = "-" if signo < 0 else ""
-                    ws.cell(i, col_tot).value = f"={prefijo}{letra_usd}{i}*{letra_tc}{i}"
-    return informe_a_bytes(wb)
+    """Papel de trabajo: una hoja, importe impreso, NC restan en el neto."""
+    notas = {}
+    if df is not None and hasattr(df, "attrs"):
+        notas = dict(df.attrs.get("notas_control") or {})
+    return mono_facturas.exportar_papel_facturas(df, notas)
 
 
 def _periodo_mm_aaaa(periodo: str) -> tuple[int, int] | None:

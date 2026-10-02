@@ -122,6 +122,7 @@ from procesador import (
     parsear_fecha_export_tango,
     procesar_facturas_monotributo,
     exportar_monotributo_excel,
+    COLUMNAS_PAPEL_MONOTRIBUTO,
     parsear_mis_retenciones_afip,
     procesar_extractos_santander_pdfs,
     procesar_extractos_bancarios_pdfs,
@@ -12721,28 +12722,12 @@ def _seccion_herramientas() -> None:
 def _seccion_recategorizacion_monotributo() -> None:
     """Análisis de períodos devengados en facturas electrónicas AFIP (PDF / ZIP)."""
     st.caption(
-        "El mes de cada comprobante es el **Período Facturado Desde**, no la Fecha de Emisión. "
-        "Las notas de crédito restan. Los recibos se cargan (no se descartan aunque citen una factura). "
-        "Si el CUIT emisor no es el del cliente activo, el PDF no entra."
+        "No depende del cliente seleccionado: entran facturas de cualquier CUIT emisor. "
+        "Cada PDF cuenta una vez: original, duplicado y triplicado se unifican si el número y el importe coinciden. "
+        "El papel trae el importe impreso. Lo que no figura queda en rojo como FALTA DATO "
+        "(no se completa el período con la fecha de emisión). "
+        "Las notas de crédito restan en el neto. Si hay más de un emisor, el Excel abre los totales por emisor y por año."
     )
-
-    clientes = db.listar_clientes()
-    if not clientes:
-        st.warning("Debe registrar al menos un cliente antes de analizar facturas.")
-        return
-
-    if not _selector_sociedad_devengamientos(clientes):
-        return
-
-    nombre = st.session_state.get("nombre_activo") or "—"
-    cuit = st.session_state.get("cuit_activo") or "—"
-    cliente = db.obtener_cliente(st.session_state.get(_SOCiedad_KEY)) if st.session_state.get(_SOCiedad_KEY) else None
-    tipo_persona = cliente.get("tipo_persona", "—") if cliente else "—"
-
-    col_n, col_c, col_t = st.columns(3)
-    col_n.metric("Sociedad activa", nombre)
-    col_c.metric("CUIT", cuit)
-    col_t.metric("Tipo", tipo_persona)
 
     archivos = st.file_uploader(
         "Facturas electrónicas AFIP (PDF o ZIP)",
@@ -12756,8 +12741,8 @@ def _seccion_recategorizacion_monotributo() -> None:
         if not archivos:
             st.warning("Subí al menos un archivo PDF o ZIP para analizar.")
         else:
-            with st.spinner("Procesando comprobantes (período facturado, recibos, CUIT)..."):
-                df, errores = procesar_facturas_monotributo(archivos, cuit_cliente=str(cuit))
+            with st.spinner("Procesando comprobantes (período facturado, emisor, copias)..."):
+                df, errores = procesar_facturas_monotributo(archivos)
                 st.session_state.mono_facturas_df = df
                 st.session_state.mono_errores_extraccion = errores
             if df.empty:
@@ -12787,7 +12772,13 @@ def _seccion_recategorizacion_monotributo() -> None:
             n_usd = int(pd.to_numeric(df_mono["Importe Dólares"], errors="coerce").fillna(0).gt(0).sum())
         if "Supuesto período" in df_mono.columns:
             n_supuesto = int(df_mono["Supuesto período"].astype(str).str.len().gt(0).sum())
-        periodos = df_mono["Período Desde"].astype(str).tolist()
+        periodos = pd.to_datetime(df_mono["Período Desde"], dayfirst=True, errors="coerce").dropna()
+        if periodos.empty:
+            rango_periodo = "sin período impreso"
+        else:
+            rango_periodo = (
+                f"{periodos.min().strftime('%d/%m/%Y')} a {periodos.max().strftime('%d/%m/%Y')}"
+            )
         st.markdown(
             f"**Resumen:** {len(df_mono)} comprobante(s) "
             f"({n_nc} NC · {n_recibos} recibo(s)"
@@ -12795,14 +12786,26 @@ def _seccion_recategorizacion_monotributo() -> None:
             f"{f' · {n_supuesto} con supuesto de período' if n_supuesto else ''}) · "
             f"Facturado **${total_fc:,.2f}** · "
             f"NC **${total_nc:,.2f}** · "
-            f"Neto **${total_importe:,.2f}** · "
-            f"Período **{periodos[0]}** a **{periodos[-1]}**"
+            f"Neto categoría **${total_importe:,.2f}** · "
+            f"Período **{rango_periodo}**"
         )
+        n_emisores = 0
+        if "CUIT emisor" in df_mono.columns:
+            n_emisores = int(df_mono["CUIT emisor"].astype(str).replace("", "FALTA DATO").nunique())
         st.caption(
-            "NC con importe negativo. Recibos en positivo. "
-            "El mes sale de Período Desde. En USD, Imp. Total del Excel es dólares × tipo de cambio."
+            "En el Excel las facturas y las notas de crédito van con importe positivo: el neto resta las NC. "
+            + (
+                "En USD el papel muestra los dólares y el tipo de cambio; la proyección los pasa a pesos. "
+                if n_usd else ""
+            )
+            + (
+                "Hay más de un emisor: el Excel separa totales por emisor y por año; la proyección suma todos. "
+                if n_emisores > 1 else ""
+            )
+            + "El mes de la categoría sale de Período Desde. Los recibos se cargan."
         )
-        st.dataframe(df_mono, use_container_width=True, hide_index=True)
+        columnas_papel = [c for c in COLUMNAS_PAPEL_MONOTRIBUTO if c in df_mono.columns]
+        st.dataframe(df_mono[columnas_papel], use_container_width=True, hide_index=True)
 
         meta_topes = cargar_topes_categorias()
         cats = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K"]
@@ -12838,8 +12841,7 @@ def _seccion_recategorizacion_monotributo() -> None:
                 "Puede corresponder recategorización inmediata: confirmarlo con el equipo / ARCA."
             )
 
-        cuit_limpio = re.sub(r"\D", "", str(cuit)) or "00000000000"
-        nombre_xlsx = f"Recategorizacion_Monotributo_{cuit_limpio}_{date.today().strftime('%Y%m%d')}.xlsx"
+        nombre_xlsx = f"Recategorizacion_Monotributo_{date.today().strftime('%Y%m%d')}.xlsx"
         st.download_button(
             "Descargar papel de trabajo (Excel)",
             data=exportar_monotributo_excel(df_mono),

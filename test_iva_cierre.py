@@ -1627,7 +1627,7 @@ def test_factura_usd_imp_total_es_dolares_por_tc():
   print("OK test_factura_usd_imp_total_es_dolares_por_tc")
 
 
-def test_cuit_ajeno_no_se_carga_en_monotributo():
+def test_cuit_ajeno_se_carga_en_monotributo():
   import unittest.mock as mock
   import procesador as proc
 
@@ -1643,6 +1643,7 @@ def test_cuit_ajeno_no_se_carga_en_monotributo():
   FACTURA C
   Codigo: 011
   CUIT: 30-99999999-9
+  Razón Social: OTRO EMISOR SA
   Fecha de Emisión: 01/05/2025
   Punto de Venta: 1
   Comp. Nro: 1
@@ -1659,9 +1660,12 @@ def test_cuit_ajeno_no_se_carga_en_monotributo():
       [_FakeUpload("ajeno.pdf", texto.encode("utf-8"))],
       cuit_cliente="20112223339",
     )
-  assert df.empty
-  assert any("CUIT emisor" in str(e.get("motivo", "")) for e in errores)
-  print("OK test_cuit_ajeno_no_se_carga_en_monotributo")
+  assert len(df) == 1
+  assert not any("distinto del cliente" in str(e.get("motivo", "")) for e in errores)
+  assert df.iloc[0]["CUIT Emisor"] == "30999999999"
+  assert df.iloc[0]["CUIT emisor"] == "30-99999999-9"
+  assert df.iloc[0]["Emisor"] == "OTRO EMISOR SA"
+  print("OK test_cuit_ajeno_se_carga_en_monotributo")
 
 
 def test_correlatividad_facturas_y_recibos_aparte():
@@ -2019,7 +2023,7 @@ if __name__ == "__main__":
     test_procesar_facturas_monotributo_orden_cronologico()
     test_recibo_no_se_clasifica_como_factura()
     test_factura_usd_imp_total_es_dolares_por_tc()
-    test_cuit_ajeno_no_se_carga_en_monotributo()
+    test_cuit_ajeno_se_carga_en_monotributo()
     test_correlatividad_facturas_y_recibos_aparte()
     test_mis_retenciones_fecha_ret_perc_omite_pendiente()
     test_conceptos_bancos_lista_cerrada_y_a_identificar()
