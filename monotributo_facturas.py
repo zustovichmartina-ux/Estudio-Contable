@@ -83,6 +83,11 @@ _CENTRO = Alignment(horizontal="center", vertical="center", wrap_text=True)
 _CENTRO_DATO = Alignment(horizontal="center")
 
 
+def escapar_pesos_markdown(texto: str) -> str:
+    """Streamlit markdown toma un par de $ como delimitadores de LaTeX."""
+    return str(texto).replace("$", "\\$")
+
+
 def numero_impreso(texto: str | None) -> float | None:
     """Miles con punto y decimales con coma, como en el armado de referencia."""
     if texto is None:
