@@ -143,6 +143,7 @@ from procesador import (
 )
 
 from capa_revision import gate_asiento
+from monotributo_facturas import escapar_pesos_markdown
 from monotributo_proyeccion import cargar_topes_categorias, proyectar_monotributo
 from ui_tango_bot import render_tango_bot
 from ui_version_web import render_aviso_version
@@ -12780,14 +12781,16 @@ def _seccion_recategorizacion_monotributo() -> None:
                 f"{periodos.min().strftime('%d/%m/%Y')} a {periodos.max().strftime('%d/%m/%Y')}"
             )
         st.markdown(
-            f"**Resumen:** {len(df_mono)} comprobante(s) "
-            f"({n_nc} NC · {n_recibos} recibo(s)"
-            f"{f' · {n_usd} en USD' if n_usd else ''}"
-            f"{f' · {n_supuesto} con supuesto de período' if n_supuesto else ''}) · "
-            f"Facturado **${total_fc:,.2f}** · "
-            f"NC **${total_nc:,.2f}** · "
-            f"Neto categoría **${total_importe:,.2f}** · "
-            f"Período **{rango_periodo}**"
+            escapar_pesos_markdown(
+                f"**Resumen:** {len(df_mono)} comprobante(s) "
+                f"({n_nc} NC · {n_recibos} recibo(s)"
+                f"{f' · {n_usd} en USD' if n_usd else ''}"
+                f"{f' · {n_supuesto} con supuesto de período' if n_supuesto else ''}) · "
+                f"Facturado **${total_fc:,.2f}** · "
+                f"NC **${total_nc:,.2f}** · "
+                f"Neto categoría **${total_importe:,.2f}** · "
+                f"Período **{rango_periodo}**"
+            )
         )
         n_emisores = 0
         if "CUIT emisor" in df_mono.columns:

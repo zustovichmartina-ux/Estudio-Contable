@@ -390,6 +390,16 @@ def test_varios_emisores_no_se_rechazan_y_los_totales_se_abren():
     assert round(float(df["Importe Total"].sum()), 2) == pytest.approx(5000)
 
 
+def test_resumen_escapa_el_signo_peso_para_markdown():
+    bruto = "Facturado **$1,500.50** · NC **$-200.00** · Neto categoría **$1,300.50**"
+    escapado = mf.escapar_pesos_markdown(bruto)
+    assert escapado == (
+        "Facturado **\\$1,500.50** · NC **\\$-200.00** · Neto categoría **\\$1,300.50**"
+    )
+    assert "$" not in escapado.replace("\\$", "")
+    assert mf.escapar_pesos_markdown("sin montos") == "sin montos"
+
+
 def test_pdf_sintetico_original_duplicado_triplicado():
     pagina = _pagina(nro="00000007", monto="$ 8.000,00")
     buf = io.BytesIO()
