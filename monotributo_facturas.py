@@ -51,6 +51,28 @@ _ETIQUETA = {
 
 _RE_TIPO = r"(FACTURA|NOTA DE CR[ÉE]DITO|NOTA DE D[ÉE]BITO|RECIBO)"
 _RE_NF = re.compile(r"^(FC|NC|ND|RECIBO)\s+([ABCEM])\s+(\d+)-(\d+)$")
+# En el texto del PDF la razón social y la etiqueta siguiente suelen quedar en la misma línea.
+_RE_CORTE_NOMBRE = re.compile(
+    r"\s+(?:"
+    r"Fecha de Emisi[oó]n"
+    r"|Fecha de Inicio(?: de Actividades)?"
+    r"|Inicio de Actividades"
+    r"|Domicilio(?: Comercial)?"
+    r"|CUIT"
+    r"|Condici[oó]n(?:\s+frente al IVA|\s+de venta)?"
+    r"|Ingresos Brutos"
+    r"|Punto de Venta"
+    r"|Comp\.?\s*Nro"
+    r"|Per[ií]odo(?:\s+Facturado)?"
+    r"|Moneda"
+    r"|Tipo de Cambio"
+    r"|Cotizaci[oó]n"
+    r"|C[oó]digo"
+    r"|CAE"
+    r"|Apellido y Nombre"
+    r")\s*:",
+    re.IGNORECASE,
+)
 _MONEDAS_EXTRANJERAS = {"DOL", "USD", "U$S", "US$", "DOLAR", "DOLARES"}
 
 _HEADER_FILL = PatternFill(fill_type="solid", fgColor="305496")
@@ -596,13 +618,21 @@ def _importe(pagina: str) -> tuple[str | None, str | None]:
     return None, None
 
 
+def _recortar_nombre(texto: str) -> str:
+    """Corta el nombre donde empieza la etiqueta siguiente de la misma línea."""
+    m = _RE_CORTE_NOMBRE.search(texto or "")
+    if m:
+        texto = texto[:m.start()]
+    return re.sub(r"\s+", " ", texto).strip()
+
+
 def _emisor_nombre(pagina: str) -> str | None:
     """Razón social del emisor. No usa la del comprador (Apellido y Nombre / Razón Social)."""
     for m in re.finditer(r"Raz[oó]n Social:\s*([^\n]*)", pagina, flags=re.IGNORECASE):
         previo = pagina[max(0, m.start() - 40):m.start()]
         if re.search(r"Apellido y Nombre\s*/\s*$", previo, flags=re.IGNORECASE):
             continue
-        nombre = m.group(1).strip()
+        nombre = _recortar_nombre(m.group(1))
         if nombre:
             return nombre
     return None
@@ -631,7 +661,7 @@ def _comprador(pagina: str) -> str | None:
     )
     if not m:
         return None
-    nombre = m.group(1).strip()
+    nombre = _recortar_nombre(m.group(1))
     return nombre or None
 
 

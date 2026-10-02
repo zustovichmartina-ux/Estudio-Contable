@@ -93,6 +93,45 @@ class _Upload:
         return self._data
 
 
+def test_emisor_y_comprador_cortan_antes_de_la_etiqueta_siguiente():
+    texto = """
+ORIGINAL
+          CUIT: 27-00000000-1          C          FACTURA
+Razón Social: CHAPARTEGUI FEBE ELIZABETH Fecha de Emisión: 10/01/2025
+Punto de Venta: 00001 Comp. Nro: 00000138
+CUIT: 27-00000000-1
+Apellido y Nombre / Razón Social: ALBARELLO CAMILA ROCIO Fecha de Emisión: 31/08/2026
+Período Facturado Desde: 01/01/2025 Hasta: 31/01/2025
+Importe Total: $ 1.000,00
+"""
+    fila = mf.parsear_texto_recat(texto, "chapartegui.pdf")
+    assert fila["Emisor"] == "CHAPARTEGUI FEBE ELIZABETH"
+    assert fila["Denominación del comprador"] == "ALBARELLO CAMILA ROCIO"
+    assert fila["Fecha"] == "10/01/2025"
+    assert "Fecha de Emisión" not in fila["Emisor"]
+    assert "Fecha de Emisión" not in fila["Denominación del comprador"]
+
+    otra = """
+Razón Social: WERTHEIMER SOFIA Fecha de Emisión: 31/08/2026
+          CUIT: 27-00000000-2          C          FACTURA
+Punto de Venta: 00002 Comp. Nro: 00000003
+Fecha de Emisión: 31/08/2026
+CUIT: 27-00000000-2
+Apellido y Nombre / Razón Social: WERTHEIMER SOFIA Condición frente al IVA: Consumidor Final Domicilio: CALLE 1
+Importe Total: $ 2.000,00
+"""
+    fila_b = mf.parsear_texto_recat(otra, "wertheimer.pdf")
+    assert fila_b["Emisor"] == "WERTHEIMER SOFIA"
+    assert fila_b["Denominación del comprador"] == "WERTHEIMER SOFIA"
+
+    xlsx = mf.exportar_papel_facturas([fila, fila_b])
+    ws = _hoja(xlsx)
+    titulos = [str(ws.cell(r, 1).value or "") for r in range(1, ws.max_row + 1)]
+    assert any(t == "Emisor 27-00000000-1 — CHAPARTEGUI FEBE ELIZABETH" for t in titulos)
+    assert any(t == "Emisor 27-00000000-2 — WERTHEIMER SOFIA" for t in titulos)
+    assert not any("Fecha de Emisión" in t for t in titulos)
+
+
 def test_numero_y_comprador_no_toma_al_emisor():
     fila = mf.parsear_texto_recat(_pagina(), "fc.pdf")
     assert fila["N° Factura"] == "FC C 00001-00000138"
