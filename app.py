@@ -10964,9 +10964,10 @@ def _seccion_conciliacion_bancaria_balance() -> None:
         _mostrar_aviso_cambio_sociedad()
 
         clientes = db.listar_clientes()
-        clientes_pj = [c for c in clientes if c.get("tipo_persona") == "Persona Jurídica"]
+        # Conciliación aplica a todas las personas (jurídicas y físicas).
+        clientes_pj = list(clientes)
         if not clientes_pj:
-            st.warning("Debe registrar al menos una Persona Jurídica para conciliar bancos.")
+            st.warning("Debe registrar al menos un cliente para conciliar bancos.")
             return
 
         indice = _indice_sociedades_pj(clientes_pj)
