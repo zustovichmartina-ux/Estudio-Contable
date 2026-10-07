@@ -314,6 +314,7 @@ _MODULOS_TRABAJO = ("Devengamiento de Impuestos", "Conciliación Bancaria")
 _VENTANAS_PRINCIPALES = (
     "Devengamiento de Impuestos",
     "Conciliación Bancaria",
+    "Control de comprobantes",
     "Préstamos Financieros",
     "Inversiones",
     "Herramientas",
@@ -326,6 +327,10 @@ _VENTANA_KEY = "ventana_principal_v4"
 _VENTANA_KEY_LEGACY = "ventana_principal_activa"
 _VENTANA_KEY_V3 = "ventana_principal_v3"
 _VENTANA_HEADER = {
+    "Control de comprobantes": (
+        "Control de comprobantes",
+        "Marcá lo que entregó el cliente y pedí los faltantes",
+    ),
     "Devengamiento de Impuestos": (
         "Devengamiento",
         "Armá el asiento de impuestos y exportalo a Tango",
@@ -366,6 +371,7 @@ _VENTANA_HEADER = {
 _VENTANA_NAV_LABELS = {
     "Devengamiento de Impuestos": "Devengamiento",
     "Conciliación Bancaria": "Conciliación",
+    "Control de comprobantes": "Comprobantes",
     "Préstamos Financieros": "Préstamos",
     "Inversiones": "Inversiones",
     "Herramientas": "Herramientas",
@@ -13360,6 +13366,10 @@ def _main() -> None:
         elif ventana_activa == "Conciliación Bancaria":
             with st.container():
                 _seccion_conciliacion_bancaria_balance()
+        elif ventana_activa == "Control de comprobantes":
+            from control_comprobantes import render_control_comprobantes
+
+            render_control_comprobantes()
         elif ventana_activa == "Préstamos Financieros":
             _seccion_auditoria_prestamos()
         elif ventana_activa == "Inversiones":
