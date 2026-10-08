@@ -134,12 +134,8 @@ def _desde_texto(doc) -> dict | None:
     m_pv = re.search(r"punto de venta[:\s]*0*(\d{1,5})", n)
     m_num = re.search(r"comp\.?\s*(?:nro|n[°o])\.?[:\s]*0*(\d{1,8})", n)
     if not (m_pv and m_num):
-        m = re.search(r"\b0*(\d{1,5})\s*-\s*0*(\d{1,8})\b", n)
-        if not m:
-            return None
-        pv, num = int(m.group(1)), int(m.group(2))
-    else:
-        pv, num = int(m_pv.group(1)), int(m_num.group(1))
+        return None
+    pv, num = int(m_pv.group(1)), int(m_num.group(1))
     cuits = re.findall(r"cuit[:\s]*(\d{2}-?\d{8}-?\d)", n)
     cuit = re.sub(r"\D", "", cuits[0]) if cuits else ""
     tipo = None
@@ -161,6 +157,71 @@ def _desde_texto(doc) -> dict | None:
         return None
     return {"origen": "Texto", "cuit": cuit, "tipo": tipo, "pv": pv, "num": num,
             "importe": importe, "fecha": ""}
+
+
+_RE_NOMBRE = re.compile(
+    r"(factura|nota de cr[eé]dito|nota de d[eé]bito|recibo)\s+([ABCEM])\s+0*(\d{1,5})\s*-\s*0*(\d{1,8})",
+    re.I)
+_TIPOS_NOMBRE = {
+    "factura": {"A": 1, "B": 6, "C": 11, "M": 51, "E": 19},
+    "nota de credito": {"A": 3, "B": 8, "C": 13, "M": 53},
+    "nota de debito": {"A": 2, "B": 7, "C": 12, "M": 52},
+    "recibo": {"A": 4, "B": 9, "C": 15},
+}
+
+
+def leer_nombre(nombre: str) -> dict | None:
+    """Nombre tipo 'Proveedor - Factura A 00001-00000391 - 05-09-2026.pdf'."""
+    m = _RE_NOMBRE.search(nombre.split("/")[-1])
+    if not m:
+        return None
+    cls = _norm(m.group(1))
+    tipo = _TIPOS_NOMBRE.get(cls, {}).get(m.group(2).upper())
+    if tipo is None:
+        return None
+    return {"origen": "Nombre del archivo", "cuit": "", "tipo": tipo, "pv": int(m.group(3)),
+            "num": int(m.group(4)), "importe": None, "fecha": ""}
+
+
+def _abrir(data: bytes):
+    try:
+        try:
+            import pymupdf as fitz
+        except ImportError:
+            import fitz
+        return fitz.open(stream=data, filetype="pdf")
+    except Exception:
+        return None
+
+
+def leer_qr(data: bytes) -> dict | None:
+    doc = _abrir(data)
+    if doc is None:
+        return None
+    try:
+        return _decodificar_qr_imagenes(doc)
+    except Exception:
+        return None
+    finally:
+        try:
+            doc.close()
+        except Exception:
+            pass
+
+
+def leer_texto(data: bytes) -> dict | None:
+    doc = _abrir(data)
+    if doc is None:
+        return None
+    try:
+        return _desde_texto(doc)
+    except Exception:
+        return None
+    finally:
+        try:
+            doc.close()
+        except Exception:
+            pass
 
 
 def leer_pdf(data: bytes) -> dict | None:
@@ -211,6 +272,17 @@ def _solo_digitos(t) -> str:
     return re.sub(r"\D", "", str(t or ""))
 
 
+def _candidatos(por_pv_num: dict, info: dict, es_ventas: bool) -> list[dict]:
+    cands = por_pv_num.get((info["pv"], info["num"]), [])
+    if not es_ventas and info["cuit"]:
+        cands = [r for r in cands if _solo_digitos(r["cuit"]) == info["cuit"]]
+    if len(cands) > 1:
+        c3 = [r for r in cands if r["tipo"] == info["tipo"]]
+        if c3:
+            cands = c3
+    return cands
+
+
 def cruzar(rows: list[dict], archivos: list[tuple[str, bytes]], es_ventas: bool,
            es_b) -> dict:
     """Lee los PDF y los cruza con el CSV.
@@ -228,20 +300,30 @@ def cruzar(rows: list[dict], archivos: list[tuple[str, bytes]], es_ventas: bool,
     detalle: list[dict] = []
     for nombre, data in pdfs:
         corto = nombre.split("/")[-1]
-        info = leer_pdf(data) if data else None
-        if not info:
+        # Fuentes en orden de confianza: QR, nombre del archivo, texto del PDF.
+        # Se usa la primera que encuentra el comprobante en el CSV.
+        fuentes = []
+        qr = leer_qr(data) if data else None
+        if qr:
+            fuentes.append(qr)
+        nom = leer_nombre(nombre)
+        if nom:
+            fuentes.append(nom)
+        if not qr and data:
+            tx = leer_texto(data)
+            if tx:
+                fuentes.append(tx)
+        if not fuentes:
             detalle.append({"Archivo": corto, "Estado": "No se pudo leer", "Comprobante": "", "Detalle":
                             "Marcalo a mano con el buscador"})
             continue
+        info, cands = fuentes[0], []
+        for f in fuentes:
+            c = _candidatos(por_pv_num, f, es_ventas)
+            if c:
+                info, cands = f, c
+                break
         etiqueta = f"{info['pv']}-{info['num']}"
-        cands = por_pv_num.get((info["pv"], info["num"]), [])
-        if not es_ventas and info["cuit"]:
-            c2 = [r for r in cands if _solo_digitos(r["cuit"]) == info["cuit"]]
-            cands = c2
-        if len(cands) > 1:
-            c3 = [r for r in cands if r["tipo"] == info["tipo"]]
-            if c3:
-                cands = c3
         if not cands:
             detalle.append({"Archivo": corto, "Estado": "No figura en el CSV", "Comprobante": etiqueta,
                             "Detalle": "Puede ser de otro período o no estar en Mis Comprobantes"})
