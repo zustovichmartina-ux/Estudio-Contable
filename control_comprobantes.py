@@ -576,6 +576,7 @@ def _cargar_archivo(raw: bytes, nombre: str) -> None:
     s["cc_perc"] = {r["i"]: _perc_default(r) for r in data["rows"] if tiene_tributos(r)}
     s["cc_opciones"] = []
     s["cc_msg"] = None
+    s.pop("cc_pdf_res", None)
     s["cc_ver"] = 0
     s["cc_periodo"] = detectar_periodo(nombre) or periodo_desde_fechas(s["cc_data"])
     s["cc_destino_def"] = "No gravado"
@@ -618,6 +619,45 @@ def _buscar() -> None:
     else:
         s["cc_opciones"] = [r["i"] for r in coinc]
         s["cc_msg"] = ("info", f"El número {num} coincide con {len(coinc)} comprobantes. Elegí cuál tenés:")
+
+
+def _cb_leer_pdfs() -> None:
+    s = _ss()
+    subidos = s.get("cc_pdfs") or []
+    if not subidos:
+        s["cc_msg"] = ("warning", "Primero subí los PDF (o un .zip) y después apretá Leer y marcar.")
+        return
+    try:
+        import control_pdf
+    except Exception as e:  # pragma: no cover
+        s["cc_msg"] = ("error", f"No se pudo cargar el lector de PDF: {e}")
+        return
+    archivos = [(f.name, f.getvalue()) for f in subidos]
+    res = control_pdf.cruzar(_rows(), archivos, s["cc_data"]["es_ventas"], es_b)
+    nuevos = res["marcar"] - s["cc_tengo"]
+    s["cc_tengo"] |= res["marcar"]
+    s["cc_ver"] += 1
+    s["cc_pdf_res"] = res["detalle"]
+    ok = sum(1 for d in res["detalle"] if d["Estado"] == "OK")
+    otros = len(res["detalle"]) - ok
+    s["cc_msg"] = ("success" if not otros else "info",
+                   f"Leí {len(res['detalle'])} PDF: {ok} coinciden con el CSV ({len(nuevos)} marcados como Tengo nuevos)"
+                   + (f" y {otros} para revisar abajo." if otros else "."))
+
+
+def _bloque_pdf() -> None:
+    s = _ss()
+    with st.expander("Cargar PDF de comprobantes (lectura automática)", expanded=False):
+        st.caption("Subí los PDF que mandó el cliente (sueltos o en un .zip). Se leen solos y se marca como Tengo "
+                   "lo que coincide con el CSV. Lo que no se pueda leer queda para marcar a mano.")
+        st.file_uploader("PDF o ZIP de comprobantes", type=["pdf", "zip"], accept_multiple_files=True,
+                         key="cc_pdfs")
+        st.button("Leer y marcar", key="cc_btn_pdf", on_click=_cb_leer_pdfs, disabled=not s.get("cc_pdfs"))
+        det = s.get("cc_pdf_res")
+        if det:
+            orden = {"No se pudo leer": 0, "Importe distinto": 1, "No figura en el CSV": 2, "Ambiguo": 3}
+            det = sorted(det, key=lambda d: orden.get(d["Estado"], 9))
+            st.dataframe(pd.DataFrame(det), hide_index=True, **_STRETCH)
 
 
 def _marcar_todos() -> None:
@@ -1053,6 +1093,8 @@ def render_control_comprobantes() -> None:
         {"success": st.success, "warning": st.warning, "error": st.error, "info": st.info}[msg[0]](msg[1])
     for i in s.get("cc_opciones", []):
         st.button(_desc(_rows()[i]), key=f"cc_op_{i}", on_click=_marcar, args=(i,))
+
+    _bloque_pdf()
 
     # contadores + masivos
     n_b = sum(1 for r in _rows() if es_b(r))
