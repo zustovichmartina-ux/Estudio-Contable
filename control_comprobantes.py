@@ -49,6 +49,13 @@ TRIB_REVISAR = ("otros_nac", "mun", "int", "otros_trib")
 
 DESTINOS_FILA = ("Por defecto", "No gravado", "Exento")
 
+# Comprobantes B (factura, ND, NC, recibo, tique, MiPyME B): no dan crédito fiscal, se desestiman solos.
+TIPOS_B = frozenset({6, 7, 8, 9, 82, 206, 207, 208})
+
+
+def es_b(r: dict) -> bool:
+    return r["tipo"] in TIPOS_B
+
 
 def _stretch() -> dict:
     """Ancho completo, compatible con versiones viejas y nuevas de Streamlit."""
@@ -569,7 +576,9 @@ def _marcar(i: int) -> None:
     s = _ss()
     r = _rows()[i]
     s["cc_opciones"] = []
-    if i in s["cc_tengo"]:
+    if es_b(r):
+        s["cc_msg"] = ("info", f"Es un comprobante B ({tipo_en_palabras(r['tipo'])}): se desestima automáticamente, no se marca. {_desc(r)}")
+    elif i in s["cc_tengo"]:
         s["cc_msg"] = ("warning", f"Ya estaba marcado: {_desc(r)}")
     else:
         s["cc_tengo"].add(i)
@@ -603,8 +612,9 @@ def _buscar() -> None:
 
 def _marcar_todos() -> None:
     s = _ss()
-    s["cc_tengo"] = {r["i"] for r in _rows()}
-    s["cc_msg"] = ("success", f"Marcados los {len(_rows())} comprobantes como Tengo. Desmarcá los que falten.")
+    validos = [r for r in _rows() if not es_b(r)]
+    s["cc_tengo"] = {r["i"] for r in validos}
+    s["cc_msg"] = ("success", f"Marcados los {len(validos)} comprobantes como Tengo. Desmarcá los que falten.")
     s["cc_ver"] += 1
 
 
@@ -618,7 +628,7 @@ def _desmarcar_todos() -> None:
 
 def _faltantes() -> list[int]:
     t = _ss()["cc_tengo"]
-    return [r["i"] for r in _rows() if r["i"] not in t]
+    return [r["i"] for r in _rows() if r["i"] not in t and not es_b(r)]
 
 
 def _pedidos() -> list[int]:
@@ -666,7 +676,7 @@ def _aplicar_avance(raw: bytes) -> tuple[bool, str]:
     if obj.get("hash") != s["cc_hash"]:
         return False, "Ese avance es de otro CSV (el hash no coincide). Subí el mismo CSV con el que lo guardaste."
     n = len(_rows())
-    s["cc_tengo"] = {int(i) for i in obj.get("tengo", []) if 0 <= int(i) < n}
+    s["cc_tengo"] = {int(i) for i in obj.get("tengo", []) if 0 <= int(i) < n and not es_b(_rows()[int(i)])}
     s["cc_nopedir"] = {int(i) for i in obj.get("no_pedir", []) if 0 <= int(i) < n}
     for k, p in (obj.get("percepciones") or {}).items():
         k = int(k)
@@ -726,7 +736,7 @@ def _tabla_comprobantes() -> None:
     tengo, nopedir = s["cc_tengo"], s["cc_nopedir"]
     destino_g = s.get("cc_destino_def", "No gravado")
 
-    filtro = st.radio("Mostrar", ["Todos", "Tengo", "Faltan", "Con percepciones"],
+    filtro = st.radio("Mostrar", ["Todos", "Tengo", "Faltan", "Con percepciones", "Desestimados (B)"],
                       horizontal=True, key="cc_filtro")
 
     falt = _faltantes()
@@ -744,16 +754,21 @@ def _tabla_comprobantes() -> None:
     datos, colores = [], {}
     for r in rows:
         i = r["i"]
-        es_tengo = i in tengo
+        b = es_b(r)
+        es_tengo = (i in tengo) and not b
+        if (filtro == "Desestimados (B)") != b and filtro in ("Desestimados (B)", "Tengo", "Faltan"):
+            continue
+        if b and filtro == "Con percepciones":
+            continue
         if filtro == "Tengo" and not es_tengo:
             continue
         if filtro == "Faltan" and es_tengo:
             continue
         if filtro == "Con percepciones" and not tiene_tributos(r):
             continue
-        pedir = (not es_tengo) and (i not in nopedir)
+        pedir = (not es_tengo) and (not b) and (i not in nopedir)
         estado_perc = ""
-        if tiene_tributos(r):
+        if tiene_tributos(r) and not b:
             ev = evaluar_perc(r, s["cc_perc"].get(i) or _perc_default(r), destino_g)
             estado_perc = _etiquetas_perc(r, ev["estado"])
         datos.append({
@@ -766,11 +781,11 @@ def _tabla_comprobantes() -> None:
             "CUIT": r["cuit"],
             "Importe total": fmt_ar(r["total"]),
             "Percepciones": estado_perc,
-            "Estado": "Tengo" if es_tengo else "Falta",
+            "Estado": "Desestimado (B)" if b else ("Tengo" if es_tengo else "Falta"),
             "Tengo": es_tengo,
             "Pedir": pedir,
         })
-        colores[i] = "background-color: #E3F3E6" if es_tengo else (
+        colores[i] = "background-color: #EDEDED; color: #7A7A7A; font-style: italic" if b else "background-color: #E3F3E6" if es_tengo else (
             "" if pedir else "background-color: #EDEDED; color: #7A7A7A")
     if not datos:
         st.info("No hay comprobantes para mostrar con este filtro.")
@@ -796,6 +811,8 @@ def _tabla_comprobantes() -> None:
     )
     cambio = False
     for i in editado.index:
+        if es_b(rows[i]):
+            continue
         t_old, t_new = bool(df.at[i, "Tengo"]), bool(editado.at[i, "Tengo"])
         p_old, p_new = bool(df.at[i, "Pedir"]), bool(editado.at[i, "Pedir"])
         if t_new != t_old:
@@ -812,7 +829,7 @@ def _tabla_comprobantes() -> None:
 
 def _tabla_percepciones() -> None:
     s = _ss()
-    rows = [r for r in _rows() if tiene_tributos(r)]
+    rows = [r for r in _rows() if tiene_tributos(r) and not es_b(r)]
     cols = s["cc_data"]["cols"]
     if not rows:
         st.info("Ningún comprobante trae tributos distintos de cero.")
@@ -899,7 +916,7 @@ def _pendientes_revisar() -> int:
     s = _ss()
     n = 0
     for r in _rows():
-        if tiene_tributos(r):
+        if tiene_tributos(r) and not es_b(r):
             ev = evaluar_perc(r, s["cc_perc"].get(r["i"]) or _perc_default(r), s.get("cc_destino_def", "No gravado"))
             if ev["estado"] == "Revisar":
                 n += 1
@@ -964,7 +981,8 @@ def render_control_comprobantes() -> None:
         return
 
     es_ventas = s["cc_data"]["es_ventas"]
-    st.success(f"{len(_rows())} comprobantes de {'ventas' if es_ventas else 'compras'} · {s['cc_nombre']}")
+    st.success(f"{len(_rows())} comprobantes de {'ventas' if es_ventas else 'compras'} · {s['cc_nombre']}"
+               + (f" · {sum(1 for r in _rows() if es_b(r))} comprobantes B desestimados" if any(es_b(r) for r in _rows()) else ""))
 
     # datos del informe
     d1, d2, d3 = st.columns(3)
@@ -984,7 +1002,9 @@ def render_control_comprobantes() -> None:
         st.button(_desc(_rows()[i]), key=f"cc_op_{i}", on_click=_marcar, args=(i,))
 
     # contadores + masivos
-    n_t, n_f = len(s["cc_tengo"]), len(_rows()) - len(s["cc_tengo"])
+    n_b = sum(1 for r in _rows() if es_b(r))
+    n_t = len(s["cc_tengo"])
+    n_f = len(_rows()) - n_b - n_t
     k1, k2, k3, k4 = st.columns([2, 2, 2, 2])
     k1.markdown(f"<div class='cc-cont'><span>{n_t}</span> tengo / <span>{n_f}</span> faltan</div>",
                 unsafe_allow_html=True)
