@@ -562,6 +562,7 @@ def _cargar_archivo(raw: bytes, nombre: str) -> None:
     s["cc_ver"] = 0
     s["cc_periodo"] = detectar_periodo(nombre)
     s["cc_destino_def"] = "No gravado"
+    s.pop("cc_destino_w", None)
 
 
 def _marcar(i: int) -> None:
@@ -648,7 +649,7 @@ def _avance_json() -> bytes:
         "tengo": sorted(s["cc_tengo"]),
         "no_pedir": sorted(s["cc_nopedir"]),
         "percepciones": {str(i): p for i, p in s["cc_perc"].items()},
-        "destino_defecto": s["cc_destino_def"],
+        "destino_defecto": s.get("cc_destino_def", "No gravado"),
         "cliente": s.get("cc_cliente", ""),
         "periodo": s.get("cc_periodo", ""),
         "mail": s.get("cc_mail", MAIL_DEFAULT),
@@ -677,6 +678,7 @@ def _aplicar_avance(raw: bytes) -> tuple[bool, str]:
                 "revisado": bool(p.get("revisado", False)),
             }
     s["cc_destino_def"] = obj.get("destino_defecto") if obj.get("destino_defecto") in ("No gravado", "Exento") else "No gravado"
+    s.pop("cc_destino_w", None)
     s["cc_cliente"] = obj.get("cliente", "")
     s["cc_periodo"] = obj.get("periodo", s.get("cc_periodo", ""))
     s["cc_mail"] = obj.get("mail", MAIL_DEFAULT)
@@ -722,7 +724,7 @@ def _tabla_comprobantes() -> None:
     s = _ss()
     rows = _rows()
     tengo, nopedir = s["cc_tengo"], s["cc_nopedir"]
-    destino_g = s["cc_destino_def"]
+    destino_g = s.get("cc_destino_def", "No gravado")
 
     filtro = st.radio("Mostrar", ["Todos", "Tengo", "Faltan", "Con percepciones"],
                       horizontal=True, key="cc_filtro")
@@ -778,7 +780,7 @@ def _tabla_comprobantes() -> None:
     nombre_contra = "Proveedor" if not s["cc_data"]["es_ventas"] else "Cliente"
     editado = _editor(
         df, colores,
-        key=f"cc_editor_{filtro}_{s['cc_ver']}",
+        key=f"cc_editor_{filtro}_{s['cc_ver']}_{hash(tuple(df.index))}",
         **_STRETCH, hide_index=True,
         height=min(640, 38 + 35 * len(df)),
         disabled=["Fecha", "Tipo", "Pto. venta", "Número", nombre_contra, "CUIT",
@@ -804,7 +806,7 @@ def _tabla_comprobantes() -> None:
             if i not in tengo:
                 (nopedir.discard if p_new else nopedir.add)(i)
     if cambio:
-        s["cc_ver"] += 1
+        # Sin cambiar la key del editor: así la tabla conserva el scroll y no vuelve arriba.
         st.rerun()
 
 
@@ -823,9 +825,13 @@ def _tabla_percepciones() -> None:
         "ARCA a veces informa las percepciones en la columna equivocada. Cargá la Perc. IVA y la Perc. IIBB "
         "reales; lo que sobre del total de tributos va a No gravado o Exento. El Importe Total no se toca."
     )
+    def _sync_destino():
+        s["cc_destino_def"] = s["cc_destino_w"]
+
     st.radio("Destino del resto por defecto", ["No gravado", "Exento"], horizontal=True,
-             key="cc_destino_def")
-    destino_g = s["cc_destino_def"]
+             index=0 if s.get("cc_destino_def", "No gravado") == "No gravado" else 1,
+             key="cc_destino_w", on_change=_sync_destino)
+    destino_g = s.get("cc_destino_def", "No gravado")
     solo_rev = st.checkbox("Mostrar solo los que hay que revisar o tienen error", key="cc_solo_rev")
 
     datos, colores = [], {}
@@ -894,7 +900,7 @@ def _pendientes_revisar() -> int:
     n = 0
     for r in _rows():
         if tiene_tributos(r):
-            ev = evaluar_perc(r, s["cc_perc"].get(r["i"]) or _perc_default(r), s["cc_destino_def"])
+            ev = evaluar_perc(r, s["cc_perc"].get(r["i"]) or _perc_default(r), s.get("cc_destino_def", "No gravado"))
             if ev["estado"] == "Revisar":
                 n += 1
     return n
@@ -915,7 +921,7 @@ def _descargas() -> None:
         (c1, "CSV depurado (Tengo)", tengo_idx, "_depurado.csv"),
         (c2, "Faltantes en CSV", falt_idx, "_faltantes.csv"),
     ):
-        out, errs = exportar_csv(data, idxs, s["cc_perc"], s["cc_destino_def"])
+        out, errs = exportar_csv(data, idxs, s["cc_perc"], s.get("cc_destino_def", "No gravado"))
         if errs:
             col.error("No se puede descargar: hay errores en percepciones.")
             col.caption("; ".join(errs[:3]) + (" …" if len(errs) > 3 else ""))
