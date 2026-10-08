@@ -277,6 +277,16 @@ def detectar_periodo(nombre: str) -> str:
     return f"{MESES[mes - 1].capitalize()} {anio}{tipo}"
 
 
+def periodo_desde_fechas(data: dict) -> str:
+    """Mes más frecuente entre las fechas de los comprobantes, ej.: Septiembre 2026."""
+    from collections import Counter
+    c = Counter((r["fecha"].year, r["fecha"].month) for r in data["rows"] if r["fecha"])
+    if not c:
+        return ""
+    (anio, mes), _ = c.most_common(1)[0]
+    return f"{MESES[mes - 1].capitalize()} {anio}"
+
+
 # --- percepciones ---
 def tiene_tributos(r: dict) -> bool:
     return any(r["trib"][k] != 0 for k in TRIBUTOS)
@@ -567,7 +577,7 @@ def _cargar_archivo(raw: bytes, nombre: str) -> None:
     s["cc_opciones"] = []
     s["cc_msg"] = None
     s["cc_ver"] = 0
-    s["cc_periodo"] = detectar_periodo(nombre)
+    s["cc_periodo"] = detectar_periodo(nombre) or periodo_desde_fechas(s["cc_data"])
     s["cc_destino_def"] = "No gravado"
     s.pop("cc_destino_w", None)
 
@@ -957,6 +967,48 @@ def _descargas() -> None:
         c3.caption("No hay faltantes tildados en Pedir.")
 
 
+_OTRO = "Otro (escribir a mano)"
+
+
+def _nombres_clientes() -> list[str]:
+    try:
+        import db
+        return sorted({str(c.get("nombre") or "").strip() for c in db.listar_clientes()} - {""})
+    except Exception:
+        return []
+
+
+def _selector_cliente() -> None:
+    s = _ss()
+    nombres = _nombres_clientes()
+    if not nombres:
+        st.text_input("Cliente (razón social)", key="cc_cliente")
+        return
+    if not s.get("cc_cliente"):
+        activo = str(s.get("nombre_activo") or "").strip()
+        if activo in nombres:
+            s["cc_cliente"] = activo
+    actual = s.get("cc_cliente", "")
+    opciones = nombres + [_OTRO]
+    idx = nombres.index(actual) if actual in nombres else (len(nombres) if actual else None)
+
+    def _cambio():
+        v = s.get("cc_cliente_sel")
+        if v == _OTRO:
+            s["cc_cliente"] = ""
+            s["cc_cliente_otro"] = True
+        elif v:
+            s["cc_cliente"] = v
+            s["cc_cliente_otro"] = False
+
+    if s.get("cc_cliente_otro"):
+        idx = len(nombres)
+    sel = st.selectbox("Cliente (razón social)", opciones, index=idx, key="cc_cliente_sel",
+                       placeholder="Elegí o buscá el cliente", on_change=_cambio)
+    if sel == _OTRO or (idx == len(nombres) and sel is not None and sel not in nombres):
+        s["cc_cliente"] = st.text_input("Razón social", value=actual, key="cc_cliente_txt")
+
+
 def render_control_comprobantes() -> None:
     s = _ss()
     st.markdown(_CSS, unsafe_allow_html=True)
@@ -988,7 +1040,8 @@ def render_control_comprobantes() -> None:
     d1, d2, d3 = st.columns(3)
     s.setdefault("cc_mail", MAIL_DEFAULT)
     s.setdefault("cc_cliente", "")
-    d1.text_input("Cliente (razón social)", key="cc_cliente")
+    with d1:
+        _selector_cliente()
     d2.text_input("Período", key="cc_periodo")
     d3.text_input("Mail que figura en el informe", key="cc_mail")
 
