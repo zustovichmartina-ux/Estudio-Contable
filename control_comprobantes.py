@@ -215,6 +215,29 @@ def _entero(tok: str) -> int:
         return 0
 
 
+def parsear_fecha(txt: str) -> dt.date | None:
+    """ISO (2026-09-04), argentina (04/09/2026, 4-9-2026, 04/09/26), con hora o serial de Excel."""
+    t = str(txt or "").strip().strip('"').strip()
+    if not t:
+        return None
+    try:
+        m = re.match(r"(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})", t)
+        if m:
+            return dt.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        m = re.match(r"(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})", t)
+        if m:
+            return dt.date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+        m = re.match(r"(\d{1,2})[-/.](\d{1,2})[-/.](\d{2})(?!\d)", t)
+        if m:
+            return dt.date(2000 + int(m.group(3)), int(m.group(2)), int(m.group(1)))
+        m = re.fullmatch(r"(\d{5})(?:[.,]\d+)?", t)
+        if m:
+            return dt.date(1899, 12, 30) + dt.timedelta(days=int(m.group(1)))
+    except ValueError:
+        return None
+    return None
+
+
 def parsear_csv(raw: bytes) -> dict:
     texto, enc, bom = _decodificar(raw)
     lineas = re.split(r"\r\n|\n|\r", texto)
@@ -234,10 +257,7 @@ def parsear_csv(raw: bytes) -> dict:
         if len(tok) < len(hn):
             tok = tok + [""] * (len(hn) - len(tok))
         fecha_txt = _valor(tok[cols["fecha"]])
-        try:
-            fecha = dt.datetime.strptime(fecha_txt[:10], "%Y-%m-%d").date()
-        except ValueError:
-            fecha = None
+        fecha = parsear_fecha(fecha_txt)
         trib = {
             k: (_dec(tok[cols[k]]) if cols[k] is not None else Decimal(0))
             for k in TRIBUTOS
@@ -596,11 +616,41 @@ def _marcar(i: int) -> None:
         s["cc_msg"] = ("success", f"Marcado como Tengo: {_desc(r)}")
 
 
+def _cb_sel_dup() -> None:
+    s = _ss()
+    i = s.get("cc_sel_dup")
+    if i is not None:
+        _marcar(i)
+        s["cc_focus"] = "busq"
+
+
+def _enfocar() -> None:
+    """Devuelve el cursor al buscador (o al selector de duplicados) después de una acción."""
+    s = _ss()
+    objetivo = s.pop("cc_focus", None)
+    if not objetivo:
+        return
+    s["cc_focus_n"] = s.get("cc_focus_n", 0) + 1
+    clave = "cc_sel_dup" if objetivo == "sel" else "cc_busq"
+    html = (f"<script>/*{s['cc_focus_n']}*/let t=0;const iv=setInterval(()=>{{"
+            f"const el=window.parent.document.querySelector('.st-key-{clave} input');"
+            f"if(el){{el.focus();clearInterval(iv);}}if(++t>30)clearInterval(iv);}},80);</script>")
+    try:
+        if hasattr(st, "iframe"):
+            st.iframe(html, height=1)
+        else:
+            import streamlit.components.v1 as components
+            components.html(html, height=0)
+    except Exception:
+        pass
+
+
 def _buscar() -> None:
     s = _ss()
     val = str(s.get("cc_busq", "")).strip()
     s["cc_busq"] = ""
     s["cc_opciones"] = []
+    s["cc_focus"] = "busq"
     if not val:
         return
     m = re.fullmatch(r"(\d+)\s*[-\s]\s*(\d+)", val)
@@ -618,7 +668,9 @@ def _buscar() -> None:
         _marcar(coinc[0]["i"])
     else:
         s["cc_opciones"] = [r["i"] for r in coinc]
-        s["cc_msg"] = ("info", f"El número {num} coincide con {len(coinc)} comprobantes. Elegí cuál tenés:")
+        s["cc_focus"] = "sel"
+        s["cc_msg"] = ("info", f"El número {num} coincide con {len(coinc)} comprobantes. "
+                               "Bajá con las flechas, elegí cuál tenés y apretá Enter.")
 
 
 def _cb_leer_pdfs() -> None:
@@ -906,9 +958,17 @@ def _tabla_percepciones() -> None:
         i = r["i"]
         p = s["cc_perc"].setdefault(i, _perc_default(r))
         ev = evaluar_perc(r, p, destino_g)
-        if solo_rev and ev["estado"] == "OK":
+        d0 = _perc_default(r)
+        confirmado = bool(p["revisado"]) or p["destino"] != "Por defecto" or (
+            parse_importe(p["iva"]) != parse_importe(d0["iva"]) or parse_importe(p["iibb"]) != parse_importe(d0["iibb"]))
+        if solo_rev and ev["estado"] == "OK" and not confirmado:
             continue
         t = r["trib"]
+        if ev["resto"] is not None and ev["estado"] != "Error":
+            quedo = (f"IVA {fmt_ar(ev['iva'])} · IIBB {fmt_ar(ev['iibb'])} · "
+                     f"{ev['destino']} {fmt_ar(ev['resto'])}")
+        else:
+            quedo = ""
         datos.append({
             "i": i,
             "Fecha": r["fecha"].strftime("%d/%m/%Y") if r["fecha"] else "",
@@ -920,9 +980,17 @@ def _tabla_percepciones() -> None:
             "Resto": float(ev["resto"]) if ev["resto"] is not None else None,
             "Destino": p["destino"],
             "Revisado": bool(p["revisado"]),
+            "Quedó así": quedo if confirmado else "",
             "Estado": ev["estado"] if not ev["msg"] else f"{ev['estado']}: {ev['msg']}",
         })
-        colores[i] = {"Error": "background-color: #F8D7DA", "Revisar": "background-color: #FFF3CD"}.get(ev["estado"], "")
+        if ev["estado"] == "Error":
+            colores[i] = "background-color: #F8D7DA"
+        elif confirmado:
+            colores[i] = "background-color: #E3F3E6"
+        elif ev["estado"] == "Revisar":
+            colores[i] = "background-color: #FFF3CD"
+        else:
+            colores[i] = ""
     if not datos:
         st.success("No queda nada para revisar.")
         return
@@ -931,10 +999,13 @@ def _tabla_percepciones() -> None:
     fmt_num = "%.2f"
     editado = _editor(
         df, colores,
-        key=f"cc_perc_editor_{s['cc_ver']}_{int(solo_rev)}_{destino_g}",
+        key=f"cc_perc_editor_{s['cc_ver']}_{int(solo_rev)}_{destino_g}_{hash(tuple(df.index))}",
         **_STRETCH, hide_index=True,
         height=min(640, 38 + 35 * len(df)),
-        disabled=["Fecha", "Proveedor", "Comprobante", "Resto", "Estado"] + [ETIQUETA_TRIB[k] for k in TRIBUTOS],
+        column_order=["Comprobante", "Proveedor", "Perc. IVA real", "Perc. IIBB real", "Destino", "Revisado",
+                      "Quedó así"] + [ETIQUETA_TRIB[k] for k in TRIBUTOS] + ["Resto", "Estado", "Fecha"],
+        disabled=["Fecha", "Proveedor", "Comprobante", "Resto", "Estado", "Quedó así"]
+        + [ETIQUETA_TRIB[k] for k in TRIBUTOS],
         column_config={
             **{ETIQUETA_TRIB[k]: st.column_config.NumberColumn(ETIQUETA_TRIB[k], format=fmt_num)
                for k in TRIBUTOS},
@@ -942,7 +1013,8 @@ def _tabla_percepciones() -> None:
             "Perc. IVA real": st.column_config.TextColumn("Perc. IVA real", help="Ej.: 1.596,66 o 1596.66"),
             "Perc. IIBB real": st.column_config.TextColumn("Perc. IIBB real"),
             "Destino": st.column_config.SelectboxColumn("Destino", options=list(DESTINOS_FILA)),
-            "Revisado": st.column_config.CheckboxColumn("Revisado"),
+            "Revisado": st.column_config.CheckboxColumn("OK", help="Tildá cuando esté bien: queda en verde"),
+            "Quedó así": st.column_config.TextColumn("Quedó así", width="large"),
         },
     )
     cambio = False
@@ -958,7 +1030,7 @@ def _tabla_percepciones() -> None:
             s["cc_perc"][i] = nuevo
             cambio = True
     if cambio:
-        s["cc_ver"] += 1
+        # No se cambia la key del editor ni la etiqueta de la solapa: así no salta ni pierde el lugar.
         st.rerun()
 
 
@@ -1091,8 +1163,12 @@ def render_control_comprobantes() -> None:
     msg = s.get("cc_msg")
     if msg:
         {"success": st.success, "warning": st.warning, "error": st.error, "info": st.info}[msg[0]](msg[1])
-    for i in s.get("cc_opciones", []):
-        st.button(_desc(_rows()[i]), key=f"cc_op_{i}", on_click=_marcar, args=(i,))
+    if s.get("cc_opciones"):
+        etiquetas = {i: _desc(_rows()[i]) for i in s["cc_opciones"]}
+        st.selectbox("Elegí cuál tenés (↓ para abrir, flechas y Enter)", list(etiquetas), index=None,
+                     format_func=lambda i: etiquetas.get(i, str(i)), key="cc_sel_dup", on_change=_cb_sel_dup,
+                     placeholder="Elegí el comprobante")
+    _enfocar()
 
     _bloque_pdf()
 
@@ -1110,7 +1186,9 @@ def render_control_comprobantes() -> None:
               disabled=not s.get("cc_conf_desm"), **_STRETCH)
 
     pend = _pendientes_revisar()
-    tab_c, tab_p = st.tabs(["Comprobantes", f"Percepciones ({pend} por revisar)" if pend else "Percepciones"])
+    if pend:
+        st.caption(f"Percepciones: **{pend}** por revisar en la solapa Percepciones.")
+    tab_c, tab_p = st.tabs(["Comprobantes", "Percepciones"])
     with tab_c:
         _tabla_comprobantes()
     with tab_p:
