@@ -297,8 +297,43 @@ def parsear_naranja(tok: list[str], nombre: str) -> dict:
 
 
 # ---------------------------------------------------------------- detección
+def parsear_favacard(tok: list[str], nombre: str) -> dict:
+    """Sólo se lee 'PROXIMOS PAGOS DE ESTA PRESENTACION' (el resto de la liquidación no se toma)."""
+    r = _vacio()
+    notas: list[str] = []
+    try:
+        a = next(k for k, t in enumerate(tok) if t.startswith("PROXIMOS PAGOS"))
+    except StopIteration:
+        return {"datos": r, "marca": "FAVACARD", "notas": ["No encontré 'Próximos pagos de esta presentación'."], "fecha": ""}
+    k = a + 2  # salta el encabezado de columnas
+    fechas: list[str] = []
+    while k + 5 < len(tok) and re.match(r"^\d{2}/\d{2}/\d{2}$", tok[k]):
+        v = [a_dec(x) for x in tok[k + 1:k + 6]]
+        if None in v:
+            break
+        pres, cargos, iva_perc, p_ib, neto = v
+        iva = min(iva_perc, (cargos * Decimal("0.21")).quantize(Q2, ROUND_HALF_UP))
+        r["presentado"] += pres
+        r["bi"] += cargos
+        r["iva"] += iva
+        r["p_iva"] += iva_perc - iva
+        r["p_iibb"] += p_ib
+        r["neto"] += neto
+        if (pres - cargos - iva_perc - p_ib - neto).copy_abs() > Decimal("0.05"):
+            notas.append(f"La fila del {tok[k]} no cierra (presentado - cargos - IVA/perc - perc IIBB <> neto).")
+        d, m, y = tok[k].split("/")
+        fechas.append(f"{d}/{m}/20{y}")
+        k += 6
+    if not fechas:
+        notas.append("No pude leer ninguna fila de próximos pagos.")
+    notas.append("La retención IIBB SIRTAC no se carga (se toma de ARCA); el neto es el de la presentación, antes de retenciones.")
+    return {"datos": r, "marca": "FAVACARD", "notas": sorted(set(notas)), "fecha": fechas[0] if fechas else ""}
+
+
 def clasificar(tok: list[str]) -> str:
     t = "\n".join(tok[:400])
+    if "FAVACARD" in t.upper() and any(x.startswith("PROXIMOS PAGOS") for x in tok):
+        return "Favacard"
     if "Resumen Mensual de Liquidaciones" in t or "Servicio PAYWAY" in "\n".join(tok):
         return "Payway"
     if "FIRST DATA" in t.upper() and "Entidad Pagadora" in t:
@@ -328,6 +363,8 @@ def leer_archivo(nombre: str, data: bytes) -> dict:
         res = parsear_fiserv(tok, nombre)
     elif proc == "Naranja":
         res = parsear_naranja(tok, nombre)
+    elif proc == "Favacard":
+        res = parsear_favacard(tok, nombre)
     elif proc == "Ajustes":
         base["notas"] = ["Detalle de ajustes/promociones: no se carga."]
         return base
@@ -410,8 +447,35 @@ def resumen_facturas(df: pd.DataFrame, pv: dict[str, str]) -> pd.DataFrame:
     return pd.DataFrame(filas)
 
 
+# ---------------------------------------------------------------- asiento
+# Nombres de cuenta por defecto: editables en pantalla. Deben coincidir con la hoja CUENTAS del estudio.
+CUENTAS_DEFECTO = {"gasto": "Gastos por comisiones tarjetas", "iva": "IVA Crédito Fiscal",
+                   "p_iva": "Percepciones IVA", "p_iibb": "Percepciones IIBB", "prov": "Proveedores"}
+
+
+def cuenta_proveedor(cu: dict, proc: str) -> str:
+    return cu.get("prov_" + proc) or f"{cu.get('prov', 'Proveedores')} - {proc}"
+
+
+def armar_asiento(res: pd.DataFrame, cuentas: dict | None = None) -> pd.DataFrame:
+    """Factura de gastos: Debe gasto, IVA y percepciones / Haber proveedor."""
+    cu = {**CUENTAS_DEFECTO, **(cuentas or {})}
+    filas = []
+    for _, r in res.iterrows():
+        proc = r["Procesadora"]
+        deb = [(cu["gasto"], _dec(r["Gasto (BI 21%)"]) + _dec(r["No gravado"])), (cu["iva"], _dec(r["IVA 21%"])),
+               (cu["p_iva"], _dec(r["P IVA"])), (cu["p_iibb"], _dec(r["P IIBB"]))]
+        for cta, imp in deb:
+            if imp:
+                filas.append({"Procesadora": proc, "Cuenta": cta, "Debe": float(imp), "Haber": 0.0})
+        filas.append({"Procesadora": proc, "Cuenta": cuenta_proveedor(cu, proc), "Debe": 0.0,
+                      "Haber": float(_dec(r["Total factura"]))})
+    return pd.DataFrame(filas, columns=["Procesadora", "Cuenta", "Debe", "Haber"])
+
+
 # ---------------------------------------------------------------- Excel
-def generar_excel(df: pd.DataFrame, cliente: str, periodo: str, pv: dict[str, str]) -> bytes:
+def generar_excel(df: pd.DataFrame, cliente: str, periodo: str, pv: dict[str, str],
+                  cuentas: dict | None = None) -> bytes:
     import xlsxwriter
     bio = io.BytesIO()
     wb = xlsxwriter.Workbook(bio, {"in_memory": True})
@@ -489,12 +553,14 @@ def generar_excel(df: pd.DataFrame, cliente: str, periodo: str, pv: dict[str, st
         wf.write(3, 1 + j, c, head)
     wf.set_row(3, 30)
     fr = 4
+    fila_fact: dict[str, int] = {}
     for proc in ORDEN_PROC:
         if proc not in ref_tot:
             continue
         t = ref_tot[proc]
         wf.write(fr, 1, pv.get(proc, PV_DEFECTO.get(proc, proc)), txt)
         x = fr + 1
+        fila_fact[proc] = x
         wf.write_formula(fr, 2, f"=LIQUIDACIONES!E{t}", num)
         wf.write_formula(fr, 3, f"=LIQUIDACIONES!L{t}", num)
         wf.write_formula(fr, 4, f"=LIQUIDACIONES!F{t}", num)
@@ -510,6 +576,45 @@ def generar_excel(df: pd.DataFrame, cliente: str, periodo: str, pv: dict[str, st
         for k in range(2, 11):
             col = chr(ord("A") + k)
             wf.write_formula(fr, k, f"=SUM({col}5:{col}{fr})", tot)
+    # hoja de asientos (factura de gastos contra proveedores)
+    cu = {**CUENTAS_DEFECTO, **(cuentas or {})}
+    wa = wb.add_worksheet("ASIENTO")
+    wa.set_column("A:A", 3)
+    wa.set_column("B:B", 46)
+    wa.set_column("C:D", 18)
+    wa.write("B1", cliente or "", tit)
+    if fecha_mes:
+        wa.write_datetime("B2", fecha_mes, mes)
+    else:
+        wa.write("B2", periodo or "", sub)
+    ar = 3
+    for proc in ORDEN_PROC:
+        if proc not in fila_fact:
+            continue
+        x = fila_fact[proc]
+        wa.write(ar, 1, pv.get(proc, PV_DEFECTO.get(proc, proc)) + " · factura de gastos", sub)
+        ar += 1
+        for j, c in enumerate(["Cuenta", "Debe", "Haber"]):
+            wa.write(ar, 1 + j, c, head)
+        ar += 1
+        ini = ar + 1
+        for cta, fd in ((cu["gasto"], f"=FACTURAS!C{x}+FACTURAS!D{x}"), (cu["iva"], f"=FACTURAS!E{x}"),
+                        (cu["p_iva"], f"=FACTURAS!F{x}"), (cu["p_iibb"], f"=FACTURAS!G{x}")):
+            wa.write(ar, 1, cta, txt)
+            wa.write_formula(ar, 2, fd, num)
+            wa.write_blank(ar, 3, None, num)
+            ar += 1
+        wa.write(ar, 1, cuenta_proveedor(cu, proc), txt)
+        wa.write_blank(ar, 2, None, num)
+        wa.write_formula(ar, 3, f"=FACTURAS!H{x}", num)
+        ar += 1
+        wa.write(ar, 1, "TOTAL", tot_t)
+        wa.write_formula(ar, 2, f"=SUM(C{ini}:C{ar})", tot)
+        wa.write_formula(ar, 3, f"=SUM(D{ini}:D{ar})", tot)
+        ar += 1
+        wa.write(ar, 1, "Diferencia Debe - Haber", txt)
+        wa.write_formula(ar, 2, f"=C{ar}-D{ar}", ok)
+        ar += 3
     wb.close()
     return bio.getvalue()
 
@@ -535,6 +640,11 @@ def periodo_desde_docs(docs: list[dict]) -> str:
         m = re.match(r"(\d{2})/(\d{2})/(\d{4})", d.get("fecha") or "")
         if m and d["proc"] == "Payway":
             c[(int(m.group(3)), int(m.group(2)))] += 1
+    if not c:
+        for d in docs:
+            m = re.match(r"(\d{2})/(\d{2})/(\d{4})", d.get("fecha") or "")
+            if m:
+                c[(int(m.group(3)), int(m.group(2)))] += 1
     if not c:
         return ""
     (a, m), _ = c.most_common(1)[0]
@@ -622,8 +732,23 @@ def render_liquidaciones_tarjetas() -> None:
     st.dataframe(res, hide_index=True, **_STRETCH,
                  column_config={c: st.column_config.NumberColumn(c, format="%.2f")
                                 for c in res.columns if c not in ("Procesadora", "Comprobante")})
-    st.caption("Las retenciones (R IIBB, R IVA, R Gcias) no forman parte de la factura: son crédito fiscal aparte.")
-    st.download_button("Descargar Excel", generar_excel(df.drop(columns=["Diferencia"]), cliente or "", periodo, pv),
+    st.caption("Las retenciones (R IIBB, R IVA, R Gcias) no forman parte de la factura: se toman directamente de ARCA. "
+               "Las percepciones sí.")
+    st.subheader("Asiento: factura de gastos contra proveedores")
+    with st.expander("Cuentas del asiento (deben coincidir con la hoja CUENTAS)", expanded=False):
+        cuentas = {}
+        for k, rot in (("gasto", "Gasto (BI 21% + no gravado)"), ("iva", "IVA 21%"), ("p_iva", "Percepción de IVA"),
+                       ("p_iibb", "Percepción de IIBB")):
+            cuentas[k] = st.text_input(rot, value=CUENTAS_DEFECTO[k], key=f"lt_cta_{k}")
+        for p in res["Procesadora"]:
+            cuentas["prov_" + p] = st.text_input(f"Proveedor {p}", value=f"{CUENTAS_DEFECTO['prov']} - {p}",
+                                                 key=f"lt_cta_prov_{p}")
+    cuentas = {k: s.get(f"lt_cta_{k}", v) for k, v in CUENTAS_DEFECTO.items() if k != "prov"} | {
+        "prov_" + p: s.get(f"lt_cta_prov_{p}", f"{CUENTAS_DEFECTO['prov']} - {p}") for p in res["Procesadora"]}
+    asi = armar_asiento(res, cuentas)
+    st.dataframe(asi, hide_index=True, **_STRETCH,
+                 column_config={c: st.column_config.NumberColumn(c, format="%.2f") for c in ("Debe", "Haber")})
+    st.download_button("Descargar Excel", generar_excel(df.drop(columns=["Diferencia"]), cliente or "", periodo, pv, cuentas),
                        file_name=f"LIQUIDACIONES TARJETAS {periodo or ''}.xlsx".replace("  ", " ").strip(),
                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                        key="lt_dl_xlsx")
