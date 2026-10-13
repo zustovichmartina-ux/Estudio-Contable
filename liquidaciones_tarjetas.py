@@ -14,17 +14,32 @@ import streamlit as st
 NAVY = "#1F3557"
 GOLD = "#B08D48"
 
-PROCESADORAS = ("Payway", "Fiserv", "Naranja", "Favacard")
-# Nombre y punto de venta con que el estudio carga cada procesadora (editable en pantalla).
+PROCESADORAS = ("Payway", "Fiserv", "Naranja", "Favacard", "Nave")
+# Nombre con que el estudio carga cada procesadora (editable en pantalla). Payway se separa además por banco.
 PV_DEFECTO = {"Payway": "FRANCES - 00001", "Naranja": "NARANJA - 00002",
-              "Favacard": "FAVACARD - 00003", "Fiserv": "FIRST DATA - 00004"}
-ORDEN_PROC = ("Payway", "Favacard", "Naranja", "Fiserv")
+              "Favacard": "FAVACARD - 00003", "Fiserv": "FIRST DATA - 00004", "Nave": "NAVE"}
+ORDEN_PROC = ("Payway", "Favacard", "Naranja", "Fiserv", "Nave")
 
 # columnas numéricas de cada liquidación (orden de la planilla del estudio)
-COLS = ("Total presentado", "BI 21%", "IVA 21%", "P IIBB", "R IIBB", "P IVA", "R IVA", "R Gcias",
-        "No gravado", "Acreditado PDF")
-CAMPOS = ("presentado", "bi", "iva", "p_iibb", "r_iibb", "p_iva", "r_iva", "r_gcias", "no_grav", "neto")
+COLS = ("Total presentado", "BI 21%", "BI 10,5%", "IVA 21%", "IVA 10,5%", "P IIBB", "R IIBB", "P IVA", "R IVA",
+        "R Gcias", "No gravado", "Acreditado PDF")
+CAMPOS = ("presentado", "bi", "bi105", "iva", "iva105", "p_iibb", "r_iibb", "p_iva", "r_iva", "r_gcias",
+          "no_grav", "neto")
 CAMPO_A_COL = dict(zip(CAMPOS, COLS))
+
+
+def _txt(x) -> str:
+    return "" if x is None or (isinstance(x, float) and x != x) else str(x).strip()
+
+
+def grupo_de(proc: str, banco: str = "") -> str:
+    return f"{proc} · {banco}" if _txt(banco) else proc
+
+
+def nombre_defecto(proc: str, banco: str = "") -> str:
+    if proc == "Payway" and _txt(banco):
+        return f"PAYWAY {_txt(banco)}"
+    return PV_DEFECTO.get(proc, proc)
 
 _RE_IMPORTE = re.compile(r"^-?\s*\$?\s*-?\s*\d{1,3}(?:\.\d{3})*,\d{2}\s*-?$")
 Q2 = Decimal("0.01")
@@ -109,10 +124,24 @@ def _marca_por_nombre(nombre: str) -> str:
     return ""
 
 
+def _banco_pagador(tok: list[str]) -> str:
+    """Banco que paga el resumen Payway ('007 BANCO GALICIA' -> 'GALICIA')."""
+    for t in tok[:80]:
+        m = re.match(r"^\d{3}\s+(BANCO\s+.+)$", t.strip(), re.I)
+        if m:
+            n = re.sub(r"^BANCO\s+", "", m.group(1), flags=re.I)
+            n = re.sub(r"^(DE LA|DEL|DE)\s+", "", n, flags=re.I)
+            n = re.sub(r"\s+S\.?A\.?U?\.?$", "", n, flags=re.I)
+            n = re.sub(r"\s+ARGENTINA$", "", n, flags=re.I)
+            return n.upper().strip() or m.group(1).upper()
+    return ""
+
+
 def parsear_payway(tok: list[str], nombre: str) -> dict:
     texto = "\n".join(tok)
     r = _vacio()
     notas: list[str] = []
+    banco = _banco_pagador(tok)
     # totales del encabezado: presentado, descuento, saldo, y tres ceros de U$S
     m = re.search(r"([\d.]+,\d\d)\n([\d.]+,\d\d)\n([\d.]+,\d\d)\n0,00\n0,00\n0,00", texto)
     descuento = None
@@ -125,8 +154,8 @@ def parsear_payway(tok: list[str], nombre: str) -> dict:
     try:
         i0 = max(k for k, t in enumerate(tok) if t.startswith("DESGLOSE DE DESCUENTOS"))
     except ValueError:
-        return {"datos": r, "marca": _marca_por_nombre(nombre), "notas": notas + ["No encontré el desglose de descuentos."],
-                "fecha": ""}
+        return {"datos": r, "marca": _marca_por_nombre(nombre), "banco": banco,
+                "notas": notas + ["No encontré el desglose de descuentos."], "fecha": ""}
     fin = len(tok)
     for k in range(i0, len(tok)):
         if tok[k].startswith("(*) Servicio") or tok[k].startswith("SR. COMERCIANTE"):
@@ -134,19 +163,38 @@ def parsear_payway(tok: list[str], nombre: str) -> dict:
             break
     bloque = tok[i0 + 1:fin]
     previos: list[str] = []
-    arancel_serv = Decimal(0)
+    cargos = Decimal(0)
+    bases: dict[str, Decimal] = {}
+    en_base = False
     for t in bloque:
+        if t.startswith("Base Imponible"):
+            en_base = True
+            previos = []
+            continue
+        if t.startswith("Deducciones"):
+            en_base = False
+            previos = [t]
+            continue
         if re.match(r"^\$\s", t) and es_importe(t):
             monto = a_dec(t)
             etiqueta = " ".join(x for x in previos if re.search(r"[A-Za-zÁÉÍÓÚáéíóú]", x)).lower()
             previos = []
-            if "base imponible" in etiqueta:
+            if en_base:
+                mt = re.search(r"tasa\s+(\d+)[,.](\d+)", etiqueta)
+                if mt:
+                    k = f"{int(mt.group(1))},{mt.group(2)}"
+                    bases[k] = bases.get(k, Decimal(0)) + monto
                 continue
             if "arancel" in etiqueta or "servicio" in etiqueta or "cargo por serv" in etiqueta \
                     or "bonif" in etiqueta:
-                arancel_serv += monto
+                cargos += monto
             elif re.search(r"\biva\b", etiqueta) and "ret" not in etiqueta and "perc" not in etiqueta:
-                r["iva"] += monto
+                if re.search(r"10[,.]5", etiqueta):
+                    r["iva105"] += monto
+                else:
+                    r["iva"] += monto
+            elif "sellos" in etiqueta:
+                r["no_grav"] += monto
             elif "perc" in etiqueta and ("ib" in etiqueta or "bruto" in etiqueta) and "afip" not in etiqueta:
                 r["p_iibb"] += monto
             elif ("ret" in etiqueta and "ib" in etiqueta) or "sirtac" in etiqueta:
@@ -165,16 +213,30 @@ def parsear_payway(tok: list[str], nombre: str) -> dict:
             previos.append(t)
             if len(previos) > 6:
                 previos = previos[-6:]
-    r["bi"] = arancel_serv
+    if not bases:
+        r["bi"] = cargos
+    else:
+        r["bi"] = bases.get("21,00", Decimal(0))
+        r["bi105"] = bases.get("10,50", Decimal(0))
+        for k, v in bases.items():
+            if k not in ("21,00", "10,50"):
+                notas.append(f"Base imponible con alícuota {k}% no contemplada ({fmt_ar(v)}): revisar.")
+        if (sum(bases.values(), Decimal(0)) - cargos).copy_abs() > Decimal("0.05"):
+            notas.append("Los cargos (arancel/servicio) no coinciden con la base imponible informada.")
+    if (r["iva"] - r["bi"] * Decimal("0.21")).copy_abs() > Decimal("1.5"):
+        notas.append("El IVA 21% no coincide con el 21% de la base imponible.")
+    if (r["iva105"] - r["bi105"] * Decimal("0.105")).copy_abs() > Decimal("1.5"):
+        notas.append("El IVA 10,5% no coincide con el 10,5% de la base imponible.")
     if descuento is not None:
-        suma = r["bi"] + r["iva"] + r["p_iibb"] + r["r_iibb"] + r["p_iva"] + r["r_iva"] + r["r_gcias"] + r["no_grav"]
+        suma = (r["bi"] + r["bi105"] + r["iva"] + r["iva105"] + r["p_iibb"] + r["r_iibb"] + r["p_iva"] + r["r_iva"]
+                + r["r_gcias"] + r["no_grav"] - (r["bi"] + r["bi105"]) + cargos)
         if (suma - descuento).copy_abs() > Decimal("0.05"):
             notas.append(f"Los descuentos del desglose ({fmt_ar(suma)}) no coinciden con el total del encabezado ({fmt_ar(descuento)}).")
     fecha = ""
     mf = re.search(r"(\d{2}/\d{2}/\d{4})\n000\d+", texto)
     if mf:
         fecha = mf.group(1)
-    return {"datos": r, "marca": _marca_por_nombre(nombre), "notas": sorted(set(notas)), "fecha": fecha}
+    return {"datos": r, "marca": _marca_por_nombre(nombre), "banco": banco, "notas": sorted(set(notas)), "fecha": fecha}
 
 
 # ---------------------------------------------------------------- Fiserv (First Data)
@@ -330,10 +392,215 @@ def parsear_favacard(tok: list[str], nombre: str) -> dict:
     return {"datos": r, "marca": "FAVACARD", "notas": sorted(set(notas)), "fecha": fechas[0] if fechas else ""}
 
 
+def _n(x) -> str:
+    return _sin_acentos(_txt(x).lower())
+
+
+def _num(x) -> Decimal:
+    if x is None or (isinstance(x, float) and x != x):
+        return Decimal(0)
+    if isinstance(x, (int, float)):
+        return Decimal(str(x))
+    t = str(x).strip().replace("$", "").replace(" ", "")
+    if not t or t == "-":
+        return Decimal(0)
+    if "," in t:
+        v = a_dec(t)
+        return v if v is not None else Decimal(0)
+    try:
+        return Decimal(t)
+    except InvalidOperation:
+        return Decimal(0)
+
+
+def _iva_credito(r: dict, notas: list[str], monto: Decimal, costo: Decimal) -> None:
+    """IVA del costo: crédito fiscal al 21% o al 10,5% según corresponda."""
+    if costo and (monto / costo - Decimal("0.105")).copy_abs() < Decimal("0.003"):
+        r["iva105"] += monto
+        r["bi105"] += costo
+        return
+    r["iva"] += monto
+    r["bi"] += costo
+    if costo and (monto / costo - Decimal("0.21")).copy_abs() >= Decimal("0.003"):
+        notas.append(f"El IVA ({fmt_ar(monto)}) no es el 21% ni el 10,5% del costo ({fmt_ar(costo)}): puede incluir "
+                     "retención de IVA, revisar.")
+
+
+def _tipo_impuesto(h: str) -> str | None:
+    iva = bool(re.search(r"\biva\b|i\.v\.a", h))
+    if "reten" in h:
+        return "r_iva" if iva else ("r_gcias" if "ganancia" in h else "r_iibb")
+    if "percep" in h:
+        return "p_iva" if iva else "p_iibb"
+    return "iva" if iva else None
+
+
+def parsear_nave_excel(data: bytes, nombre: str) -> dict | None:
+    """Excel 'Detalle de operaciones' de Nave. Devuelve None si no tiene ese formato."""
+    try:
+        raw = pd.read_excel(io.BytesIO(data), header=None, dtype=object)
+    except Exception:
+        return None
+    filas = raw.values.tolist()
+    ih = next((i for i, f in enumerate(filas) if any(_n(c) == "monto bruto" for c in f)), None)
+    if ih is None:
+        return None
+    hdr = [_n(c) for c in filas[ih]]
+    idx = lambda pred: next((i for i, h in enumerate(hdr) if h and pred(h)), None)
+    cb, cn = idx(lambda h: h == "monto bruto"), idx(lambda h: h == "monto neto")
+    cc = idx(lambda h: h.startswith("costo"))
+    ce = idx(lambda h: h == "estado")
+    cf = idx(lambda h: h.startswith("fecha de operacion")) or 0
+    if cb is None or cn is None:
+        return None
+    imp = [(i, _tipo_impuesto(h)) for i, h in enumerate(hdr) if h and i not in (cb, cn, cc) and _tipo_impuesto(h)]
+    r = _vacio()
+    notas: list[str] = []
+    n_aj, aj, n_raro, n_pend, pend = 0, Decimal(0), 0, 0, Decimal(0)
+    n_ops = 0
+    for f in filas[ih + 1:]:
+        c0 = f[cf]
+        if not re.match(r"^\d{2}/\d{2}/\d{4}", _txt(c0)) and not hasattr(c0, "year"):
+            continue
+        n_ops += 1
+        bruto, neto = _num(f[cb]), _num(f[cn])
+        costo = _num(f[cc]) if cc is not None else Decimal(0)
+        t = {}
+        for i, tipo in imp:
+            t[tipo] = t.get(tipo, Decimal(0)) + _num(f[i])
+        ivaf = t.pop("iva", Decimal(0))
+        resid = bruto - costo - ivaf - sum(t.values(), Decimal(0)) - neto
+        if resid.copy_abs() > Decimal("0.011"):
+            t["r_iibb"] = t.get("r_iibb", Decimal(0)) + resid
+            n_aj += 1
+            aj += resid
+        if costo or ivaf:
+            if costo and (ivaf / costo - Decimal("0.105")).copy_abs() < Decimal("0.003"):
+                r["bi105"] += costo
+                r["iva105"] += ivaf
+            else:
+                r["bi"] += costo
+                r["iva"] += ivaf
+                if costo and (ivaf / costo - Decimal("0.21")).copy_abs() >= Decimal("0.003"):
+                    n_raro += 1
+        for k, v in t.items():
+            r[k] += v
+        r["presentado"] += bruto
+        r["neto"] += neto
+        if ce is not None and "acreditar" in _n(f[ce]):
+            n_pend += 1
+            pend += neto
+    if not n_ops:
+        return None
+    if n_aj:
+        notas.append(f"{n_aj} operación(es) con diferencia entre bruto, costos y neto ({fmt_ar(aj)}), por ejemplo "
+                     "devoluciones que reintegran retenciones: se cargó como ajuste de R IIBB.")
+    if n_raro:
+        notas.append(f"En {n_raro} operación(es) el IVA no es el 21% ni el 10,5% del costo: puede incluir retención "
+                     "de IVA, revisar.")
+    if n_pend:
+        notas.append(f"Incluye {n_pend} operación(es) por acreditar (neto {fmt_ar(pend)}).")
+    fecha, cuit = "", ""
+    for f in filas[:ih]:
+        for c in f:
+            mm = re.search(r"Detalles del .* al (\d{2}/\d{2}/\d{4})", _txt(c))
+            if mm:
+                fecha = mm.group(1)
+            mc = re.match(r"^CUIT:\s*(\d+)", _txt(c))
+            if mc:
+                cuit = mc.group(1)
+    tot = next((f for f in filas[ih + 1:] if _n(f[0]) == "total"), None)
+    if tot is not None and abs(_num(tot[cn]) - r["neto"]) > Decimal("0.05"):
+        notas.append("El neto de las operaciones no coincide con la fila Total del Excel.")
+    return {"datos": r, "marca": "NAVE", "banco": "", "notas": sorted(set(notas)), "fecha": fecha,
+            "clave_nave": f"{cuit}|{fecha}"}
+
+
+def _monto_sig(tok: list[str], i: int) -> Decimal | None:
+    for j in range(i + 1, min(i + 3, len(tok))):
+        if es_importe(tok[j]):
+            return a_dec(tok[j])
+    return None
+
+
+def parsear_nave_pdf(tok: list[str], nombre: str) -> dict:
+    r = _vacio()
+    notas: list[str] = []
+    texto = "\n".join(tok)
+    mf = re.search(r"Detalles del .* al (\d{2}/\d{2}/\d{4})", texto)
+    fecha = mf.group(1) if mf else ""
+    mc = re.search(r"CUIT:\s*(\d+)", texto)
+    clave = f"{mc.group(1) if mc else ''}|{fecha}"
+    try:
+        i_fin = max(k for k, t in enumerate(tok) if t == "Total bruto")
+    except ValueError:
+        return {"datos": r, "marca": "NAVE", "banco": "", "notas": ["No encontré el resumen de totales."],
+                "fecha": fecha, "clave_nave": clave}
+
+    def val(etq: str) -> Decimal:
+        for i in range(i_fin, len(tok)):
+            if tok[i].startswith(etq):
+                m = _monto_sig(tok, i)
+                if m is not None:
+                    return m
+        return Decimal(0)
+
+    r["presentado"] = val("Total bruto")
+    r["neto"] = val("Total neto")
+    costo = val("Costo del servicio")
+    try:
+        a = next(k for k in range(i_fin, len(tok)) if tok[k].startswith("Impuestos sobre costos"))
+        b = next(k for k in range(a, len(tok)) if tok[k].startswith("Total debitado por impuestos"))
+    except StopIteration:
+        a = b = None
+    if costo and a is None:
+        r["bi"] = costo
+    en_costos, previos, hubo_iva = True, [], False
+    for t in (tok[a + 1:b] if a is not None else []):
+        if t.startswith("Impuestos sobre operaciones"):
+            en_costos, previos = False, []
+            continue
+        if re.match(r"^\$\s*-?[\d.]+,\d\d$", t):
+            monto = a_dec(t)
+            e = _n(" ".join(previos))
+            previos = []
+            if re.search(r"\biva\b|i\.v\.a", e) and "reten" not in e and "percep" not in e:
+                if en_costos:
+                    _iva_credito(r, notas, monto, costo)
+                    hubo_iva = True
+                else:
+                    r["r_iva"] += monto
+                    notas.append("IVA bajo 'impuestos sobre operaciones': se cargó como retención de IVA, revisar.")
+            elif re.search(r"\biva\b|i\.v\.a", e) and "reten" in e:
+                r["r_iva"] += monto
+            elif re.search(r"\biva\b|i\.v\.a", e) and "percep" in e:
+                r["p_iva"] += monto
+            elif "ganancia" in e:
+                r["r_gcias"] += monto
+            elif "percep" in e:
+                r["p_iibb"] += monto
+            elif "reten" in e or "sirtac" in e or "iibb" in e:
+                r["r_iibb"] += monto
+            else:
+                r["no_grav"] += monto
+                notas.append(f"Concepto sin clasificar ({e or 's/nombre'}): {fmt_ar(monto)} quedó en No gravado.")
+        else:
+            previos.append(t)
+    if costo and not hubo_iva:
+        r["bi"] += costo
+    notas.append("El PDF de Nave es un resumen: si el mes tiene devoluciones puede quedar una diferencia; "
+                 "el Excel de detalle es más preciso.")
+    return {"datos": r, "marca": "NAVE", "banco": "", "notas": sorted(set(notas)), "fecha": fecha,
+            "clave_nave": clave}
+
+
 def clasificar(tok: list[str]) -> str:
     t = "\n".join(tok[:400])
     if "FAVACARD" in t.upper() and any(x.startswith("PROXIMOS PAGOS") for x in tok):
         return "Favacard"
+    if any(x.startswith("Costos por cobro") for x in tok) and any(
+            x.startswith("Total debitado por impuestos") for x in tok):
+        return "Nave"
     if "Resumen Mensual de Liquidaciones" in t or "Servicio PAYWAY" in "\n".join(tok):
         return "Payway"
     if "FIRST DATA" in t.upper() and "Entidad Pagadora" in t:
@@ -346,8 +613,17 @@ def clasificar(tok: list[str]) -> str:
 
 
 def leer_archivo(nombre: str, data: bytes) -> dict:
+    base = {"archivo": nombre.split("/")[-1], "proc": "", "marca": "", "banco": "", "datos": _vacio(),
+            "notas": [], "fecha": ""}
+    if nombre.lower().endswith((".xlsx", ".xls", ".xlsm")):
+        res = parsear_nave_excel(data, nombre)
+        if res is None:
+            base["notas"] = ["No reconocí el Excel (se espera el 'Detalle de operaciones' de Nave)."]
+            return base
+        base["proc"] = "Nave"
+        base.update(res)
+        return base
     doc = _abrir(data)
-    base = {"archivo": nombre.split("/")[-1], "proc": "", "marca": "", "datos": _vacio(), "notas": [], "fecha": ""}
     if doc is None:
         base["notas"] = ["No se pudo abrir el PDF."]
         return base
@@ -365,6 +641,8 @@ def leer_archivo(nombre: str, data: bytes) -> dict:
         res = parsear_naranja(tok, nombre)
     elif proc == "Favacard":
         res = parsear_favacard(tok, nombre)
+    elif proc == "Nave":
+        res = parsear_nave_pdf(tok, nombre)
     elif proc == "Ajustes":
         base["notas"] = ["Detalle de ajustes/promociones: no se carga."]
         return base
@@ -382,7 +660,8 @@ def expandir(archivos: list[tuple[str, bytes]]) -> list[tuple[str, bytes]]:
             try:
                 with zipfile.ZipFile(io.BytesIO(data)) as z:
                     for info in z.infolist():
-                        if not info.is_dir() and info.filename.lower().endswith(".pdf") and info.file_size < 40_000_000:
+                        if not info.is_dir() and info.filename.lower().endswith((".pdf", ".xlsx", ".xls")) \
+                                and info.file_size < 40_000_000:
                             out.append((f"{nombre}/{info.filename}", z.read(info)))
             except zipfile.BadZipFile:
                 pass
@@ -393,8 +672,22 @@ def expandir(archivos: list[tuple[str, bytes]]) -> list[tuple[str, bytes]]:
 
 def leer_archivos(archivos: list[tuple[str, bytes]]) -> list[dict]:
     docs = [leer_archivo(n, d) for n, d in expandir(archivos)]
+    # Nave: si llegan el PDF y el Excel del mismo período, se usa el Excel (más detallado)
+    por_clave: dict[str, list[dict]] = {}
+    for d in docs:
+        if d["proc"] == "Nave" and d.get("clave_nave"):
+            por_clave.setdefault(d["clave_nave"], []).append(d)
+    for grupo in por_clave.values():
+        if len(grupo) > 1:
+            xl = [d for d in grupo if d["archivo"].lower().endswith((".xlsx", ".xls", ".xlsm"))]
+            keep = xl[0] if xl else grupo[0]
+            for d in grupo:
+                if d is not keep:
+                    d["proc"] = ""
+                    d["notas"] = [f"Mismo período que {keep['archivo']}: se usó ese archivo."]
     orden = {p: i for i, p in enumerate(ORDEN_PROC)}
-    docs.sort(key=lambda d: (orden.get(d["proc"], 9), d["fecha"][6:] + d["fecha"][3:5] + d["fecha"][:2], d["archivo"]))
+    docs.sort(key=lambda d: (orden.get(d["proc"], 9), d.get("banco", ""), d["fecha"][6:] + d["fecha"][3:5] + d["fecha"][:2],
+                             d["archivo"]))
     return docs
 
 
@@ -404,11 +697,11 @@ def a_tabla(docs: list[dict]) -> pd.DataFrame:
     for d in docs:
         if not d["proc"] or d["proc"] == "Ajustes":
             continue
-        fila = {"Procesadora": d["proc"], "Detalle": d["archivo"], "Tarjeta": d["marca"]}
+        fila = {"Procesadora": d["proc"], "Banco": d.get("banco", ""), "Detalle": d["archivo"], "Tarjeta": d["marca"]}
         for c in CAMPOS:
             fila[CAMPO_A_COL[c]] = float(d["datos"][c])
         filas.append(fila)
-    cols = ["Procesadora", "Detalle", "Tarjeta"] + list(COLS)
+    cols = ["Procesadora", "Banco", "Detalle", "Tarjeta"] + list(COLS)
     return pd.DataFrame(filas, columns=cols)
 
 
@@ -424,23 +717,33 @@ def _dec(x) -> Decimal:
 def diferencia(fila) -> Decimal:
     """Presentado - descuentos - retenciones - acreditado. Debe dar 0."""
     g = lambda c: _dec(fila.get(c))
-    return (g("Total presentado") - g("BI 21%") - g("IVA 21%") - g("P IIBB") - g("R IIBB") - g("P IVA")
-            - g("R IVA") - g("R Gcias") - g("No gravado") - g("Acreditado PDF")).quantize(Q2, ROUND_HALF_UP)
+    return (g("Total presentado") - g("BI 21%") - g("BI 10,5%") - g("IVA 21%") - g("IVA 10,5%") - g("P IIBB")
+            - g("R IIBB") - g("P IVA") - g("R IVA") - g("R Gcias") - g("No gravado")
+            - g("Acreditado PDF")).quantize(Q2, ROUND_HALF_UP)
+
+
+def grupos(df: pd.DataFrame) -> list[tuple[str, str, pd.DataFrame, str]]:
+    """(procesadora, banco, filas, etiqueta) en el orden de la planilla: una factura por cada uno."""
+    d = df.copy()
+    if "Banco" not in d.columns:
+        d["Banco"] = ""
+    d["_b"] = d["Banco"].map(_txt)
+    orden = {p: i for i, p in enumerate(ORDEN_PROC)}
+    claves = sorted({(p, b) for p, b in zip(d["Procesadora"], d["_b"]) if isinstance(p, str) and p},
+                    key=lambda k: (orden.get(k[0], 9), k[1]))
+    return [(p, b, d[(d["Procesadora"] == p) & (d["_b"] == b)].drop(columns=["_b"]), grupo_de(p, b)) for p, b in claves]
 
 
 def resumen_facturas(df: pd.DataFrame, pv: dict[str, str]) -> pd.DataFrame:
     filas = []
-    for proc in ORDEN_PROC:
-        sub = df[df["Procesadora"] == proc]
-        if sub.empty:
-            continue
+    for proc, banco, sub, etq in grupos(df):
         s = lambda c: sum((_dec(v) for v in sub[c]), Decimal(0)).quantize(Q2, ROUND_HALF_UP)
-        gasto = s("BI 21%") + s("No gravado")
-        total = gasto + s("IVA 21%") + s("P IVA") + s("P IIBB")
+        total = (s("BI 21%") + s("BI 10,5%") + s("No gravado") + s("IVA 21%") + s("IVA 10,5%") + s("P IVA")
+                 + s("P IIBB"))
         filas.append({
-            "Procesadora": proc, "Comprobante": pv.get(proc, PV_DEFECTO.get(proc, proc)),
-            "Gasto (BI 21%)": float(s("BI 21%")), "No gravado": float(s("No gravado")),
-            "IVA 21%": float(s("IVA 21%")),
+            "Procesadora": etq, "Comprobante": pv.get(etq, nombre_defecto(proc, banco)),
+            "Gasto BI 21%": float(s("BI 21%")), "Gasto BI 10,5%": float(s("BI 10,5%")),
+            "No gravado": float(s("No gravado")), "IVA 21%": float(s("IVA 21%")), "IVA 10,5%": float(s("IVA 10,5%")),
             "P IVA": float(s("P IVA")), "P IIBB": float(s("P IIBB")), "Total factura": float(total),
             "R IIBB": float(s("R IIBB")), "R IVA": float(s("R IVA")), "R Gcias": float(s("R Gcias")),
         })
@@ -450,13 +753,14 @@ def resumen_facturas(df: pd.DataFrame, pv: dict[str, str]) -> pd.DataFrame:
 # ---------------------------------------------------------------- asiento
 # Nombres de cuenta por defecto: editables en pantalla. Deben coincidir con la hoja CUENTAS del estudio.
 CUENTAS_DEFECTO = {"gasto": "Gastos por comisiones tarjetas", "iva": "IVA Crédito Fiscal",
-                   "p_iva": "Percepciones IVA", "p_iibb": "Percepciones IIBB", "deudores": "Deudores por ventas"}
+                   "iva105": "IVA Crédito Fiscal 10,5%", "p_iva": "Percepciones IVA", "p_iibb": "Percepciones IIBB", "deudores": "Deudores por ventas"}
 SIN_CUENTA = "(elegir cuenta)"
 
 # patrones para sugerir cuenta del plan; sólo se sugiere si hay UNA sola coincidencia
 _PATRONES = {
     "gasto": (r"comisi\w*.*tarjeta|tarjeta.*comisi", r"gastos?.*tarjeta"),
     "iva": (r"iva.*cr[eé]dito.*21|iva.*21.*cr[eé]dito", r"iva.*cr[eé]dito"),
+    "iva105": (r"iva.*cr[eé]dito.*10[,.]?5|10[,.]?5.*iva.*cr[eé]dito|iva.*10[,.]?5",),
     "p_iva": (r"percepci\w*.*iva|iva.*percepci",),
     "p_iibb": (r"percepci\w*.*(iibb|ingresos brutos|ii\.?bb)", r"(iibb|ingresos brutos).*percepci"),
     "deudores": (r"deudores por ventas",),
@@ -525,7 +829,8 @@ def armar_asiento(res: pd.DataFrame, cuentas: dict | None = None) -> pd.DataFram
     filas = []
     for _, r in res.iterrows():
         proc = r["Procesadora"]
-        deb = [(cu["gasto"], _dec(r["Gasto (BI 21%)"]) + _dec(r["No gravado"])), (cu["iva"], _dec(r["IVA 21%"])),
+        deb = [(cu["gasto"], _dec(r["Gasto BI 21%"]) + _dec(r["Gasto BI 10,5%"]) + _dec(r["No gravado"])),
+               (cu["iva"], _dec(r["IVA 21%"])), (cu["iva105"], _dec(r["IVA 10,5%"])),
                (cu["p_iva"], _dec(r["P IVA"])), (cu["p_iibb"], _dec(r["P IIBB"]))]
         for cta, imp in deb:
             if imp:
@@ -553,27 +858,29 @@ def generar_excel(df: pd.DataFrame, cliente: str, periodo: str, pv: dict[str, st
     tot_t = f(bold=True, top=1)
     mes = f(num_format="mmm-yy", bold=True, align="left")
     ok = f(num_format=CONT, bold=True, bg_color="#E3F3E6")
+    fecha_mes = _fecha_periodo(periodo)
+    gl = grupos(df)
+
+    def titulo(w):
+        w.write("B1", cliente or "", tit)
+        if fecha_mes:
+            w.write_datetime("B2", fecha_mes, mes)
+        else:
+            w.write("B2", periodo or "", sub)
 
     ws = wb.add_worksheet("LIQUIDACIONES")
     ws.set_column("A:A", 3)
     ws.set_column("B:B", 46)
     ws.set_column("C:C", 18)
-    ws.set_column("D:N", 15)
-    ws.write("B1", cliente or "", tit)
-    fecha_mes = _fecha_periodo(periodo)
-    if fecha_mes:
-        ws.write_datetime("B2", fecha_mes, mes)
-    else:
-        ws.write("B2", periodo or "", sub)
+    ws.set_column("D:Q", 15)
+    titulo(ws)
     fila = 3  # 0-index -> fila 4
-    ref_tot = {}  # proc -> fila de totales (1-index)
-    cab = ["Detalle", "Tarjeta", "TOTAL", "BI 21", "IVA 21%", "P IIBB", "R IIBB", "P IVA", "R IVA", "R GCIAS",
-           "NO GRAVADO", "NETO", "ACREDITADO PDF", "DIFERENCIA"]
-    for proc in ORDEN_PROC:
-        sub_df = df[df["Procesadora"] == proc]
-        if sub_df.empty:
-            continue
-        ws.write(fila, 1, pv.get(proc, PV_DEFECTO.get(proc, proc)), sub)
+    ref_tot: dict[str, int] = {}   # etiqueta -> fila de totales (1-index)
+    usa105: dict[str, bool] = {}
+    cab = ["Detalle", "Tarjeta", "TOTAL", "BI 21", "BI 10,5", "IVA 21%", "IVA 10,5%", "P IIBB", "R IIBB", "P IVA",
+           "R IVA", "R GCIAS", "NO GRAVADO", "NETO", "ACREDITADO PDF", "DIFERENCIA"]
+    for proc, banco, sub_df, etq in gl:
+        ws.write(fila, 1, pv.get(etq, nombre_defecto(proc, banco)), sub)
         fila += 1
         for j, c in enumerate(cab):
             ws.write(fila, 1 + j, c, head)
@@ -586,89 +893,77 @@ def generar_excel(df: pd.DataFrame, cliente: str, periodo: str, pv: dict[str, st
             ws.write(fila, 2, str(r["Tarjeta"] or ""), txt)
             for k, c in enumerate(COLS[:-1]):
                 ws.write_number(fila, 3 + k, float(_dec(r[c])), num_in)
-            # NETO = TOTAL - descuentos y retenciones
-            ws.write_formula(fila, 12, f"=D{fx}-SUM(E{fx}:L{fx})", num)
-            ws.write_number(fila, 13, float(_dec(r["Acreditado PDF"])), num_in)
-            ws.write_formula(fila, 14, f"=M{fx}-N{fx}", num)
+            # NETO = TOTAL - descuentos, percepciones y retenciones
+            ws.write_formula(fila, 14, f"=D{fx}-SUM(E{fx}:N{fx})", num)
+            ws.write_number(fila, 15, float(_dec(r["Acreditado PDF"])), num_in)
+            ws.write_formula(fila, 16, f"=O{fx}-P{fx}", num)
             fila += 1
         fin = fila
         ws.write(fila, 1, "TOTAL", tot_t)
         ws.write(fila, 2, "", tot_t)
-        for k in range(3, 15):
+        for k in range(3, 17):
             col = chr(ord("A") + k)
             ws.write_formula(fila, k, f"=SUM({col}{ini}:{col}{fin})", tot)
-        ref_tot[proc] = fila + 1
+        ref_tot[etq] = fila + 1
+        usa105[etq] = any(_dec(v) for c in ("BI 10,5%", "IVA 10,5%") for v in sub_df[c])
         fila += 3
     # hoja de facturas
     wf = wb.add_worksheet("FACTURAS")
     wf.set_column("A:A", 3)
-    wf.set_column("B:B", 24)
-    wf.set_column("C:L", 16)
-    wf.write("B1", cliente or "", tit)
-    if fecha_mes:
-        wf.write_datetime("B2", fecha_mes, mes)
-    else:
-        wf.write("B2", periodo or "", sub)
-    cab2 = ["Comprobante", "Gasto (BI 21%)", "No gravado", "IVA 21%", "P IVA", "P IIBB", "TOTAL FACTURA",
-            "R IIBB", "R IVA", "R GCIAS"]
+    wf.set_column("B:B", 28)
+    wf.set_column("C:M", 16)
+    titulo(wf)
+    cab2 = ["Comprobante", "Gasto (BI 21%)", "Gasto (BI 10,5%)", "No gravado", "IVA 21%", "IVA 10,5%", "P IVA",
+            "P IIBB", "TOTAL FACTURA", "R IIBB", "R IVA", "R GCIAS"]
     for j, c in enumerate(cab2):
         wf.write(3, 1 + j, c, head)
     wf.set_row(3, 30)
     fr = 4
     fila_fact: dict[str, int] = {}
-    for proc in ORDEN_PROC:
-        if proc not in ref_tot:
-            continue
-        t = ref_tot[proc]
-        wf.write(fr, 1, pv.get(proc, PV_DEFECTO.get(proc, proc)), txt)
+    # (columna de FACTURAS, columna de LIQUIDACIONES)
+    enlaces = ((2, "E"), (3, "F"), (4, "N"), (5, "G"), (6, "H"), (7, "K"), (8, "I"), (10, "J"), (11, "L"), (12, "M"))
+    for proc, banco, sub_df, etq in gl:
+        t = ref_tot[etq]
+        wf.write(fr, 1, pv.get(etq, nombre_defecto(proc, banco)), txt)
         x = fr + 1
-        fila_fact[proc] = x
-        wf.write_formula(fr, 2, f"=LIQUIDACIONES!E{t}", num)
-        wf.write_formula(fr, 3, f"=LIQUIDACIONES!L{t}", num)
-        wf.write_formula(fr, 4, f"=LIQUIDACIONES!F{t}", num)
-        wf.write_formula(fr, 5, f"=LIQUIDACIONES!I{t}", num)
-        wf.write_formula(fr, 6, f"=LIQUIDACIONES!G{t}", num)
-        wf.write_formula(fr, 7, f"=SUM(C{x}:G{x})", ok)
-        wf.write_formula(fr, 8, f"=LIQUIDACIONES!H{t}", num)
-        wf.write_formula(fr, 9, f"=LIQUIDACIONES!J{t}", num)
-        wf.write_formula(fr, 10, f"=LIQUIDACIONES!K{t}", num)
+        fila_fact[etq] = x
+        for cf, cl in enlaces:
+            wf.write_formula(fr, cf, f"=LIQUIDACIONES!{cl}{t}", num)
+        wf.write_formula(fr, 9, f"=SUM(C{x}:I{x})", ok)
         fr += 1
     if fr > 4:
         wf.write(fr, 1, "TOTAL", tot_t)
-        for k in range(2, 11):
+        for k in range(2, 13):
             col = chr(ord("A") + k)
             wf.write_formula(fr, k, f"=SUM({col}5:{col}{fr})", tot)
-    # hoja de asientos (factura de gastos contra proveedores)
+    # hoja de asientos (factura de gastos contra deudores por ventas)
     cu = {**CUENTAS_DEFECTO, **(cuentas or {})}
     wa = wb.add_worksheet("ASIENTO")
     wa.set_column("A:A", 3)
-    wa.set_column("B:B", 46)
+    wa.set_column("B:B", 52)
     wa.set_column("C:D", 18)
-    wa.write("B1", cliente or "", tit)
-    if fecha_mes:
-        wa.write_datetime("B2", fecha_mes, mes)
-    else:
-        wa.write("B2", periodo or "", sub)
+    titulo(wa)
     ar = 3
-    for proc in ORDEN_PROC:
-        if proc not in fila_fact:
-            continue
-        x = fila_fact[proc]
-        wa.write(ar, 1, pv.get(proc, PV_DEFECTO.get(proc, proc)) + " · factura de gastos", sub)
+    for proc, banco, sub_df, etq in gl:
+        x = fila_fact[etq]
+        wa.write(ar, 1, pv.get(etq, nombre_defecto(proc, banco)) + " · factura de gastos", sub)
         ar += 1
         for j, c in enumerate(["Cuenta", "Debe", "Haber"]):
             wa.write(ar, 1 + j, c, head)
         ar += 1
         ini = ar + 1
-        for cta, fd in ((cu["gasto"], f"=FACTURAS!C{x}+FACTURAS!D{x}"), (cu["iva"], f"=FACTURAS!E{x}"),
-                        (cu["p_iva"], f"=FACTURAS!F{x}"), (cu["p_iibb"], f"=FACTURAS!G{x}")):
+        lineas = [(cu["gasto"], f"=FACTURAS!C{x}+FACTURAS!D{x}+FACTURAS!E{x}"), (cu["iva"], f"=FACTURAS!F{x}")]
+        if usa105[etq]:
+            lineas.append((cu["iva105"], f"=FACTURAS!G{x}"))
+        lineas += [(cu["p_iva"], f"=FACTURAS!H{x}"), (cu["p_iibb"], f"=FACTURAS!I{x}")]
+        for cta, fd in lineas:
             wa.write(ar, 1, cta, txt)
             wa.write_formula(ar, 2, fd, num)
             wa.write_blank(ar, 3, None, num)
             ar += 1
         wa.write(ar, 1, cuenta_haber(cu), txt)
         wa.write_blank(ar, 2, None, num)
-        wa.write_formula(ar, 3, f"=FACTURAS!H{x}", num)
+        wa.write_formula(ar, 3, f"=FACTURAS!J{x}", num)
         ar += 1
         wa.write(ar, 1, "TOTAL", tot_t)
         wa.write_formula(ar, 2, f"=SUM(C{ini}:C{ar})", tot)
@@ -722,8 +1017,8 @@ def _leer_cacheado(clave: str, archivos: tuple) -> list[dict]:
 def render_liquidaciones_tarjetas() -> None:
     s = st.session_state
     st.markdown(f"<h2 style='color:{NAVY};font-weight:700'>Liquidaciones de tarjetas</h2>", unsafe_allow_html=True)
-    st.caption("Subí los PDF del mes de Payway, Fiserv (First Data) y Naranja. Se leen solos, se controlan contra "
-               "lo acreditado y se arma una factura de gastos por procesadora.")
+    st.caption("Subí los PDF o Excel del mes (Payway, Fiserv, Naranja, Favacard, Nave). Se leen solos, se controlan "
+               "contra lo acreditado y se arma una factura de gastos por procesadora (Payway, una por banco).")
     try:
         from control_comprobantes import _nombres_clientes
         nombres = _nombres_clientes()
@@ -738,7 +1033,8 @@ def render_liquidaciones_tarjetas() -> None:
                                placeholder="Elegí o buscá el cliente")
     else:
         cliente = c1.text_input("Cliente (razón social)", key="lt_cliente_txt")
-    subidos = st.file_uploader("PDF de liquidaciones (o un .zip)", type=["pdf", "zip"], accept_multiple_files=True,
+    subidos = st.file_uploader("Liquidaciones (PDF, Excel o un .zip)", type=["pdf", "zip", "xlsx", "xls"],
+                               accept_multiple_files=True,
                                key="lt_pdfs")
     if not subidos:
         st.info("Subí los PDF de la carpeta del mes (Fiserv, Favacard, Naranja y Payway).")
@@ -767,6 +1063,8 @@ def render_liquidaciones_tarjetas() -> None:
     cfg = {c: st.column_config.NumberColumn(c, format="%.2f") for c in COLS}
     cfg["Procesadora"] = st.column_config.SelectboxColumn("Procesadora", options=list(PROCESADORAS), required=True)
     base = s["lt_df"].copy()
+    if "Banco" not in base.columns:
+        base.insert(1, "Banco", "")
     editado = st.data_editor(base, num_rows="dynamic", hide_index=True, key=f"lt_editor_{s['lt_ver']}",
                              column_config=cfg, **_STRETCH)
     df = editado.copy()
@@ -778,16 +1076,16 @@ def render_liquidaciones_tarjetas() -> None:
     malas = df[df["Diferencia"].abs() > 0.05]
     if len(malas):
         st.warning("Hay liquidaciones donde Total − descuentos − acreditado no da cero:")
-        st.dataframe(malas[["Procesadora", "Detalle", "Tarjeta", "Diferencia"]], hide_index=True, **_STRETCH)
+        st.dataframe(malas[["Procesadora", "Banco", "Detalle", "Tarjeta", "Diferencia"]], hide_index=True, **_STRETCH)
     else:
         st.success("Todas las liquidaciones cierran contra lo acreditado.")
 
     st.subheader("Factura de gastos por procesadora")
+    gl = grupos(df)
     with st.expander("Nombre y punto de venta de cada comprobante", expanded=False):
-        pv = {}
-        for p in ORDEN_PROC:
-            pv[p] = st.text_input(p, value=PV_DEFECTO[p], key=f"lt_pv_{p}")
-    pv = {p: s.get(f"lt_pv_{p}", PV_DEFECTO[p]) for p in ORDEN_PROC}
+        for proc, banco, _, etq in gl:
+            st.text_input(etq, value=nombre_defecto(proc, banco), key=f"lt_pv_{etq}")
+    pv = {etq: s.get(f"lt_pv_{etq}", nombre_defecto(proc, banco)) for proc, banco, _, etq in gl}
     res = resumen_facturas(df, pv)
     if res.empty:
         return
@@ -799,8 +1097,11 @@ def render_liquidaciones_tarjetas() -> None:
     st.subheader("Asiento: factura de gastos contra deudores por ventas")
     plan = plan_del_cliente(cliente) if cliente else []
     cuentas = {}
-    conceptos = (("gasto", "Gasto (BI 21% + no gravado)"), ("iva", "IVA 21%"), ("p_iva", "Percepción de IVA"),
-                 ("p_iibb", "Percepción de IIBB"), ("deudores", "Deudores por ventas (Haber)"))
+    conceptos = [("gasto", "Gasto (BI + no gravado)"), ("iva", "IVA crédito fiscal 21%")]
+    if res["IVA 10,5%"].abs().sum() > 0:
+        conceptos.append(("iva105", "IVA crédito fiscal 10,5%"))
+    conceptos += [("p_iva", "Percepción de IVA"), ("p_iibb", "Percepción de IIBB"),
+                  ("deudores", "Deudores por ventas (Haber)")]
     with st.expander("Cuentas del asiento", expanded=bool(plan)):
         if plan:
             st.caption(f"Plan de cuentas de **{cliente}** ({len(plan)} cuentas). Se sugiere una cuenta sólo cuando hay "
