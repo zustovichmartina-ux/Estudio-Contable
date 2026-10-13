@@ -315,6 +315,7 @@ _VENTANAS_PRINCIPALES = (
     "Devengamiento de Impuestos",
     "Conciliación Bancaria",
     "Control de comprobantes",
+    "Liquidaciones de tarjetas",
     "Préstamos Financieros",
     "Inversiones",
     "Herramientas",
@@ -330,6 +331,10 @@ _VENTANA_HEADER = {
     "Control de comprobantes": (
         "Control de comprobantes",
         "Marcá lo que entregó el cliente y pedí los faltantes",
+    ),
+    "Liquidaciones de tarjetas": (
+        "Liquidaciones de tarjetas",
+        "Subí los PDF del mes y armá la factura de gastos por procesadora",
     ),
     "Devengamiento de Impuestos": (
         "Devengamiento",
@@ -372,6 +377,7 @@ _VENTANA_NAV_LABELS = {
     "Devengamiento de Impuestos": "Devengamiento",
     "Conciliación Bancaria": "Conciliación",
     "Control de comprobantes": "Comprobantes",
+    "Liquidaciones de tarjetas": "Tarjetas",
     "Préstamos Financieros": "Préstamos",
     "Inversiones": "Inversiones",
     "Herramientas": "Herramientas",
@@ -13370,6 +13376,10 @@ def _main() -> None:
             from control_comprobantes import render_control_comprobantes
 
             render_control_comprobantes()
+        elif ventana_activa == "Liquidaciones de tarjetas":
+            from liquidaciones_tarjetas import render_liquidaciones_tarjetas
+
+            render_liquidaciones_tarjetas()
         elif ventana_activa == "Préstamos Financieros":
             _seccion_auditoria_prestamos()
         elif ventana_activa == "Inversiones":
