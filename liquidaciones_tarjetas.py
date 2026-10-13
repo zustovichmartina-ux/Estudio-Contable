@@ -448,7 +448,7 @@ def parsear_nave_excel(data: bytes, nombre: str) -> dict | None:
     hdr = [_n(c) for c in filas[ih]]
     idx = lambda pred: next((i for i, h in enumerate(hdr) if h and pred(h)), None)
     cb, cn = idx(lambda h: h == "monto bruto"), idx(lambda h: h == "monto neto")
-    cc = idx(lambda h: h.startswith("costo"))
+    cc = idx(lambda h: "iva" not in h and h.startswith(("costo", "comision", "cargo", "arancel", "tarifa")))
     ce = idx(lambda h: h == "estado")
     cf = idx(lambda h: h.startswith("fecha de operacion")) or 0
     if cb is None or cn is None:
@@ -469,6 +469,9 @@ def parsear_nave_excel(data: bytes, nombre: str) -> dict | None:
         for i, tipo in imp:
             t[tipo] = t.get(tipo, Decimal(0)) + _num(f[i])
         ivaf = t.pop("iva", Decimal(0))
+        if cc is None and ivaf:
+            costo = (ivaf / Decimal("0.21")).quantize(Q2, ROUND_HALF_UP)
+            notas.append("No encontré la columna de comisiones: la base imponible se calculó desde el IVA (IVA / 21%); verificar.")
         resid = bruto - costo - ivaf - sum(t.values(), Decimal(0)) - neto
         if resid.copy_abs() > Decimal("0.011"):
             t["r_iibb"] = t.get("r_iibb", Decimal(0)) + resid
@@ -612,6 +615,17 @@ def clasificar(tok: list[str]) -> str:
     return ""
 
 
+def _completar_bases(base: dict) -> None:
+    """Si hay IVA sin base imponible, calcula la base desde el IVA y lo avisa."""
+    d = base["datos"]
+    for iv, bi, tasa, lbl in (("iva", "bi", Decimal("0.21"), "21%"), ("iva105", "bi105", Decimal("0.105"), "10,5%")):
+        if d[iv] and not d[bi]:
+            d[bi] = (d[iv] / tasa).quantize(Q2, ROUND_HALF_UP)
+            base["notas"] = list(base["notas"]) + [
+                f"IVA {lbl} sin base imponible en el archivo: se calculó la base ({fmt_ar(d[bi])}) a partir del "
+                "IVA; verificar."]
+
+
 def leer_archivo(nombre: str, data: bytes) -> dict:
     base = {"archivo": nombre.split("/")[-1], "proc": "", "marca": "", "banco": "", "datos": _vacio(),
             "notas": [], "fecha": ""}
@@ -622,6 +636,7 @@ def leer_archivo(nombre: str, data: bytes) -> dict:
             return base
         base["proc"] = "Nave"
         base.update(res)
+        _completar_bases(base)
         return base
     doc = _abrir(data)
     if doc is None:
@@ -650,6 +665,7 @@ def leer_archivo(nombre: str, data: bytes) -> dict:
         base["notas"] = ["No reconocí de qué procesadora es este PDF."]
         return base
     base.update(res)
+    _completar_bases(base)
     return base
 
 
@@ -738,8 +754,7 @@ def resumen_facturas(df: pd.DataFrame, pv: dict[str, str]) -> pd.DataFrame:
     filas = []
     for proc, banco, sub, etq in grupos(df):
         s = lambda c: sum((_dec(v) for v in sub[c]), Decimal(0)).quantize(Q2, ROUND_HALF_UP)
-        total = (s("BI 21%") + s("BI 10,5%") + s("No gravado") + s("IVA 21%") + s("IVA 10,5%") + s("P IVA")
-                 + s("P IIBB"))
+        total = s("BI 21%") + s("BI 10,5%") + s("IVA 21%") + s("IVA 10,5%") + s("P IVA") + s("P IIBB")
         filas.append({
             "Procesadora": etq, "Comprobante": pv.get(etq, nombre_defecto(proc, banco)),
             "Gasto BI 21%": float(s("BI 21%")), "Gasto BI 10,5%": float(s("BI 10,5%")),
@@ -753,12 +768,13 @@ def resumen_facturas(df: pd.DataFrame, pv: dict[str, str]) -> pd.DataFrame:
 # ---------------------------------------------------------------- asiento
 # Nombres de cuenta por defecto: editables en pantalla. Deben coincidir con la hoja CUENTAS del estudio.
 CUENTAS_DEFECTO = {"gasto": "Gastos por comisiones tarjetas", "iva": "IVA Crédito Fiscal",
-                   "iva105": "IVA Crédito Fiscal 10,5%", "p_iva": "Percepciones IVA", "p_iibb": "Percepciones IIBB", "deudores": "Deudores por ventas"}
+                   "gasto105": "Gastos por comisiones tarjetas 10,5%", "iva105": "IVA Crédito Fiscal 10,5%", "p_iva": "Percepciones IVA", "p_iibb": "Percepciones IIBB", "deudores": "Deudores por ventas"}
 SIN_CUENTA = "(elegir cuenta)"
 
 # patrones para sugerir cuenta del plan; sólo se sugiere si hay UNA sola coincidencia
 _PATRONES = {
     "gasto": (r"comisi\w*.*tarjeta|tarjeta.*comisi", r"gastos?.*tarjeta"),
+    "gasto105": (r"comisi\w*.*10[,.]?5",),
     "iva": (r"iva.*cr[eé]dito.*21|iva.*21.*cr[eé]dito", r"iva.*cr[eé]dito"),
     "iva105": (r"iva.*cr[eé]dito.*10[,.]?5|10[,.]?5.*iva.*cr[eé]dito|iva.*10[,.]?5",),
     "p_iva": (r"percepci\w*.*iva|iva.*percepci",),
@@ -829,7 +845,7 @@ def armar_asiento(res: pd.DataFrame, cuentas: dict | None = None) -> pd.DataFram
     filas = []
     for _, r in res.iterrows():
         proc = r["Procesadora"]
-        deb = [(cu["gasto"], _dec(r["Gasto BI 21%"]) + _dec(r["Gasto BI 10,5%"]) + _dec(r["No gravado"])),
+        deb = [(cu["gasto"], _dec(r["Gasto BI 21%"])), (cu["gasto105"], _dec(r["Gasto BI 10,5%"])),
                (cu["iva"], _dec(r["IVA 21%"])), (cu["iva105"], _dec(r["IVA 10,5%"])),
                (cu["p_iva"], _dec(r["P IVA"])), (cu["p_iibb"], _dec(r["P IIBB"]))]
         for cta, imp in deb:
@@ -913,7 +929,7 @@ def generar_excel(df: pd.DataFrame, cliente: str, periodo: str, pv: dict[str, st
     wf.set_column("B:B", 28)
     wf.set_column("C:M", 16)
     titulo(wf)
-    cab2 = ["Comprobante", "Gasto (BI 21%)", "Gasto (BI 10,5%)", "No gravado", "IVA 21%", "IVA 10,5%", "P IVA",
+    cab2 = ["Comprobante", "Gasto (BI 21%)", "Gasto (BI 10,5%)", "No gravado (excluido)", "IVA 21%", "IVA 10,5%", "P IVA",
             "P IIBB", "TOTAL FACTURA", "R IIBB", "R IVA", "R GCIAS"]
     for j, c in enumerate(cab2):
         wf.write(3, 1 + j, c, head)
@@ -929,7 +945,7 @@ def generar_excel(df: pd.DataFrame, cliente: str, periodo: str, pv: dict[str, st
         fila_fact[etq] = x
         for cf, cl in enlaces:
             wf.write_formula(fr, cf, f"=LIQUIDACIONES!{cl}{t}", num)
-        wf.write_formula(fr, 9, f"=SUM(C{x}:I{x})", ok)
+        wf.write_formula(fr, 9, f"=C{x}+D{x}+F{x}+G{x}+H{x}+I{x}", ok)
         fr += 1
     if fr > 4:
         wf.write(fr, 1, "TOTAL", tot_t)
@@ -952,7 +968,10 @@ def generar_excel(df: pd.DataFrame, cliente: str, periodo: str, pv: dict[str, st
             wa.write(ar, 1 + j, c, head)
         ar += 1
         ini = ar + 1
-        lineas = [(cu["gasto"], f"=FACTURAS!C{x}+FACTURAS!D{x}+FACTURAS!E{x}"), (cu["iva"], f"=FACTURAS!F{x}")]
+        lineas = [(cu["gasto"], f"=FACTURAS!C{x}")]
+        if usa105[etq]:
+            lineas.append((cu["gasto105"], f"=FACTURAS!D{x}"))
+        lineas.append((cu["iva"], f"=FACTURAS!F{x}"))
         if usa105[etq]:
             lineas.append((cu["iva105"], f"=FACTURAS!G{x}"))
         lineas += [(cu["p_iva"], f"=FACTURAS!H{x}"), (cu["p_iibb"], f"=FACTURAS!I{x}")]
@@ -971,6 +990,9 @@ def generar_excel(df: pd.DataFrame, cliente: str, periodo: str, pv: dict[str, st
         ar += 1
         wa.write(ar, 1, "Diferencia Debe - Haber", txt)
         wa.write_formula(ar, 2, f"=C{ar}-D{ar}", ok)
+        ar += 1
+        wa.write(ar, 1, "No gravado (no incluido en la factura)", txt)
+        wa.write_formula(ar, 2, f"=FACTURAS!E{x}", num)
         ar += 3
     wb.close()
     return bio.getvalue()
@@ -1094,11 +1116,18 @@ def render_liquidaciones_tarjetas() -> None:
                                 for c in res.columns if c not in ("Procesadora", "Comprobante")})
     st.caption("Las retenciones (R IIBB, R IVA, R Gcias) no forman parte de la factura: se toman directamente de ARCA. "
                "Las percepciones sí.")
+    ng = res["No gravado"].sum()
+    if ng:
+        st.caption(f"No gravado (por ejemplo sellos): {fmt_ar(ng)}. No se incluye en la factura ni en el asiento.")
     st.subheader("Asiento: factura de gastos contra deudores por ventas")
     plan = plan_del_cliente(cliente) if cliente else []
     cuentas = {}
-    conceptos = [("gasto", "Gasto (BI + no gravado)"), ("iva", "IVA crédito fiscal 21%")]
-    if res["IVA 10,5%"].abs().sum() > 0:
+    usa105 = res["IVA 10,5%"].abs().sum() + res["Gasto BI 10,5%"].abs().sum() > 0
+    conceptos = [("gasto", "Gasto al 21% (comisiones)")]
+    if usa105:
+        conceptos.append(("gasto105", "Gasto al 10,5% (comisiones)"))
+    conceptos.append(("iva", "IVA crédito fiscal 21%"))
+    if usa105:
         conceptos.append(("iva105", "IVA crédito fiscal 10,5%"))
     conceptos += [("p_iva", "Percepción de IVA"), ("p_iibb", "Percepción de IIBB"),
                   ("deudores", "Deudores por ventas (Haber)")]
