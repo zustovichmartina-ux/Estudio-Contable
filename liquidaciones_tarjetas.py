@@ -450,15 +450,77 @@ def resumen_facturas(df: pd.DataFrame, pv: dict[str, str]) -> pd.DataFrame:
 # ---------------------------------------------------------------- asiento
 # Nombres de cuenta por defecto: editables en pantalla. Deben coincidir con la hoja CUENTAS del estudio.
 CUENTAS_DEFECTO = {"gasto": "Gastos por comisiones tarjetas", "iva": "IVA Crédito Fiscal",
-                   "p_iva": "Percepciones IVA", "p_iibb": "Percepciones IIBB", "prov": "Proveedores"}
+                   "p_iva": "Percepciones IVA", "p_iibb": "Percepciones IIBB", "deudores": "Deudores por ventas"}
+SIN_CUENTA = "(elegir cuenta)"
+
+# patrones para sugerir cuenta del plan; sólo se sugiere si hay UNA sola coincidencia
+_PATRONES = {
+    "gasto": (r"comisi\w*.*tarjeta|tarjeta.*comisi", r"gastos?.*tarjeta"),
+    "iva": (r"iva.*cr[eé]dito.*21|iva.*21.*cr[eé]dito", r"iva.*cr[eé]dito"),
+    "p_iva": (r"percepci\w*.*iva|iva.*percepci",),
+    "p_iibb": (r"percepci\w*.*(iibb|ingresos brutos|ii\.?bb)", r"(iibb|ingresos brutos).*percepci"),
+    "deudores": (r"deudores por ventas",),
+}
 
 
-def cuenta_proveedor(cu: dict, proc: str) -> str:
-    return cu.get("prov_" + proc) or f"{cu.get('prov', 'Proveedores')} - {proc}"
+def _sin_acentos(t: str) -> str:
+    for a, b in (("á", "a"), ("é", "e"), ("í", "i"), ("ó", "o"), ("ú", "u")):
+        t = t.replace(a, b)
+    return t
+
+
+def sugerir_cuenta(plan: list[str], clave: str) -> str:
+    for pat in _PATRONES.get(clave, ()):
+        rx = re.compile(_sin_acentos(pat))
+        hallados = [c for c in plan if rx.search(_sin_acentos(c.lower()))]
+        if len(hallados) == 1:
+            return hallados[0]
+    return ""
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def plan_del_cliente(nombre: str) -> list[str]:
+    """Cuentas imputables del plan del cliente ('codigo - descripcion'), o [] si no se encuentra."""
+    try:
+        import database as db
+        from pathlib import Path
+        from procesador import cargar_plan_cuentas, plan_cuentas_desde_csv
+        cli = next((c for c in db.listar_clientes() if str(c.get("nombre") or "").strip() == nombre), None)
+        if not cli:
+            return []
+        df = None
+        csv_txt = db.plan_cuentas_csv_cliente(int(cli["id"]))
+        if csv_txt:
+            df = plan_cuentas_desde_csv(csv_txt)
+        if df is None or df.empty:
+            ruta = str(cli.get("plan_cuentas_path") or "").strip()
+            if ruta and Path(ruta).is_file():
+                df = cargar_plan_cuentas(ruta)
+        if df is None or df.empty:
+            return []
+        if "imputable" in df.columns:
+            imp = df[df["imputable"].astype(str).str.lower().isin(["true", "1", "si", "sí", "s"])]
+            if not imp.empty:
+                df = imp
+        out, vistos = [], set()
+        for _, r in df.iterrows():
+            cod = str(r.get("codigo", "")).strip()
+            desc = str(r.get("descripcion", "")).strip()
+            if not cod or cod.lower() in ("nan", "none", "codigo", "código") or cod in vistos:
+                continue
+            vistos.add(cod)
+            out.append(f"{cod} - {desc}" if desc and desc.lower() not in ("nan", "none") else cod)
+        return out
+    except Exception:
+        return []
+
+
+def cuenta_haber(cu: dict) -> str:
+    return cu.get("deudores") or SIN_CUENTA
 
 
 def armar_asiento(res: pd.DataFrame, cuentas: dict | None = None) -> pd.DataFrame:
-    """Factura de gastos: Debe gasto, IVA y percepciones / Haber proveedor."""
+    """Factura de gastos: Debe gasto, IVA y percepciones / Haber deudores por ventas (tarjetas)."""
     cu = {**CUENTAS_DEFECTO, **(cuentas or {})}
     filas = []
     for _, r in res.iterrows():
@@ -468,7 +530,7 @@ def armar_asiento(res: pd.DataFrame, cuentas: dict | None = None) -> pd.DataFram
         for cta, imp in deb:
             if imp:
                 filas.append({"Procesadora": proc, "Cuenta": cta, "Debe": float(imp), "Haber": 0.0})
-        filas.append({"Procesadora": proc, "Cuenta": cuenta_proveedor(cu, proc), "Debe": 0.0,
+        filas.append({"Procesadora": proc, "Cuenta": cuenta_haber(cu), "Debe": 0.0,
                       "Haber": float(_dec(r["Total factura"]))})
     return pd.DataFrame(filas, columns=["Procesadora", "Cuenta", "Debe", "Haber"])
 
@@ -604,7 +666,7 @@ def generar_excel(df: pd.DataFrame, cliente: str, periodo: str, pv: dict[str, st
             wa.write_formula(ar, 2, fd, num)
             wa.write_blank(ar, 3, None, num)
             ar += 1
-        wa.write(ar, 1, cuenta_proveedor(cu, proc), txt)
+        wa.write(ar, 1, cuenta_haber(cu), txt)
         wa.write_blank(ar, 2, None, num)
         wa.write_formula(ar, 3, f"=FACTURAS!H{x}", num)
         ar += 1
@@ -734,17 +796,26 @@ def render_liquidaciones_tarjetas() -> None:
                                 for c in res.columns if c not in ("Procesadora", "Comprobante")})
     st.caption("Las retenciones (R IIBB, R IVA, R Gcias) no forman parte de la factura: se toman directamente de ARCA. "
                "Las percepciones sí.")
-    st.subheader("Asiento: factura de gastos contra proveedores")
-    with st.expander("Cuentas del asiento (deben coincidir con la hoja CUENTAS)", expanded=False):
-        cuentas = {}
-        for k, rot in (("gasto", "Gasto (BI 21% + no gravado)"), ("iva", "IVA 21%"), ("p_iva", "Percepción de IVA"),
-                       ("p_iibb", "Percepción de IIBB")):
-            cuentas[k] = st.text_input(rot, value=CUENTAS_DEFECTO[k], key=f"lt_cta_{k}")
-        for p in res["Procesadora"]:
-            cuentas["prov_" + p] = st.text_input(f"Proveedor {p}", value=f"{CUENTAS_DEFECTO['prov']} - {p}",
-                                                 key=f"lt_cta_prov_{p}")
-    cuentas = {k: s.get(f"lt_cta_{k}", v) for k, v in CUENTAS_DEFECTO.items() if k != "prov"} | {
-        "prov_" + p: s.get(f"lt_cta_prov_{p}", f"{CUENTAS_DEFECTO['prov']} - {p}") for p in res["Procesadora"]}
+    st.subheader("Asiento: factura de gastos contra deudores por ventas")
+    plan = plan_del_cliente(cliente) if cliente else []
+    cuentas = {}
+    conceptos = (("gasto", "Gasto (BI 21% + no gravado)"), ("iva", "IVA 21%"), ("p_iva", "Percepción de IVA"),
+                 ("p_iibb", "Percepción de IIBB"), ("deudores", "Deudores por ventas (Haber)"))
+    with st.expander("Cuentas del asiento", expanded=bool(plan)):
+        if plan:
+            st.caption(f"Plan de cuentas de **{cliente}** ({len(plan)} cuentas). Se sugiere una cuenta sólo cuando hay "
+                       "una única coincidencia; si no, elegila vos.")
+            for k, rot in conceptos:
+                sug = sugerir_cuenta(plan, k)
+                op = [SIN_CUENTA] + plan
+                cuentas[k] = st.selectbox(rot, op, index=op.index(sug) if sug else 0, key=f"lt_cta_{k}_{cliente}")
+        else:
+            st.caption("No encontré el plan de cuentas de este cliente: escribí los nombres tal cual figuran en su plan.")
+            for k, rot in conceptos:
+                cuentas[k] = st.text_input(rot, value=CUENTAS_DEFECTO[k], key=f"lt_cta_{k}_{cliente or 'x'}")
+    faltan = [rot for k, rot in conceptos if cuentas.get(k) in (None, "", SIN_CUENTA)]
+    if faltan:
+        st.warning("Falta elegir cuenta para: " + ", ".join(faltan))
     asi = armar_asiento(res, cuentas)
     st.dataframe(asi, hide_index=True, **_STRETCH,
                  column_config={c: st.column_config.NumberColumn(c, format="%.2f") for c in ("Debe", "Haber")})
