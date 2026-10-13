@@ -1084,7 +1084,7 @@ _OTRO = "Otro (escribir a mano)"
 
 def _nombres_clientes() -> list[str]:
     try:
-        import db
+        import database as db
         return sorted({str(c.get("nombre") or "").strip() for c in db.listar_clientes()} - {""})
     except Exception:
         return []
