@@ -77,6 +77,7 @@ informacion sobre tango/
 !plantillas/
 !plantillas/**
 !plantillas/**/*.xlsx
+!plantillas/**/*.pdf
 
 # Template vacío Tango (Streamlit Cloud / export asientos)
 !Asientos contables VACIO PARA LLENAR E IMPORTAR.xlsx
