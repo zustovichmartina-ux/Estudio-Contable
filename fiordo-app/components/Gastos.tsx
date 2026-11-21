@@ -62,14 +62,14 @@ export default function Gastos({ r, config, modo, guardarGastos, guardarParametr
           <div className="kpis" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>
             <div className="campo"><label htmlFor="p-com">Comisiones tarjetas y QR (%)</label><input id="p-com" className="input r" type="number" step="0.1" inputMode="decimal" value={p.comisionPct} onChange={(e) => setP({ ...p, comisionPct: Number(e.target.value) || 0 })} /></div>
             <div className="campo"><label htmlFor="p-iibb">Ingresos brutos (%)</label><input id="p-iibb" className="input r" type="number" step="0.1" inputMode="decimal" value={p.iibbPct} onChange={(e) => setP({ ...p, iibbPct: Number(e.target.value) || 0 })} /></div>
-            <div className="campo"><label htmlFor="p-dias">Días que abre en el mes</label><input id="p-dias" className="input r" type="number" min={1} max={31} inputMode="numeric" value={p.diasApertura} onChange={(e) => setP({ ...p, diasApertura: Math.max(1, Math.min(31, Number(e.target.value) || 1)) })} /></div>
+            <div className="campo"><label htmlFor="p-dias">Días que cierra en el mes</label><input id="p-dias" className="input r" type="number" min={0} max={30} inputMode="numeric" value={p.diasCerrados} onChange={(e) => setP({ ...p, diasCerrados: Math.max(0, Math.min(30, Number(e.target.value) || 0)) })} /></div>
             <div className="campo"><label htmlFor="p-def">Costo estimado si falta receta (%)</label><input id="p-def" className="input r" type="number" step="1" inputMode="decimal" value={p.costoDefectoPct} onChange={(e) => setP({ ...p, costoDefectoPct: Number(e.target.value) || 0 })} /></div>
             <div className="campo"><label htmlFor="p-min">Margen mínimo aceptable (%)</label><input id="p-min" className="input r" type="number" step="1" inputMode="decimal" value={p.margenMinimoPct} onChange={(e) => setP({ ...p, margenMinimoPct: Number(e.target.value) || 0 })} /></div>
             <div className="campo"><label htmlFor="p-nombre">Nombre del local</label><input id="p-nombre" className="input" value={nombre} onChange={(e) => setNombre(e.target.value)} /></div>
           </div>
           <div className="fila" style={{ marginTop: 12 }}>
             <button className="btn" onClick={() => { guardarParametros(p, nombre); avisar("Datos guardados"); }}>Guardar</button>
-            <button className="btn sec" onClick={() => setP({ ...p, diasApertura: diasDelMes(r.mes) })}>Abre todos los días ({diasDelMes(r.mes)})</button>
+            <span className="small muted">Abre {r.diasApertura} de {diasDelMes(r.mes)} días en {nombreMes(r.mes).split(" ")[0].toLowerCase()}.</span>
           </div>
           <div className="formula aviso info" style={{ marginTop: 14 }}>
             <strong>Punto de equilibrio</strong> = gastos fijos ÷ margen de contribución<br />

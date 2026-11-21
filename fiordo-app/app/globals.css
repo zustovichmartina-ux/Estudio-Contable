@@ -1,51 +1,54 @@
 /*
- * Estilo de Fiordo Café — PROVISORIO hasta tener el estilo real.
- * Para cambiar la marca: tocar solo los tokens de :root (y los de modo oscuro) y lib/tema.ts.
+ * Identidad de Fiordo Café (relevada del Instagram @fiordocafe):
+ * marrón #762303, crema #FFEEDA / #FFEDD9, terracota #A0553A, beige #E4E0C7, texto #3B1A0C.
+ * Títulos en Quicksand (la más parecida al logo), textos en Montserrat.
  * Layout: una columna en el celular con barra de pestañas abajo; en la compu, barra arriba y grillas.
  */
 :root {
-  --bg: #f2f5f6;
-  --surface: #ffffff;
-  --surface-2: #e9eff1;
-  --ink: #15232b;
-  --muted: #5e6f78;
-  --line: #d6e0e4;
-  --brand: #1e4a5c;
-  --brand-ink: #ffffff;
-  --brand-soft: #e4eef1;
-  --accent: #b5794a;
-  --ok: #2e8049;
-  --ok-soft: #e2f2e7;
-  --warn: #a8740c;
-  --warn-soft: #fbf0d9;
-  --bad: #bc3b2c;
-  --bad-soft: #fbe5e2;
-  --bar-empty: #cfd9dd;
-  --font-display: "Outfit", "Segoe UI", system-ui, sans-serif;
-  --font-body: "Inter", "Segoe UI", system-ui, sans-serif;
-  --radius: 14px;
+  --bg: #fff5ea;
+  --surface: #fffdf9;
+  --surface-2: #ffedd9;
+  --ink: #3b1a0c;
+  --muted: #7a5847;
+  --line: #ecdac6;
+  --brand: #762303;
+  --brand-ink: #ffeeda;
+  --brand-soft: #ffedd9;
+  --accent: #a0553a;
+  --beige: #e4e0c7;
+  --ok: #4c7a34;
+  --ok-soft: #e8f0dc;
+  --warn: #a86f0c;
+  --warn-soft: #fbedd2;
+  --bad: #c0392b;
+  --bad-soft: #fbe2dc;
+  --bar-empty: #e8d6c3;
+  --font-display: "Quicksand", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Montserrat", "Segoe UI", system-ui, sans-serif;
+  --radius: 16px;
   --nav-h: 64px;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0f1a1f;
-    --surface: #172329;
-    --surface-2: #1d2c33;
-    --ink: #e9f0f2;
-    --muted: #94a6ae;
-    --line: #2a3b43;
-    --brand: #6fb3c9;
-    --brand-ink: #0f1a1f;
-    --brand-soft: #1c323b;
-    --accent: #d39a6a;
-    --ok: #5cc47b;
-    --ok-soft: #17301f;
-    --warn: #e3b545;
-    --warn-soft: #362c12;
-    --bad: #ef6f5f;
-    --bad-soft: #3a1d19;
-    --bar-empty: #33464e;
+    --bg: #1c110b;
+    --surface: #271910;
+    --surface-2: #332117;
+    --ink: #ffeeda;
+    --muted: #c7a994;
+    --line: #47301f;
+    --brand: #f0b48f;
+    --brand-ink: #1c110b;
+    --brand-soft: #3a2418;
+    --accent: #d98c6b;
+    --beige: #4a4231;
+    --ok: #8cc46f;
+    --ok-soft: #22301a;
+    --warn: #e6b74a;
+    --warn-soft: #3a2c12;
+    --bad: #f07b69;
+    --bad-soft: #3d1c16;
+    --bar-empty: #47301f;
     color-scheme: dark;
   }
 }
@@ -63,6 +66,7 @@ body {
 }
 h1, h2, h3 { font-family: var(--font-display); margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
 h1 { font-size: 22px; font-weight: 700; }
+.logo { width: 40px; height: 40px; flex: none; }
 h2 { font-size: 18px; font-weight: 600; }
 h3 { font-size: 15px; font-weight: 600; }
 p { margin: 0; }
@@ -79,10 +83,10 @@ button, input, select { font: inherit; color: inherit; }
   background: var(--brand); color: var(--brand-ink);
   padding: calc(env(safe-area-inset-top, 0px) + 12px) max(16px, env(safe-area-inset-right, 0px)) 12px max(16px, env(safe-area-inset-left, 0px));
 }
-.top-in { max-width: 1100px; margin: 0 auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.marca { display: flex; align-items: center; gap: 10px; margin-right: auto; }
-.marca img { width: 32px; height: 32px; border-radius: 8px; }
-.marca h1 { font-size: 18px; color: var(--brand-ink); }
+.top-in { max-width: 1100px; margin: 0 auto; display: flex; align-items: center; gap: 10px; }
+.marca { display: flex; align-items: center; gap: 10px; margin-right: auto; min-width: 0; }
+@media (max-width: 520px) { .top .marca span { display: none; } .top .chip { display: none; } }
+.marca h1 { font-size: 21px; color: var(--brand-ink); font-weight: 700; letter-spacing: 0; text-transform: lowercase; }
 .marca span { font-size: 12px; opacity: 0.8; display: block; line-height: 1.2; }
 .mes-sel {
   background: color-mix(in srgb, var(--brand-ink) 14%, transparent); color: var(--brand-ink);
@@ -128,6 +132,8 @@ button, input, select { font: inherit; color: inherit; }
 .semaforo { border-radius: var(--radius); padding: 20px; display: flex; flex-direction: column; gap: 12px; border: 1px solid transparent; }
 .semaforo.ok { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 30%, transparent); }
 .semaforo.warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 30%, transparent); }
+.semaforo.neutro { background: var(--surface-2); border-color: var(--line); }
+.neutro .luz { background: var(--accent); box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 22%, transparent); }
 .semaforo.bad { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 30%, transparent); }
 .luz { width: 14px; height: 14px; border-radius: 50%; display: inline-block; flex: none; }
 .ok .luz { background: var(--ok); box-shadow: 0 0 0 5px color-mix(in srgb, var(--ok) 22%, transparent); }

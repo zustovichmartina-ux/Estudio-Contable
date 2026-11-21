@@ -8,9 +8,9 @@ Se usa desde la compu y desde el celular. Las ventas se cargan desde el Excel qu
 | Pestaña | Para qué sirve |
 |---|---|
 | **Hoy** | Semáforo del último día, avance del mes contra el punto de equilibrio, proyección, margen de seguridad, ventas por día y por día de la semana. |
-| **Cargar** | Subir el Excel/CSV de ventas. Detecta solo la fila de títulos y las columnas (fecha, artículo, cantidad, importe, medio de pago, ticket); se pueden corregir antes de guardar. Si un día ya estaba cargado, se reemplaza (no se duplica). |
-| **Productos** | Margen y aporte de cada producto. Acá se carga el **costo de receta** de cada uno. |
-| **Gastos** | Gastos fijos del mes, comisiones, ingresos brutos y días de apertura. |
+| **Cargar** | Subir el Excel de ventas. Reconoce directo el **Detalle de Transacciones** de Bistrosoft; para otros archivos detecta la fila de títulos y las columnas, y se pueden corregir antes de guardar. Si un día ya estaba cargado, se reemplaza (no se duplica). |
+| **Productos** | Margen y aporte de cada producto. Costo de receta uno por uno, o todos juntos: **Bajar planilla de costos** → completar en Excel → **Subir costos** (acepta también el reporte "Costo de Mercaderías" de Bistrosoft). |
+| **Gastos** | Gastos fijos del mes, comisiones, ingresos brutos y días que cierra el local. |
 | **Reportes** | Informe mensual en **PDF**, detalle en **Excel** y aviso listo para mandar por **WhatsApp**. |
 
 Punto de equilibrio = gastos fijos ÷ margen de contribución, donde margen de contribución = 1 − (mercadería + comisiones + ingresos brutos).
@@ -38,11 +38,17 @@ Sin el paso 4, cada navegador guarda sus propios datos (lo que cargues en la com
 
 ## Cómo sacar el Excel de Bistrosoft
 
-En Bistro Web (`webaccess.bistrosoft.com`) → **Reportes / Ventas** → reporte de **ventas por artículo** o
-**detalle de ventas** → rango de fechas del mes → **Exportar a Excel**. Subirlo en la pestaña **Cargar**.
+En Bistro Web (`webaccess.bistrosoft.com`) exportar el reporte **Detalle de Transacciones** del mes a Excel
+(archivo `DetalleDeTransacciones_FIORDO_CAFÉ_-_....xlsx`) y subirlo en la pestaña **Cargar**.
 
-Lo ideal es una fila por artículo vendido con fecha, cantidad e importe (si trae medio de pago y número
-de ticket, también se usan). En `ejemplo/ventas_ejemplo_noviembre.xlsx` hay un archivo inventado con ese formato.
+Cómo se lee ese reporte:
+- Cada ticket tiene una fila de encabezado (`Venta`, `Comanda`, `Venta (Multipago)`) con el total, y debajo sus líneas.
+- Se suman las líneas `- ITEM` y `- COMBO` (el precio ya es el total de la línea) y los descuentos
+  (`- ITEM DESCUENTO`, `- ITEM DESCUENTO POR PRODUCTO`). Los `- COMBO ITEM` van en $0 y se ignoran.
+- Los movimientos de caja (apertura, retiro, depósito, cierre, ajustes) no son ventas y se ignoran.
+- Probado con octubre 2026: 1.432 tickets, todos cuadran contra su encabezado.
+
+En `ejemplo/ventas_ejemplo_noviembre.xlsx` hay un archivo inventado de formato genérico para probar.
 
 ## Cambiar el estilo de la marca
 

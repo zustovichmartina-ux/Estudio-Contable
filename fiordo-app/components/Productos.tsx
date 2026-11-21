@@ -3,10 +3,21 @@ import { useState } from "react";
 import { Resultado } from "@/lib/motor";
 import { corto, pct, pesos } from "@/lib/formato";
 import { norm } from "@/lib/tipos";
+import { leerCostos } from "@/lib/lector";
+import { planillaCostos } from "@/lib/reportes";
+import { IcoCargar, IcoDescarga } from "./Iconos";
 
-type Props = { r: Resultado; costos: Record<string, number>; margenMinimo: number; cambiarCosto: (articulo: string, costo: number | null) => void };
+type Props = {
+  r: Resultado;
+  costos: Record<string, number>;
+  margenMinimo: number;
+  nombreLocal: string;
+  cambiarCosto: (articulo: string, costo: number | null) => void;
+  importarCostos: (lista: { articulo: string; costo: number }[]) => void;
+};
 
-export default function Productos({ r, costos, margenMinimo, cambiarCosto }: Props) {
+export default function Productos({ r, costos, margenMinimo, nombreLocal, cambiarCosto, importarCostos }: Props) {
+  const [msg, setMsg] = useState<{ tipo: "ok" | "bad"; texto: string } | null>(null);
   const [soloSinCosto, setSoloSinCosto] = useState(false);
   const [busca, setBusca] = useState("");
   if (!r.hayDatos) return <div className="card vacio"><h2>Sin productos todavía</h2><p className="muted">Aparecen solos cuando cargás el Excel de ventas.</p></div>;
@@ -23,6 +34,35 @@ export default function Productos({ r, costos, margenMinimo, cambiarCosto }: Pro
         <p className="muted small" style={{ marginBottom: 12 }}>
           Cargá el <strong>costo de receta</strong> de cada producto: lo que cuestan los insumos de una unidad. Los productos sin costo se estiman y se marcan con un asterisco. Por debajo de {margenMinimo} % de margen se marcan para revisar el precio.
         </p>
+        <div className="aviso info" style={{ marginBottom: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+          <span><strong>Cargar muchos costos juntos:</strong> bajá la planilla con todos los productos, completá la columna Costo en Excel y subila. También acepta el reporte &quot;Costo de mercaderías&quot; de Bistrosoft.</span>
+          <div className="fila">
+            <button className="btn sec" onClick={() => planillaCostos(r, costos, nombreLocal)}><IcoDescarga /> Bajar planilla de costos</button>
+            <label className="btn" style={{ position: "relative" }}>
+              <IcoCargar /> Subir costos
+              <input id="costos-archivo" type="file" accept=".xlsx,.xls,.csv" style={{ position: "absolute", opacity: 0, width: 1, height: 1 }}
+                onChange={async (e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = "";
+                  if (!f) return;
+                  try {
+                    const lista = await leerCostos(f);
+                    if (!lista.length) {
+                      setMsg({ tipo: "bad", texto: "El archivo no tiene ningún costo cargado. Si es el reporte de Bistrosoft, primero hay que cargar los costos allá; si no, completá la columna Costo de la planilla." });
+                      return;
+                    }
+                    importarCostos(lista);
+                    const vendidos = new Set(r.productos.map((p) => norm(p.articulo)));
+                    const coinciden = lista.filter((x) => vendidos.has(norm(x.articulo))).length;
+                    setMsg({ tipo: "ok", texto: `Se cargaron ${lista.length} costos (${coinciden} coinciden con productos vendidos este mes).` });
+                  } catch (err) {
+                    setMsg({ tipo: "bad", texto: (err as Error).message });
+                  }
+                }} />
+            </label>
+          </div>
+          {msg && <span className={`aviso ${msg.tipo}`} role="status">{msg.texto}</span>}
+        </div>
         <div className="fila" style={{ marginBottom: 12 }}>
           <input className="input" style={{ maxWidth: 260 }} placeholder="Buscar producto" aria-label="Buscar producto" value={busca} onChange={(e) => setBusca(e.target.value)} />
           <label className="fila small" style={{ gap: 6 }}>

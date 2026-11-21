@@ -1,17 +1,17 @@
 /**
- * Colores de marca usados fuera del CSS (PDF y color de la barra del celular).
- * PROVISORIOS hasta tener el estilo real de Fiordo Café: cambiar acá y en app/globals.css (:root).
+ * Colores de Fiordo Café usados fuera del CSS (PDF y barra del celular).
+ * Mantener alineados con los tokens de app/globals.css.
  */
 export const MARCA = {
-  primario: "#1E4A5C", // azul fiordo
-  primarioClaro: "#E4EEF1",
-  acento: "#B5794A", // café
-  tinta: "#15232B",
-  gris: "#5E6F78",
-  linea: "#D6E0E4",
-  ok: "#2E8049",
-  alerta: "#B7800F",
-  mal: "#BC3B2C",
+  primario: "#762303", // marrón del logo
+  primarioClaro: "#FFEDD9", // crema
+  acento: "#A0553A", // terracota de promos
+  tinta: "#3B1A0C",
+  gris: "#7A5847",
+  linea: "#ECDAC6",
+  ok: "#4C7A34",
+  alerta: "#A86F0C",
+  mal: "#C0392B",
 };
 
 export const hexARgb = (hex: string): [number, number, number] => {

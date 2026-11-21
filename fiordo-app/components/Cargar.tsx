@@ -64,8 +64,8 @@ export default function Cargar({ meses, guardar }: Props) {
     }
   }
 
-  const faltaFecha = hoja && hoja.mapeo.fecha < 0 && !fechaFija;
-  const faltaImporte = hoja && hoja.mapeo.importe < 0;
+  const faltaFecha = hoja && !lectura?.formato && hoja.mapeo.fecha < 0 && !fechaFija;
+  const faltaImporte = hoja && !lectura?.formato && hoja.mapeo.importe < 0;
 
   return (
     <>
@@ -105,7 +105,7 @@ export default function Cargar({ meses, guardar }: Props) {
               <label htmlFor="fila-enc">Fila de títulos</label>
               <input id="fila-enc" className="input" type="number" min={1} value={hoja.filaEncabezado + 1} onChange={(e) => cambiarEncabezado(+e.target.value - 1)} />
             </div>
-            {CAMPOS.map((c) => (
+            {!lectura.formato && CAMPOS.map((c) => (
               <div className="campo" key={c.campo}>
                 <label htmlFor={`map-${c.campo}`}>{c.etiqueta}{c.obligatorio ? " *" : ""}</label>
                 <select id={`map-${c.campo}`} className="input" value={hoja.mapeo[c.campo]} onChange={(e) => cambiarMapeo(c.campo, +e.target.value)}>
@@ -114,7 +114,13 @@ export default function Cargar({ meses, guardar }: Props) {
                 </select>
               </div>
             ))}
-            {hoja.mapeo.fecha < 0 && (
+            {lectura.formato && (
+              <div className="campo" style={{ gridColumn: "1 / -1" }}>
+                <span className="pill ok" style={{ alignSelf: "flex-start", fontSize: 13, padding: "4px 12px" }}>Formato reconocido: {lectura.formato}</span>
+                <span className="small muted">Se toman los artículos, combos y descuentos de cada ticket. Los movimientos de caja (apertura, retiros, cierre) no son ventas y se ignoran.</span>
+              </div>
+            )}
+            {!lectura.formato && hoja.mapeo.fecha < 0 && (
               <div className="campo">
                 <label htmlFor="fecha-fija">Fecha de todas las filas *</label>
                 <input id="fecha-fija" className="input" type="date" value={fechaFija} onChange={(e) => setFechaFija(e.target.value)} />
@@ -130,7 +136,7 @@ export default function Cargar({ meses, guardar }: Props) {
               <div className="aviso info">
                 {lectura.lineas.length ? (
                   <>Se leyeron <strong>{lectura.lineas.length.toLocaleString("es-AR")} líneas</strong> por <strong>{pesos(total)}</strong>, del {fechaCorta(lectura.desde!)} al {fechaCorta(lectura.hasta!)}.
-                  {lectura.descartadas > 0 && <> {lectura.descartadas === 1 ? "Se ignoró 1 fila" : `Se ignoraron ${lectura.descartadas} filas`} sin fecha o importe (títulos, totales).</>}</>
+                  {lectura.descartadas > 0 && !lectura.formato && <> {lectura.descartadas === 1 ? "Se ignoró 1 fila" : `Se ignoraron ${lectura.descartadas} filas`} sin fecha o importe (títulos, totales).</>}</>
                 ) : (
                   <>No encontré filas con fecha e importe válidos. Revisá la fila de títulos y las columnas elegidas.</>
                 )}

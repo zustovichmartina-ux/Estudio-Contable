@@ -7,6 +7,7 @@ import { CONFIG_INICIAL, Config, Datos, Gasto, LineaVenta, Parametros, norm } fr
 import { CATALOGO_EJEMPLO, GASTOS_EJEMPLO, ventasEjemplo } from "@/lib/ejemplo";
 import { nombreMes } from "@/lib/formato";
 import Hoy from "@/components/Hoy";
+import Logo from "@/components/Logo";
 import Cargar from "@/components/Cargar";
 import Productos from "@/components/Productos";
 import Gastos from "@/components/Gastos";
@@ -107,10 +108,10 @@ export default function App() {
       <header className="top">
         <div className="top-in">
           <div className="marca">
-            <img src="/icon.svg" alt="" />
+            <Logo />
             <div>
-              <h1>{datos.config.nombreLocal || "Fiordo Café"}</h1>
-              <span>Punto de equilibrio</span>
+              <h1>fiordo</h1>
+              <span>Números del café · punto de equilibrio</span>
             </div>
           </div>
           {datos.meses[mes]?.archivos.includes("datos de ejemplo") && <span className="chip">Datos de ejemplo</span>}
@@ -139,6 +140,14 @@ export default function App() {
             r={r}
             costos={datos.config.costos}
             margenMinimo={datos.config.parametros.margenMinimoPct}
+            nombreLocal={datos.config.nombreLocal}
+            importarCostos={(lista) =>
+              actualizarConfig((c) => {
+                const costos = { ...c.costos };
+                for (const x of lista) costos[norm(x.articulo)] = x.costo;
+                return { ...c, costos };
+              })
+            }
             cambiarCosto={(articulo, costo) =>
               actualizarConfig((c) => {
                 const costos = { ...c.costos };

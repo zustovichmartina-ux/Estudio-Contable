@@ -226,3 +226,21 @@ export async function reporteExcel(r: Resultado, nombreLocal: string) {
   const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
   descargar(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), `punto_equilibrio_${slug(nombreLocal)}_${r.mes}.xlsx`);
 }
+
+/** Planilla para completar el costo de receta de cada producto y volver a subirla. */
+export async function planillaCostos(r: Resultado, costos: Record<string, number>, nombreLocal: string) {
+  const XLSX = await import("xlsx");
+  const { norm } = await import("./tipos");
+  const filas: (string | number)[][] = [
+    ["Producto", "Precio promedio de venta", "Unidades vendidas en el mes", "Costo"],
+    ...[...r.productos]
+      .sort((a, b) => b.venta - a.venta)
+      .map((p) => [p.articulo, Math.round(p.precioProm), Math.round(p.unidades), costos[norm(p.articulo)] ?? ""]),
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(filas);
+  ws["!cols"] = [{ wch: 32 }, { wch: 22 }, { wch: 24 }, { wch: 12 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Costos");
+  const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+  descargar(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), `costos_${slug(nombreLocal)}.xlsx`);
+}

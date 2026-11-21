@@ -3,7 +3,7 @@
   "short_name": "Fiordo",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#F2F5F6",
-  "theme_color": "#1E4A5C",
+  "background_color": "#FFF5EA",
+  "theme_color": "#762303",
   "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
 }

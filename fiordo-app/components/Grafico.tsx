@@ -4,7 +4,7 @@ import { Resultado } from "@/lib/motor";
 import { corto, fechaCorta, pesos } from "@/lib/formato";
 
 /** Barras de venta por día (verde = cubrió, rojo = no) contra la línea de lo necesario. */
-export default function Grafico({ r }: { r: Resultado }) {
+export default function Grafico({ r, neutro = false }: { r: Resultado; neutro?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const [w, setW] = useState(640);
   useEffect(() => {
@@ -43,7 +43,7 @@ export default function Grafico({ r }: { r: Resultado }) {
           return (
             <g key={dia}>
               {d ? (
-                <rect x={x} y={y(d.venta)} width={bwi} height={y(0) - y(d.venta)} rx={2} fill={d.cubrio ? "var(--ok)" : "var(--bad)"}>
+                <rect x={x} y={y(d.venta)} width={bwi} height={y(0) - y(d.venta)} rx={2} fill={neutro ? "var(--accent)" : d.cubrio ? "var(--ok)" : "var(--bad)"}>
                   <title>{`${fechaCorta(d.fecha)}: ${pesos(d.venta)}`}</title>
                 </rect>
               ) : (

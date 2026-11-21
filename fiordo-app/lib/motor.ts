@@ -1,5 +1,5 @@
 import { Config, Gasto, MesVentas, norm } from "./tipos";
-import { DIAS_SEMANA, corto, diaSemana, fechaCorta, pct } from "./formato";
+import { DIAS_SEMANA, corto, diaSemana, diasDelMes, fechaCorta, pct } from "./formato";
 
 export type Dia = { fecha: string; venta: number; tickets: number; cubrio: boolean; diferencia: number };
 export type Producto = {
@@ -58,6 +58,7 @@ export function calcular(mesVentas: MesVentas | undefined, mes: string, config: 
   const gastos = gastosDelMes(config, mes);
   const fijos = gastos.reduce((s, g) => s + (Number(g.importe) || 0), 0);
   const otrosVar = (p.comisionPct + p.iibbPct) / 100;
+  const diasApertura = Math.max(1, diasDelMes(mes) - (p.diasCerrados || 0));
   const items = mesVentas?.items ?? [];
 
   const porDia = new Map<string, number>();
@@ -71,7 +72,8 @@ export function calcular(mesVentas: MesVentas | undefined, mes: string, config: 
     const clave = norm(it.articulo);
     const cu = config.costos[clave];
     const tieneCosto = typeof cu === "number" && cu > 0;
-    const costo = tieneCosto ? cu * it.cantidad : (it.importe * p.costoDefectoPct) / 100;
+    // un descuento baja la venta pero no el costo de la mercadería
+    const costo = it.importe <= 0 ? 0 : tieneCosto ? cu * it.cantidad : (it.importe * p.costoDefectoPct) / 100;
     costoTotal += costo;
     const prev = porProd.get(clave) ?? { articulo: config.nombresArticulos[clave] ?? it.articulo, unidades: 0, venta: 0, costo: 0, conCosto: true };
     prev.unidades += it.cantidad;
@@ -85,7 +87,7 @@ export function calcular(mesVentas: MesVentas | undefined, mes: string, config: 
   const variablesPct = insumosPct + otrosVar;
   const mc = 1 - variablesPct;
   const peMes = mc > 0 ? fijos / mc : Infinity;
-  const peDia = p.diasApertura > 0 ? peMes / p.diasApertura : Infinity;
+  const peDia = peMes / diasApertura;
 
   const dias: Dia[] = [...porDia.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
@@ -98,6 +100,7 @@ export function calcular(mesVentas: MesVentas | undefined, mes: string, config: 
     }));
 
   const productos: Producto[] = [...porProd.values()]
+    .filter((x) => x.venta > 0)
     .map((x) => {
       const margen = x.venta ? 1 - x.costo / x.venta : 0;
       return {
@@ -127,9 +130,9 @@ export function calcular(mesVentas: MesVentas | undefined, mes: string, config: 
 
   const ultimo = dias[dias.length - 1];
   const promedioDia = dias.length ? ventasMes / dias.length : 0;
-  const proyeccion = promedioDia * p.diasApertura;
+  const proyeccion = promedioDia * diasApertura;
   const falta = peMes - ventasMes;
-  const diasRestantes = Math.max(0, p.diasApertura - dias.length);
+  const diasRestantes = Math.max(0, diasApertura - dias.length);
   const ratio = ultimo && peDia ? ultimo.venta / peDia : 0;
   const totalTickets = dias.reduce((s, d) => s + d.tickets, 0);
 
@@ -144,7 +147,7 @@ export function calcular(mesVentas: MesVentas | undefined, mes: string, config: 
     mc,
     peMes,
     peDia,
-    diasApertura: p.diasApertura,
+    diasApertura,
     dias,
     productos,
     semana,
@@ -167,13 +170,13 @@ export function avisoWhatsapp(r: Resultado, nombreLocal: string): string {
   if (!r.hayDatos || !r.ultimo) return "Todavía no hay ventas cargadas para este mes.";
   const u = r.ultimo;
   const l: string[] = [
-    `Buen día. Resumen de ${fechaCorta(u.fecha)}${nombreLocal ? ` en ${nombreLocal}` : ""}:`,
+    `Buen día ☕️ Resumen de ${fechaCorta(u.fecha)}${nombreLocal ? ` en ${nombreLocal}` : ""}:`,
     `Vendiste ${corto(u.venta)}. Para cubrir los gastos necesitás ${corto(r.peDia)} por día. ` +
-      (u.cubrio ? "Día cubierto." : `Faltaron ${corto(-u.diferencia)}.`),
+      (u.cubrio ? "Día cubierto 🤎" : `Faltaron ${corto(-u.diferencia)}.`),
     "",
     `En el mes llevás ${corto(r.ventasMes)} de ${corto(r.peMes)} necesarios.`,
   ];
-  if (r.falta <= 0) l.push("Ya cubriste todos los gastos del mes.");
+  if (r.falta <= 0) l.push("Ya cubriste todos los gastos del mes ✨");
   else if (r.diasRestantes)
     l.push(`Te faltan ${corto(r.falta)}: unos ${corto(r.necesarioRestante)} por día en los ${r.diasRestantes} días que quedan.`);
   const flojo = [...r.semana].filter((d) => d.vsNecesario < 0).sort((a, b) => a.vsNecesario - b.vsNecesario)[0];

@@ -112,9 +112,60 @@ export function aNumero(v: unknown): number {
   return parseFloat(s);
 }
 
-export type ResultadoLectura = { lineas: LineaVenta[]; descartadas: number; desde?: string; hasta?: string };
+export type ResultadoLectura = { lineas: LineaVenta[]; descartadas: number; desde?: string; hasta?: string; formato?: string };
+
+// ---------------------------------------------------------------- Bistrosoft: Detalle de transacciones
+/**
+ * Reporte "Detalle de Transacciones" de Bistro Web. Cada ticket trae:
+ *  - una fila de encabezado (Venta / Comanda / Venta (Multipago)) con el total del ticket e Item "-"
+ *  - filas "- ITEM " y "- COMBO" con el importe total de la línea (no el unitario)
+ *  - filas "- COMBO ITEM" en $0 (componentes del combo: se ignoran)
+ *  - descuentos: "- ITEM DESCUENTO POR PRODUCTO" (sobre un artículo) e "- ITEM DESCUENTO" (sobre el ticket)
+ * Además hay movimientos de caja (apertura, retiro, depósito, cierre) que NO son ventas.
+ * Las líneas suman exactamente el total de cada ticket, así que usamos las líneas y no los encabezados.
+ */
+export function esBistrosoftDetalle(h: Hoja): boolean {
+  const n = h.encabezados.map((e) => norm(e));
+  return n.includes("tipo transaccion") && n.includes("item") && n.includes("nro ticket");
+}
+
+const tituloArticulo = (s: string) => {
+  const sinSku = s.replace(/\s*\(\d+\)\s*$/, "").trim();
+  const min = sinSku.toLocaleLowerCase("es-AR");
+  return min.charAt(0).toLocaleUpperCase("es-AR") + min.slice(1);
+};
+
+function convertirBistrosoft(h: Hoja): ResultadoLectura {
+  const col = (nombre: string) => h.encabezados.findIndex((e) => norm(e) === nombre);
+  const c = { fecha: col("fecha"), ticket: col("nro ticket"), tipo: col("tipo transaccion"), precio: col("precio"), item: col("item"), cant: col("cantidad"), medio: col("medio de pago") };
+  const lineas: LineaVenta[] = [];
+  let descartadas = 0;
+  for (const fila of h.filas.slice(h.filaEncabezado + 1)) {
+    const tipo = String(fila[c.tipo] ?? "").trim();
+    const fecha = aFechaISO(fila[c.fecha]);
+    const importe = aNumero(fila[c.precio]);
+    const esLinea = tipo === "- ITEM" || tipo === "- COMBO" || tipo.startsWith("- ITEM DESCUENTO");
+    if (!esLinea || !fecha || !isFinite(importe)) {
+      descartadas++; // encabezados de ticket, componentes de combo y movimientos de caja
+      continue;
+    }
+    const item = String(fila[c.item] ?? "-").trim();
+    const esDescuento = tipo.startsWith("- ITEM DESCUENTO");
+    lineas.push({
+      fecha,
+      articulo: item === "-" ? "Descuentos generales" : tituloArticulo(item),
+      cantidad: esDescuento ? 0 : aNumero(fila[c.cant]) || 0,
+      importe,
+      medio: c.medio >= 0 && fila[c.medio] != null ? tituloArticulo(String(fila[c.medio])).replace(/\bqr\b/gi, "QR") : undefined,
+      ticket: c.ticket >= 0 && fila[c.ticket] != null ? `${fecha}-${fila[c.ticket]}` : undefined,
+    });
+  }
+  const fechas = lineas.map((l) => l.fecha).sort();
+  return { lineas, descartadas, desde: fechas[0], hasta: fechas[fechas.length - 1], formato: "Detalle de transacciones de Bistrosoft" };
+}
 
 export function convertir(h: Hoja, fechaFija?: string): ResultadoLectura {
+  if (esBistrosoftDetalle(h)) return convertirBistrosoft(h);
   const m = h.mapeo;
   const lineas: LineaVenta[] = [];
   let descartadas = 0;
@@ -189,4 +240,26 @@ export function incorporar(meses: Record<string, MesVentas>, lineas: LineaVenta[
     };
   }
   return out;
+}
+
+// ---------------------------------------------------------------- costos de productos
+/**
+ * Lee una planilla de costos: la que descarga la app desde Productos, o el reporte
+ * "Costo de Mercaderías" de Bistrosoft (Nombre de Producto, Sku, Costo, Precio x Unidad).
+ */
+export async function leerCostos(archivo: File): Promise<{ articulo: string; costo: number }[]> {
+  const hojas = await leerArchivo(archivo);
+  for (const h of hojas) {
+    for (let i = 0; i < Math.min(h.filas.length, 20); i++) {
+      const enc = (h.filas[i] ?? []).map((c) => norm(String(c ?? "")));
+      const cP = enc.findIndex((e) => /producto|articulo|nombre/.test(e));
+      const cC = enc.findIndex((e) => /^costo/.test(e));
+      if (cP < 0 || cC < 0) continue;
+      return h.filas
+        .slice(i + 1)
+        .map((f) => ({ articulo: tituloArticulo(String(f[cP] ?? "")), costo: aNumero(f[cC]) }))
+        .filter((x) => x.articulo && isFinite(x.costo) && x.costo > 0);
+    }
+  }
+  throw new Error("No encontré columnas de producto y costo en el archivo.");
 }

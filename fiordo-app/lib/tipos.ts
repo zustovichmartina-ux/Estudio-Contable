@@ -23,7 +23,7 @@ export type Gasto = { concepto: string; importe: number };
 export type Parametros = {
   comisionPct: number; // tarjetas, QR, posnet
   iibbPct: number; // ingresos brutos
-  diasApertura: number; // días que abre en el mes
+  diasCerrados: number; // días del mes que el local no abre (feriados, vacaciones)
   costoDefectoPct: number; // artículos sin costo de receta
   margenMinimoPct: number; // por debajo se marca para revisar
 };
@@ -42,7 +42,7 @@ export type Datos = { config: Config; meses: Record<string, MesVentas> };
 export const PARAMETROS_INICIALES: Parametros = {
   comisionPct: 3.5,
   iibbPct: 3.0,
-  diasApertura: 30,
+  diasCerrados: 0,
   costoDefectoPct: 32,
   margenMinimoPct: 55,
 };

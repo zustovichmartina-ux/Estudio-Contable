@@ -19,9 +19,11 @@ export default function Hoy({ r, irA, probarEjemplo }: Props) {
     );
 
   const u = r.ultimo!;
+  const sinGastos = r.fijos <= 0;
   const escala = Math.max(r.peMes, r.proyeccion, r.ventasMes) * 1.05 || 1;
-  const veredicto =
-    r.estadoDia === "ok" ? `Cubriste los gastos del día, con ${corto(u.diferencia)} de sobra.`
+  const veredicto = sinGastos
+    ? "Cargá los gastos fijos para saber si este día cubrió los costos."
+    : r.estadoDia === "ok" ? `Cubriste los gastos del día, con ${corto(u.diferencia)} de sobra.`
     : r.estadoDia === "warn" ? `Quedaste cerca: faltaron ${corto(-u.diferencia)} para cubrir el día.`
     : `No alcanzó: faltaron ${corto(-u.diferencia)} para cubrir el día.`;
 
@@ -35,7 +37,7 @@ export default function Hoy({ r, irA, probarEjemplo }: Props) {
       )}
 
       <div className="grid-2">
-        <section className={`semaforo ${r.estadoDia}`} aria-label="Resultado del último día">
+        <section className={`semaforo ${sinGastos ? "neutro" : r.estadoDia}`} aria-label="Resultado del último día">
           <div className="fila" style={{ gap: 12 }}>
             <span className="luz" aria-hidden="true" />
             <span className="eyebrow">Último día cargado · {fechaCorta(u.fecha)}</span>
@@ -43,7 +45,7 @@ export default function Hoy({ r, irA, probarEjemplo }: Props) {
           <p className="veredicto">{veredicto}</p>
           <div className="cifras">
             <div><span className="eyebrow">Vendiste</span><span className="cifra num">{corto(u.venta)}</span></div>
-            <div><span className="eyebrow">Necesitás por día</span><span className="cifra num">{corto(r.peDia)}</span></div>
+            <div><span className="eyebrow">Necesitás por día</span><span className="cifra num">{sinGastos ? "–" : corto(r.peDia)}</span></div>
           </div>
         </section>
 
@@ -54,14 +56,16 @@ export default function Hoy({ r, irA, probarEjemplo }: Props) {
           </div>
           <div className="barra" role="img" aria-label={`Vendido ${pesos(r.ventasMes)} de ${pesos(r.peMes)} necesarios`}>
             <div className="barra-fill" style={{ width: `${Math.min(100, (r.ventasMes / escala) * 100)}%` }} />
-            {isFinite(r.peMes) && <div className="barra-marca" style={{ left: `${Math.min(100, (r.peMes / escala) * 100)}%` }} />}
+            {!sinGastos && isFinite(r.peMes) && <div className="barra-marca" style={{ left: `${Math.min(100, (r.peMes / escala) * 100)}%` }} />}
           </div>
           <div className="fila small muted" style={{ justifyContent: "space-between" }}>
             <span>{r.dias.length} de {r.diasApertura} días</span>
-            <span>Equilibrio: {corto(r.peMes)}</span>
+            <span>{sinGastos ? "Equilibrio: falta cargar gastos" : `Equilibrio: ${corto(r.peMes)}`}</span>
           </div>
           <p>
-            {r.falta <= 0 ? (
+            {sinGastos ? (
+              <>Promedio por día: <strong>{corto(r.promedioDia)}</strong>. Con los gastos fijos cargados vas a ver cuánto falta para cubrir el mes.</>
+            ) : r.falta <= 0 ? (
               <><strong>Ya cubriste los gastos del mes.</strong> Desde acá, cada venta deja {pct(r.mc, 0)} de ganancia antes de impuestos.</>
             ) : r.diasRestantes > 0 ? (
               <>Te faltan <strong>{corto(r.falta)}</strong>. En los {r.diasRestantes} días que quedan necesitás vender <strong>{corto(r.necesarioRestante)} por día</strong>.</>
@@ -73,12 +77,12 @@ export default function Hoy({ r, irA, probarEjemplo }: Props) {
       </div>
 
       <section className="kpis" aria-label="Indicadores">
-        <div className="kpi"><span className="eyebrow">Punto de equilibrio</span><span className="val num">{corto(r.peMes)}</span><span className="hint">Lo mínimo a vender en el mes</span></div>
+        <div className="kpi"><span className="eyebrow">Punto de equilibrio</span><span className="val num">{sinGastos ? "–" : corto(r.peMes)}</span><span className="hint">Lo mínimo a vender en el mes</span></div>
         <div className="kpi"><span className="eyebrow">Margen de contribución</span><span className="val num">{pct(r.mc)}</span><span className="hint">De cada $100, lo que queda para gastos fijos</span></div>
-        <div className="kpi"><span className="eyebrow">Proyección</span><span className="val num">{corto(r.proyeccion)}</span><span className="hint">Resultado estimado: {corto(r.resultadoProyectado)}</span></div>
+        <div className="kpi"><span className="eyebrow">Proyección</span><span className="val num">{corto(r.proyeccion)}</span><span className="hint">{sinGastos ? "Al ritmo actual, mes completo" : `Resultado estimado: ${corto(r.resultadoProyectado)}`}</span></div>
         <div className="kpi">
           <span className="eyebrow">Margen de seguridad</span>
-          <span className="val num" style={{ color: r.margenSeguridad >= 0.15 ? "var(--ok)" : r.margenSeguridad >= 0 ? "var(--warn)" : "var(--bad)" }}>{pct(r.margenSeguridad)}</span>
+          <span className="val num" style={{ color: sinGastos ? undefined : r.margenSeguridad >= 0.15 ? "var(--ok)" : r.margenSeguridad >= 0 ? "var(--warn)" : "var(--bad)" }}>{sinGastos ? "–" : pct(r.margenSeguridad)}</span>
           <span className="hint">Cuánto pueden caer las ventas sin perder</span>
         </div>
       </section>
@@ -86,13 +90,13 @@ export default function Hoy({ r, irA, probarEjemplo }: Props) {
       <section className="card">
         <div className="card-head">
           <h2>Ventas por día</h2>
-          <div className="leyenda">
+          {!sinGastos && <div className="leyenda">
             <span><i style={{ background: "var(--ok)" }} />Cubrió</span>
             <span><i style={{ background: "var(--bad)" }} />No llegó</span>
             <span><i style={{ background: "var(--ink)", height: 2 }} />Necesario</span>
-          </div>
+          </div>}
         </div>
-        <Grafico r={r} />
+        <Grafico r={r} neutro={sinGastos} />
       </section>
 
       <div className="grid-2">
@@ -106,7 +110,7 @@ export default function Hoy({ r, irA, probarEjemplo }: Props) {
                   <tr key={d.nombre}>
                     <td>{d.nombre}</td>
                     <td className="r num">{corto(d.promedio)}</td>
-                    <td className="r"><span className={`pill ${d.vsNecesario >= 0 ? "ok" : d.vsNecesario > -0.15 ? "warn" : "bad"}`}>{d.vsNecesario >= 0 ? "+" : ""}{pct(d.vsNecesario, 0)}</span></td>
+                    <td className="r">{sinGastos ? <span className="muted">–</span> : <span className={`pill ${d.vsNecesario >= 0 ? "ok" : d.vsNecesario > -0.15 ? "warn" : "bad"}`}>{d.vsNecesario >= 0 ? "+" : ""}{pct(d.vsNecesario, 0)}</span>}</td>
                   </tr>
                 ))}
               </tbody>
