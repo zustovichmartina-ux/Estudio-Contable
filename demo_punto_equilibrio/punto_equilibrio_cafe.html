@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>Punto de Equilibrio del Café</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -239,6 +240,7 @@ footer { font-size: 13px; color: var(--muted); }
     <div class="msg-grid">
       <div style="display:flex;flex-direction:column;gap:10px">
         <div class="row">
+          <button id="cargar-ejemplo" type="button">Cargar export de ejemplo</button>
           <label class="file">Subir CSV de ventas<input type="file" id="csv" accept=".csv,.txt"></label>
           <button class="ghost" id="reset" type="button">Volver al ejemplo</button>
         </div>
@@ -248,6 +250,11 @@ footer { font-size: 13px; color: var(--muted); }
 <pre>fecha;producto;cantidad;total
 21/11/2026;Cortado;38;144400
 21/11/2026;Medialuna;85;127500</pre></div>
+    </div>
+    <div id="preview-box" hidden style="margin-top:18px">
+      <h3 style="margin-bottom:6px">Así llegó el archivo <span class="muted" id="preview-info" style="font-weight:400"></span></h3>
+      <div class="table-wrap"><table id="preview"></table></div>
+      <p class="muted" style="font-size:13px;margin-top:8px">La herramienta usa fecha, artículo, cantidad e importe. Las demás columnas se ignoran.</p>
     </div>
   </section>
 
@@ -521,26 +528,52 @@ footer { font-size: 13px; color: var(--muted); }
     return rows;
   }
 
+  function mostrarPreview(txt, total) {
+    var lineas = txt.replace(/^﻿/, "").split(/\r?\n/).filter(function (l) { return l.trim(); });
+    var sep = (lineas[0].split(";").length >= lineas[0].split(",").length) ? ";" : ",";
+    var html = "";
+    lineas.slice(0, 7).forEach(function (l, i) {
+      var tag = i === 0 ? "th" : "td";
+      html += "<tr>" + l.split(sep).map(function (c) { var s = document.createElement("span"); s.textContent = c.replace(/^"|"$/g, ""); return "<" + tag + ">" + s.innerHTML + "</" + tag + ">"; }).join("") + "</tr>";
+    });
+    document.getElementById("preview").innerHTML = html;
+    document.getElementById("preview-info").textContent = "(primeras 6 de " + nf.format(total) + " líneas)";
+    document.getElementById("preview-box").hidden = false;
+  }
+
+  function cargarTexto(txt, nombre) {
+    var st = document.getElementById("csv-status");
+    try {
+      ventas = parseCSV(txt.replace(/^﻿/, ""));
+      st.textContent = "Cargadas " + nf.format(ventas.length) + " líneas de " + nombre + ". El tablero de arriba ya muestra estos datos.";
+      st.style.color = "var(--ok)";
+      document.getElementById("origen").textContent = "Datos de " + nombre;
+      mostrarPreview(txt, ventas.length);
+      render();
+    } catch (err) { st.textContent = err.message; st.style.color = "var(--bad)"; }
+  }
+
   document.getElementById("csv").addEventListener("change", function (e) {
-    var f = e.target.files[0], st = document.getElementById("csv-status");
+    var f = e.target.files[0];
     if (!f) return;
     var rd = new FileReader();
-    rd.onload = function () {
-      try {
-        ventas = parseCSV(String(rd.result));
-        st.textContent = "Cargadas " + ventas.length + " líneas de " + f.name + ".";
-        st.style.color = "var(--ok)";
-        document.getElementById("origen").textContent = "Datos de " + f.name;
-        render();
-      } catch (err) { st.textContent = err.message; st.style.color = "var(--bad)"; }
-    };
+    rd.onload = function () { cargarTexto(String(rd.result), f.name); };
     rd.readAsText(f);
+  });
+  document.getElementById("cargar-ejemplo").addEventListener("click", function () {
+    var st = document.getElementById("csv-status"), nombre = "ventas_bistrosoft_noviembre.csv";
+    st.textContent = "Leyendo " + nombre + "…"; st.style.color = "var(--muted)";
+    fetch("datos_ejemplo/" + nombre).then(function (r) {
+      if (!r.ok) throw new Error("No pude abrir el archivo de ejemplo (" + r.status + ").");
+      return r.text();
+    }).then(function (t) { cargarTexto(t, nombre); }, function (err) { st.textContent = err.message; st.style.color = "var(--bad)"; });
   });
   document.getElementById("reset").addEventListener("click", function () {
     ventas = ventasEjemplo();
     document.getElementById("origen").textContent = "Datos de ejemplo";
     document.getElementById("csv-status").textContent = "";
     document.getElementById("csv").value = "";
+    document.getElementById("preview-box").hidden = true;
     render();
   });
 
