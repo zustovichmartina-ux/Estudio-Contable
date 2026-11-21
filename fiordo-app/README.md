@@ -52,11 +52,12 @@ En `ejemplo/ventas_ejemplo_noviembre.xlsx` hay un archivo inventado de formato g
 
 ## Cambiar el estilo de la marca
 
-El estilo actual es **provisorio**. Para adaptarlo a Fiordo Café:
+Usa la identidad de Fiordo relevada del Instagram (marrón #762303, crema #FFEEDA, terracota #A0553A,
+Quicksand para títulos y Montserrat para textos). El logo es una versión simplificada.
 
 - Colores y tipografías: tokens de `:root` en `app/globals.css` (y el bloque de modo oscuro).
 - Colores del PDF: `lib/tema.ts`.
-- Logo: reemplazar `public/icon.svg`.
+- Logo: cuando esté el original, guardarlo en `public/` y usarlo en `components/Logo.tsx` y `public/icon.svg`.
 
 ## Estructura
 
