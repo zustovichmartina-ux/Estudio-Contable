@@ -1,0 +1,557 @@
+<title>Punto de Equilibrio del Café</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Inter:wght@400;500;600&display=swap">
+<style>
+/* Layout: tablero de una columna; arriba el semáforo del día, abajo el detalle para el contador */
+:root {
+  --bg: #f5f6f2;
+  --surface: #ffffff;
+  --ink: #2b211b;
+  --muted: #6e645c;
+  --line: #e3e1da;
+  --accent: #1f6b58;
+  --accent-soft: #e2efe9;
+  --ok: #2c8547;
+  --ok-soft: #e3f3e7;
+  --warn: #b97f0b;
+  --warn-soft: #fbf1db;
+  --bad: #bf3a2c;
+  --bad-soft: #fbe6e3;
+  --bar: #c9bfb5;
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Inter", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15120f; --surface: #1f1a16; --ink: #f1ebe4; --muted: #a89c92; --line: #362e28;
+    --accent: #5fc1a4; --accent-soft: #1d3530; --ok: #5cc27b; --ok-soft: #1a3222;
+    --warn: #e5b53e; --warn-soft: #3a2f14; --bad: #ef6b5c; --bad-soft: #3d1f1b; --bar: #5a4f46;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15120f; --surface: #1f1a16; --ink: #f1ebe4; --muted: #a89c92; --line: #362e28;
+  --accent: #5fc1a4; --accent-soft: #1d3530; --ok: #5cc27b; --ok-soft: #1a3222;
+  --warn: #e5b53e; --warn-soft: #3a2f14; --bad: #ef6b5c; --bad-soft: #3d1f1b; --bar: #5a4f46;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 56px;
+}
+.wrap { max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h1 { font-size: clamp(26px, 4vw, 36px); font-weight: 700; }
+h2 { font-size: 20px; font-weight: 700; }
+h3 { font-size: 15px; font-weight: 600; font-family: var(--font-body); }
+p { margin: 0; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.eyebrow { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+
+header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 12px; }
+header .sub { color: var(--muted); margin-top: 4px; }
+.demo-tag { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: var(--warn-soft); color: var(--warn); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent); }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 22px; min-width: 0; }
+.section-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 14px; }
+
+/* Semáforo */
+.hero { display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; }
+@media (max-width: 760px) { .hero { grid-template-columns: 1fr; } }
+.light { border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 14px; border: 1px solid transparent; }
+.light.ok { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 30%, transparent); }
+.light.warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 30%, transparent); }
+.light.bad { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 30%, transparent); }
+.light-top { display: flex; align-items: center; gap: 12px; }
+.dot { width: 18px; height: 18px; border-radius: 50%; flex: none; }
+.ok .dot { background: var(--ok); box-shadow: 0 0 0 5px color-mix(in srgb, var(--ok) 22%, transparent); }
+.warn .dot { background: var(--warn); box-shadow: 0 0 0 5px color-mix(in srgb, var(--warn) 22%, transparent); }
+.bad .dot { background: var(--bad); box-shadow: 0 0 0 5px color-mix(in srgb, var(--bad) 22%, transparent); }
+.light-verdict { font-family: var(--font-display); font-size: clamp(22px, 3.2vw, 30px); font-weight: 700; line-height: 1.15; }
+.light .big { font-family: var(--font-display); font-size: clamp(34px, 6vw, 48px); font-weight: 700; line-height: 1; }
+.compare { display: flex; flex-wrap: wrap; gap: 24px; }
+.compare div { display: flex; flex-direction: column; gap: 2px; }
+
+.month { display: flex; flex-direction: column; gap: 16px; }
+.progress { height: 14px; background: var(--line); border-radius: 999px; position: relative; overflow: visible; }
+.progress-fill { height: 100%; border-radius: 999px; background: var(--accent); max-width: 100%; }
+.progress-mark { position: absolute; top: -6px; bottom: -6px; width: 2px; background: var(--ink); }
+.progress-legend { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); gap: 8px; flex-wrap: wrap; }
+.month-msg { font-size: 15px; }
+.month-msg strong { font-weight: 600; }
+
+/* KPIs */
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 860px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.kpi .val { font-family: var(--font-display); font-size: 24px; font-weight: 700; }
+.kpi .hint { font-size: 12.5px; color: var(--muted); }
+
+/* Gráfico */
+.chart-wrap { overflow-x: auto; }
+svg text { fill: var(--muted); font-family: var(--font-body); font-size: 11px; }
+.legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+/* Tablas y formularios */
+.two { display: grid; grid-template-columns: 1fr 1.35fr; gap: 16px; align-items: start; }
+@media (max-width: 900px) { .two { grid-template-columns: 1fr; } }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; font-weight: 600; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; padding: 8px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 8px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td.r, th.r { text-align: right; }
+tfoot td { font-weight: 600; border-bottom: none; }
+.inp { width: 130px; text-align: right; font: inherit; font-variant-numeric: tabular-nums; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); }
+.inp.pct { width: 72px; }
+.inp:focus-visible, button:focus-visible, .file:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+.pill.ok { background: var(--ok-soft); color: var(--ok); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.bad { background: var(--bad-soft); color: var(--bad); }
+.formula { margin-top: 14px; padding: 12px 14px; background: var(--accent-soft); border-radius: 8px; font-size: 14px; }
+.formula b { font-weight: 600; }
+
+/* Mensaje */
+.msg-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 760px) { .msg-grid { grid-template-columns: 1fr; } }
+.bubble { background: var(--accent-soft); border-radius: 14px 14px 14px 4px; padding: 14px 16px; white-space: pre-wrap; font-size: 14.5px; line-height: 1.55; }
+button { font: inherit; font-weight: 600; font-size: 14px; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: var(--surface); cursor: pointer; }
+button.ghost { background: transparent; color: var(--accent); }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.file { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 8px; border: 1px dashed var(--accent); color: var(--accent); font-weight: 600; font-size: 14px; cursor: pointer; }
+.file input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; font-size: 13px; margin: 0; }
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 760px) { .steps { grid-template-columns: 1fr; } }
+.step { display: flex; flex-direction: column; gap: 6px; }
+.step .n { font-family: var(--font-display); font-weight: 700; color: var(--accent); font-size: 14px; }
+.status { font-size: 13px; }
+footer { font-size: 13px; color: var(--muted); }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow" id="periodo">Noviembre 2026</div>
+      <h1>Café La Esquina · Punto de equilibrio</h1>
+      <p class="sub">Ventas tomadas del sistema de gestión, gastos cargados por el estudio.</p>
+    </div>
+    <span class="demo-tag" id="origen">Datos de ejemplo</span>
+  </header>
+
+  <!-- Lo que mira el dueño -->
+  <section class="hero" aria-label="Resumen del día y del mes">
+    <div class="light" id="light">
+      <div class="light-top"><span class="dot" aria-hidden="true"></span><span class="eyebrow" id="ultimo-dia-label">Último día</span></div>
+      <div class="light-verdict" id="verdict">…</div>
+      <div class="compare">
+        <div><span class="eyebrow">Vendiste</span><span class="big num" id="hoy-venta">…</span></div>
+        <div><span class="eyebrow">Necesitás por día</span><span class="big num" id="pe-dia">…</span></div>
+      </div>
+    </div>
+    <div class="panel month">
+      <div>
+        <span class="eyebrow">En lo que va del mes</span>
+        <h2 class="num" id="mes-acum" style="font-size:32px;margin-top:4px">…</h2>
+      </div>
+      <div>
+        <div class="progress" role="img" id="progress-aria">
+          <div class="progress-fill" id="progress-fill"></div>
+          <div class="progress-mark" id="progress-mark" title="Punto de equilibrio"></div>
+        </div>
+      </div>
+      <div class="progress-legend"><span id="pl-left">$0</span><span id="pl-pe">Punto de equilibrio</span></div>
+      <p class="month-msg" id="month-msg">…</p>
+    </div>
+  </section>
+
+  <section class="kpis" aria-label="Indicadores">
+    <div class="kpi"><span class="eyebrow">Punto de equilibrio</span><span class="val num" id="k-pe">…</span><span class="hint">Lo mínimo a vender en el mes</span></div>
+    <div class="kpi"><span class="eyebrow">Margen de contribución</span><span class="val num" id="k-mc">…</span><span class="hint">De cada $100 vendidos, lo que queda para los fijos</span></div>
+    <div class="kpi"><span class="eyebrow">Proyección del mes</span><span class="val num" id="k-proy">…</span><span class="hint" id="k-proy-hint">Al ritmo actual</span></div>
+    <div class="kpi"><span class="eyebrow">Margen de seguridad</span><span class="val num" id="k-ms">…</span><span class="hint">Cuánto pueden caer las ventas antes de perder</span></div>
+  </section>
+
+  <section class="panel" aria-label="Ventas por día">
+    <div class="section-head">
+      <h2>Ventas por día contra lo necesario</h2>
+      <div class="legend">
+        <span><i class="sw" style="background:var(--ok)"></i>Cubrió el día</span>
+        <span><i class="sw" style="background:var(--bad)"></i>No llegó</span>
+        <span><i class="sw" style="background:var(--ink);height:2px"></i>Necesario por día</span>
+      </div>
+    </div>
+    <div class="chart-wrap"><svg id="chart" width="100%" height="260" role="img" aria-label="Gráfico de ventas diarias"></svg></div>
+  </section>
+
+  <!-- Lo que carga el estudio -->
+  <section class="two">
+    <div class="panel">
+      <div class="section-head"><h2>Gastos del mes</h2><span class="muted" style="font-size:13px">Editables</span></div>
+      <h3 style="margin-bottom:6px">Fijos (se pagan vendas o no)</h3>
+      <div class="table-wrap"><table><tbody id="fijos"></tbody>
+        <tfoot><tr><td>Total fijos</td><td class="r num" id="fijos-total"></td></tr></tfoot></table></div>
+      <h3 style="margin:18px 0 6px">Variables (suben con cada venta)</h3>
+      <div class="table-wrap"><table><tbody>
+        <tr><td>Mercadería e insumos <span class="muted">(sale del costeo)</span></td><td class="r num" id="var-insumos"></td></tr>
+        <tr><td><label for="v-com">Comisiones tarjetas y QR</label></td><td class="r"><input class="inp pct" id="v-com" type="number" step="0.1" min="0" value="3.5"> %</td></tr>
+        <tr><td><label for="v-iibb">Ingresos brutos</label></td><td class="r"><input class="inp pct" id="v-iibb" type="number" step="0.1" min="0" value="3.0"> %</td></tr>
+        <tr><td><label for="v-dias">Días que abre en el mes</label></td><td class="r"><input class="inp pct" id="v-dias" type="number" step="1" min="1" max="31" value="30"></td></tr>
+      </tbody>
+      <tfoot><tr><td>Total variables</td><td class="r num" id="var-total"></td></tr></tfoot></table></div>
+      <div class="formula" id="formula"></div>
+    </div>
+
+    <div class="panel">
+      <div class="section-head"><h2>Qué deja cada producto</h2><span class="muted" style="font-size:13px">Mes acumulado</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Producto</th><th class="r">Precio</th><th class="r">Costo</th><th class="r">Margen</th><th class="r">Vendidos</th><th class="r">Aporte</th><th></th></tr></thead>
+        <tbody id="productos"></tbody>
+      </table></div>
+      <p class="muted" style="font-size:13px;margin-top:10px">El aporte es lo que cada producto deja para pagar los gastos fijos. Margen bajo el 55 % se marca para revisar precio o receta.</p>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="Aviso para el cliente">
+    <div class="section-head"><h2>Aviso diario para el dueño</h2><span class="muted" style="font-size:13px">Por WhatsApp o mail, sin tener que abrir nada</span></div>
+    <div class="msg-grid">
+      <div class="bubble" id="mensaje"></div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <p>El dueño no necesita mirar el tablero. Cada mañana le llega este texto con el resultado del día anterior y cuánto le falta en el mes.</p>
+        <div class="row"><button id="copiar" type="button">Copiar mensaje</button><span class="status muted" id="copiado" aria-live="polite"></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="Cargar exportación">
+    <div class="section-head"><h2>Cómo entran las ventas</h2></div>
+    <div class="steps" style="margin-bottom:18px">
+      <div class="step"><span class="n">Paso 1</span><h3>Exportar del sistema</h3><p class="muted">Desde el sistema de gestión se baja el detalle de ventas a CSV o Excel. Si tiene API, este paso es automático.</p></div>
+      <div class="step"><span class="n">Paso 2</span><h3>Subir el archivo</h3><p class="muted">La herramienta reconoce las columnas de fecha, producto, cantidad e importe y arma el mes.</p></div>
+      <div class="step"><span class="n">Paso 3</span><h3>Se recalcula todo</h3><p class="muted">Semáforo, proyección, costeo y aviso se actualizan con los números reales.</p></div>
+    </div>
+    <div class="msg-grid">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div class="row">
+          <label class="file">Subir CSV de ventas<input type="file" id="csv" accept=".csv,.txt"></label>
+          <button class="ghost" id="reset" type="button">Volver al ejemplo</button>
+        </div>
+        <span class="status" id="csv-status" aria-live="polite"></span>
+      </div>
+      <div><p class="muted" style="font-size:13px;margin-bottom:6px">Formato esperado (separador ; o ,):</p>
+<pre>fecha;producto;cantidad;total
+21/11/2026;Cortado;38;144400
+21/11/2026;Medialuna;85;127500</pre></div>
+    </div>
+  </section>
+
+  <footer>Demo con datos inventados de un café de unos $30 millones de venta mensual. Precios y costos de referencia, a reemplazar por los del cliente.</footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // Catálogo de ejemplo: precio de venta y costo de receta (insumos) por unidad
+  var CATALOGO = [
+    { n: "Espresso", p: 3200, c: 700, u: 40 },
+    { n: "Cortado", p: 3800, c: 900, u: 45 },
+    { n: "Café con leche", p: 4500, c: 1200, u: 35 },
+    { n: "Capuchino", p: 5200, c: 1500, u: 30 },
+    { n: "Medialuna", p: 1500, c: 450, u: 90 },
+    { n: "Tostado J&Q", p: 8500, c: 3000, u: 15 },
+    { n: "Avocado toast", p: 11000, c: 4200, u: 8 },
+    { n: "Porción de torta", p: 6500, c: 2200, u: 12 },
+    { n: "Jugo de naranja", p: 5500, c: 1900, u: 15 },
+    { n: "Agua mineral", p: 2500, c: 1400, u: 20 },
+    { n: "Brunch completo", p: 18000, c: 7000, u: 5 }
+  ];
+  var COSTO_DEFAULT = 0.32; // productos que no están en el catálogo
+
+  var FIJOS = [
+    { id: "f-alq", n: "Alquiler", v: 3500000 },
+    { id: "f-sue", n: "Sueldos y cargas sociales", v: 9000000 },
+    { id: "f-ser", n: "Luz, gas, agua e internet", v: 1200000 },
+    { id: "f-hon", n: "Honorarios del estudio", v: 600000 },
+    { id: "f-sis", n: "Sistema de gestión", v: 150000 },
+    { id: "f-seg", n: "Seguros", v: 250000 },
+    { id: "f-man", n: "Mantenimiento y limpieza", v: 400000 },
+    { id: "f-tas", n: "Tasas municipales y monotributos", v: 500000 }
+  ];
+
+  var FACTOR_DIA = [1.25, 0.75, 0.8, 0.85, 0.9, 1.1, 1.35]; // domingo a sábado
+  var DIAS_SEM = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+
+  function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+  function ventasEjemplo() {
+    var rnd = mulberry32(2611), rows = [];
+    for (var d = 1; d <= 21; d++) {
+      var fecha = new Date(2026, 10, d), f = FACTOR_DIA[fecha.getDay()];
+      var mal = (d === 10 || d === 17) ? 0.8 : 1; // dos días de lluvia
+      CATALOGO.forEach(function (p) {
+        var q = Math.max(0, Math.round(p.u * 0.82 * f * mal * (0.85 + rnd() * 0.3)));
+        rows.push({ fecha: fecha, producto: p.n, cantidad: q, total: q * p.p });
+      });
+    }
+    return rows;
+  }
+
+  var ventas = ventasEjemplo();
+
+  // ---------- formato ----------
+  var nf = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
+  function $(n) { return "$ " + nf.format(Math.round(n)); }
+  function corto(n) {
+    var a = Math.abs(n), s = n < 0 ? "-" : "";
+    if (a >= 1e6) return s + "$ " + (a / 1e6).toLocaleString("es-AR", { maximumFractionDigits: 1 }) + " M";
+    if (a >= 1e3) return s + "$ " + Math.round(a / 1e3).toLocaleString("es-AR") + " mil";
+    return s + "$ " + nf.format(a);
+  }
+  function pct(x, d) { return (x * 100).toLocaleString("es-AR", { maximumFractionDigits: d === undefined ? 1 : d }) + " %"; }
+  function fechaCorta(dt) { return DIAS_SEM[dt.getDay()] + " " + dt.getDate() + "/" + (dt.getMonth() + 1); }
+  function key(dt) { return dt.getFullYear() + "-" + dt.getMonth() + "-" + dt.getDate(); }
+  function num(id) { var v = parseFloat(document.getElementById(id).value); return isFinite(v) ? v : 0; }
+
+  // ---------- gastos fijos editables ----------
+  var tbFijos = document.getElementById("fijos");
+  FIJOS.forEach(function (g) {
+    var tr = document.createElement("tr");
+    tr.innerHTML = '<td><label for="' + g.id + '">' + g.n + '</label></td><td class="r"><input class="inp" id="' + g.id + '" type="number" step="10000" min="0" value="' + g.v + '"></td>';
+    tbFijos.appendChild(tr);
+  });
+
+  // ---------- cálculo ----------
+  function calcular() {
+    var porCat = {}; CATALOGO.forEach(function (p) { porCat[p.n.toLowerCase()] = p; });
+    var ventasMes = 0, costoIns = 0, porDia = {}, porProd = {};
+    ventas.forEach(function (r) {
+      ventasMes += r.total;
+      var cat = porCat[r.producto.toLowerCase()];
+      var costo = cat ? cat.c * r.cantidad : r.total * COSTO_DEFAULT;
+      costoIns += costo;
+      var k = key(r.fecha);
+      if (!porDia[k]) porDia[k] = { fecha: r.fecha, total: 0 };
+      porDia[k].total += r.total;
+      var pk = r.producto;
+      if (!porProd[pk]) porProd[pk] = { n: pk, u: 0, venta: 0, costo: 0 };
+      porProd[pk].u += r.cantidad; porProd[pk].venta += r.total; porProd[pk].costo += costo;
+    });
+    var dias = Object.keys(porDia).map(function (k) { return porDia[k]; }).sort(function (a, b) { return a.fecha - b.fecha; });
+    var fijos = FIJOS.reduce(function (s, g) { return s + num(g.id); }, 0);
+    var insPct = ventasMes ? costoIns / ventasMes : 0;
+    var varPct = insPct + num("v-com") / 100 + num("v-iibb") / 100;
+    var mc = 1 - varPct;
+    var diasMes = Math.max(1, num("v-dias"));
+    var pe = mc > 0 ? fijos / mc : Infinity;
+    var peDia = pe / diasMes;
+    var cargados = dias.length;
+    var prom = cargados ? ventasMes / cargados : 0;
+    var proy = prom * diasMes;
+    var restantes = Math.max(0, diasMes - cargados);
+    var falta = pe - ventasMes;
+    return { ventasMes: ventasMes, insPct: insPct, varPct: varPct, mc: mc, fijos: fijos, pe: pe, peDia: peDia, dias: dias,
+      prom: prom, proy: proy, restantes: restantes, falta: falta, resultado: proy * mc - fijos,
+      ms: proy > 0 ? (proy - pe) / proy : 0, productos: Object.keys(porProd).map(function (k) { return porProd[k]; }), diasMes: diasMes };
+  }
+
+  // ---------- render ----------
+  function render() {
+    var R = calcular();
+    var ult = R.dias[R.dias.length - 1];
+    var text = function (id, t) { document.getElementById(id).textContent = t; };
+
+    if (ult) {
+      var meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+      text("periodo", meses[ult.fecha.getMonth()] + " " + ult.fecha.getFullYear());
+    }
+
+    // Semáforo del último día
+    var ratio = ult ? ult.total / R.peDia : 0;
+    var estado = ratio >= 1 ? "ok" : ratio >= 0.85 ? "warn" : "bad";
+    document.getElementById("light").className = "light " + estado;
+    text("ultimo-dia-label", ult ? "Último día cargado · " + fechaCorta(ult.fecha) : "Sin datos");
+    var dif = ult ? ult.total - R.peDia : 0;
+    text("verdict", estado === "ok" ? "Cubriste los gastos del día, con " + corto(dif) + " de sobra."
+      : estado === "warn" ? "Quedaste cerca: faltaron " + corto(-dif) + " para cubrir el día."
+      : "No alcanzó: faltaron " + corto(-dif) + " para cubrir el día.");
+    text("hoy-venta", ult ? corto(ult.total) : "–");
+    text("pe-dia", isFinite(R.peDia) ? corto(R.peDia) : "–");
+
+    // Progreso del mes
+    text("mes-acum", $(R.ventasMes));
+    var escala = Math.max(R.pe, R.proy, R.ventasMes) * 1.05;
+    document.getElementById("progress-fill").style.width = Math.min(100, R.ventasMes / escala * 100) + "%";
+    document.getElementById("progress-mark").style.left = Math.min(100, R.pe / escala * 100) + "%";
+    document.getElementById("progress-aria").setAttribute("aria-label", "Vendido " + $(R.ventasMes) + " de " + $(R.pe) + " necesarios");
+    text("pl-left", R.dias.length + " de " + R.diasMes + " días");
+    text("pl-pe", "Equilibrio: " + corto(R.pe));
+    var mm = document.getElementById("month-msg");
+    if (R.falta <= 0) {
+      mm.innerHTML = "<strong>Ya cubriste los gastos del mes.</strong> Desde acá, cada venta deja " + pct(R.mc, 0) + " de ganancia antes de impuesto a las ganancias.";
+    } else if (R.restantes > 0) {
+      mm.innerHTML = "Te faltan <strong>" + corto(R.falta) + "</strong> para cubrir el mes. En los " + R.restantes + " días que quedan necesitás vender <strong>" + corto(R.falta / R.restantes) + " por día</strong>.";
+    } else {
+      mm.innerHTML = "El mes cerró <strong>" + corto(R.falta) + " por debajo</strong> del punto de equilibrio.";
+    }
+
+    // KPIs
+    text("k-pe", corto(R.pe));
+    text("k-mc", pct(R.mc));
+    text("k-proy", corto(R.proy));
+    text("k-proy-hint", "Resultado estimado: " + corto(R.resultado));
+    text("k-ms", pct(R.ms));
+    document.getElementById("k-ms").style.color = R.ms >= 0.15 ? "var(--ok)" : R.ms >= 0 ? "var(--warn)" : "var(--bad)";
+
+    // Gastos
+    text("fijos-total", $(R.fijos));
+    text("var-insumos", pct(R.insPct));
+    text("var-total", pct(R.varPct));
+    document.getElementById("formula").innerHTML =
+      "<b>Punto de equilibrio</b> = gastos fijos ÷ margen de contribución<br>" +
+      $(R.fijos) + " ÷ " + pct(R.mc) + " = <b>" + $(R.pe) + "</b> por mes · <b>" + $(R.peDia) + "</b> por día";
+
+    // Productos
+    var porCat = {}; CATALOGO.forEach(function (p) { porCat[p.n.toLowerCase()] = p; });
+    var totalAporte = 0;
+    R.productos.forEach(function (p) { p.aporte = p.venta * (1 - (R.varPct - R.insPct)) - p.costo; totalAporte += p.aporte; });
+    R.productos.sort(function (a, b) { return b.aporte - a.aporte; });
+    var tb = document.getElementById("productos"); tb.innerHTML = "";
+    R.productos.forEach(function (p) {
+      var precio = p.u ? p.venta / p.u : 0, costo = p.u ? p.costo / p.u : 0;
+      var margen = p.venta ? 1 - p.costo / p.venta : 0;
+      var cls = margen >= 0.65 ? "ok" : margen >= 0.55 ? "warn" : "bad";
+      var tag = cls === "bad" ? "Revisar" : cls === "warn" ? "Justo" : "Bien";
+      var tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + p.n + (porCat[p.n.toLowerCase()] ? "" : ' <span class="muted">(costo estimado)</span>') + "</td>" +
+        '<td class="r num">' + $(precio) + '</td><td class="r num">' + $(costo) + '</td><td class="r num">' + pct(margen, 0) + "</td>" +
+        '<td class="r num">' + nf.format(p.u) + '</td><td class="r num">' + corto(p.aporte) + "</td>" +
+        '<td><span class="pill ' + cls + '">' + tag + "</span></td>";
+      tb.appendChild(tr);
+    });
+
+    drawChart(R);
+
+    // Mensaje
+    var lineas = [];
+    if (ult) {
+      lineas.push("Buen día. Resumen de ayer, " + fechaCorta(ult.fecha) + ":");
+      lineas.push("Vendiste " + corto(ult.total) + ". Para cubrir los gastos necesitás " + corto(R.peDia) + " por día. " +
+        (estado === "ok" ? "Día cubierto." : "Faltaron " + corto(-dif) + "."));
+      lineas.push("");
+      lineas.push("En el mes llevás " + corto(R.ventasMes) + " de " + corto(R.pe) + " necesarios.");
+      if (R.falta > 0 && R.restantes > 0) lineas.push("Te faltan " + corto(R.falta) + ": unos " + corto(R.falta / R.restantes) + " por día en los " + R.restantes + " días que quedan.");
+      else if (R.falta <= 0) lineas.push("Ya cubriste todos los gastos del mes.");
+      var peor = R.productos.slice().sort(function (a, b) { return (1 - a.costo / a.venta) - (1 - b.costo / b.venta); })[0];
+      if (peor && 1 - peor.costo / peor.venta < 0.55) { lineas.push(""); lineas.push("Ojo: " + peor.n + " deja solo " + pct(1 - peor.costo / peor.venta, 0) + " de margen. Conviene revisar el precio."); }
+    }
+    text("mensaje", lineas.join("\n"));
+  }
+
+  function drawChart(R) {
+    var svg = document.getElementById("chart");
+    var W = Math.max(560, svg.clientWidth || 900), H = 260, padL = 64, padR = 12, padT = 12, padB = 36;
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    svg.style.minWidth = "560px";
+    var n = R.diasMes, max = Math.max(R.peDia, Math.max.apply(null, R.dias.map(function (d) { return d.total; }).concat([0]))) * 1.12;
+    var paso = max > 2e6 ? 500000 : 250000, top = Math.ceil(max / paso) * paso;
+    var y = function (v) { return padT + (H - padT - padB) * (1 - v / top); };
+    var bw = (W - padL - padR) / n;
+    var out = "";
+    for (var t = 0; t <= top; t += paso) {
+      out += '<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + y(t) + '" y2="' + y(t) + '" stroke="var(--line)"/>';
+      out += '<text x="' + (padL - 8) + '" y="' + (y(t) + 4) + '" text-anchor="end">' + corto(t).replace("$ ", "") + "</text>";
+    }
+    var porNum = {}; R.dias.forEach(function (d) { porNum[d.fecha.getDate()] = d; });
+    for (var i = 1; i <= n; i++) {
+      var x = padL + (i - 1) * bw + bw * 0.15, w = bw * 0.7, d = porNum[i];
+      if (d) {
+        var col = d.total >= R.peDia ? "var(--ok)" : "var(--bad)";
+        out += '<rect x="' + x + '" y="' + y(d.total) + '" width="' + w + '" height="' + (y(0) - y(d.total)) + '" rx="2" fill="' + col + '"><title>' + fechaCorta(d.fecha) + ": " + $(d.total) + "</title></rect>";
+      } else {
+        out += '<rect x="' + x + '" y="' + (y(0) - 3) + '" width="' + w + '" height="3" rx="1" fill="var(--bar)"/>';
+      }
+      if (i === 1 || i % 5 === 0) out += '<text x="' + (x + w / 2) + '" y="' + (H - padB + 16) + '" text-anchor="middle">' + i + "</text>";
+    }
+    if (isFinite(R.peDia)) {
+      out += '<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + y(R.peDia) + '" y2="' + y(R.peDia) + '" stroke="var(--ink)" stroke-width="2" stroke-dasharray="6 4"/>';
+      out += '<text x="' + (W - padR) + '" y="' + (y(R.peDia) - 6) + '" text-anchor="end" style="fill:var(--ink);font-weight:600">' + corto(R.peDia) + " por día</text>";
+    }
+    out += '<text x="' + padL + '" y="' + (H - 4) + '">Día del mes</text>';
+    svg.innerHTML = out;
+  }
+
+  // ---------- CSV ----------
+  function parseFecha(s) {
+    s = s.trim();
+    var m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);
+    if (m) { var a = +m[3]; if (a < 100) a += 2000; return new Date(a, +m[2] - 1, +m[1]); }
+    m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+    return null;
+  }
+  function parseNum(s) {
+    s = String(s).replace(/[$\s]/g, "");
+    if (/,\d{1,2}$/.test(s)) s = s.replace(/\./g, "").replace(",", ".");
+    else s = s.replace(/,/g, "");
+    return parseFloat(s);
+  }
+  function parseCSV(txt) {
+    var lineas = txt.split(/\r?\n/).filter(function (l) { return l.trim(); });
+    if (lineas.length < 2) throw new Error("El archivo no tiene filas de ventas.");
+    var sep = (lineas[0].split(";").length >= lineas[0].split(",").length) ? ";" : ",";
+    var head = lineas[0].split(sep).map(function (h) { return h.trim().toLowerCase().replace(/"/g, ""); });
+    function col(re) { for (var i = 0; i < head.length; i++) if (re.test(head[i])) return i; return -1; }
+    var cF = col(/fecha/), cP = col(/producto|art[ií]culo|descrip|item/), cQ = col(/cant/), cT = col(/total|importe|monto/);
+    if (cF < 0 || cT < 0) throw new Error("No encontré las columnas de fecha e importe. Revisá que la primera fila tenga los títulos.");
+    var rows = [];
+    for (var i = 1; i < lineas.length; i++) {
+      var c = lineas[i].split(sep).map(function (x) { return x.trim().replace(/^"|"$/g, ""); });
+      var f = parseFecha(c[cF] || ""), t = parseNum(c[cT] || "");
+      if (!f || !isFinite(t)) continue;
+      rows.push({ fecha: f, producto: cP >= 0 ? (c[cP] || "Sin detalle") : "Venta", cantidad: cQ >= 0 ? (parseNum(c[cQ]) || 0) : 1, total: t });
+    }
+    if (!rows.length) throw new Error("Ninguna fila tenía fecha e importe válidos.");
+    return rows;
+  }
+
+  document.getElementById("csv").addEventListener("change", function (e) {
+    var f = e.target.files[0], st = document.getElementById("csv-status");
+    if (!f) return;
+    var rd = new FileReader();
+    rd.onload = function () {
+      try {
+        ventas = parseCSV(String(rd.result));
+        st.textContent = "Cargadas " + ventas.length + " líneas de " + f.name + ".";
+        st.style.color = "var(--ok)";
+        document.getElementById("origen").textContent = "Datos de " + f.name;
+        render();
+      } catch (err) { st.textContent = err.message; st.style.color = "var(--bad)"; }
+    };
+    rd.readAsText(f);
+  });
+  document.getElementById("reset").addEventListener("click", function () {
+    ventas = ventasEjemplo();
+    document.getElementById("origen").textContent = "Datos de ejemplo";
+    document.getElementById("csv-status").textContent = "";
+    document.getElementById("csv").value = "";
+    render();
+  });
+
+  document.getElementById("copiar").addEventListener("click", function () {
+    var t = document.getElementById("mensaje").textContent, s = document.getElementById("copiado");
+    function fallback() { var r = document.createRange(); r.selectNodeContents(document.getElementById("mensaje")); var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r); s.textContent = "Texto seleccionado: copialo con Ctrl+C."; }
+    try { navigator.clipboard.writeText(t).then(function () { s.textContent = "Copiado."; }, fallback); } catch (e) { fallback(); }
+  });
+
+  document.querySelector(".two").addEventListener("input", render);
+  window.addEventListener("resize", function () { drawChart(calcular()); });
+  render();
+})();
+</script>
