@@ -1,0 +1,174 @@
+"use client";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Modo, borrarMes, cargar, guardarConfig, guardarMeses } from "@/lib/almacen";
+import { incorporar } from "@/lib/lector";
+import { calcular } from "@/lib/motor";
+import { CONFIG_INICIAL, Config, Datos, Gasto, LineaVenta, Parametros, norm } from "@/lib/tipos";
+import { CATALOGO_EJEMPLO, GASTOS_EJEMPLO, ventasEjemplo } from "@/lib/ejemplo";
+import { nombreMes } from "@/lib/formato";
+import Hoy from "@/components/Hoy";
+import Cargar from "@/components/Cargar";
+import Productos from "@/components/Productos";
+import Gastos from "@/components/Gastos";
+import Reportes from "@/components/Reportes";
+import { IcoCargar, IcoGastos, IcoHoy, IcoProductos, IcoReportes } from "@/components/Iconos";
+
+type Vista = "hoy" | "cargar" | "productos" | "gastos" | "reportes";
+const VISTAS: { id: Vista; nombre: string; Icono: () => React.ReactElement }[] = [
+  { id: "hoy", nombre: "Hoy", Icono: IcoHoy },
+  { id: "cargar", nombre: "Cargar", Icono: IcoCargar },
+  { id: "productos", nombre: "Productos", Icono: IcoProductos },
+  { id: "gastos", nombre: "Gastos", Icono: IcoGastos },
+  { id: "reportes", nombre: "Reportes", Icono: IcoReportes },
+];
+
+const mesActual = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+};
+
+export default function App() {
+  const [datos, setDatos] = useState<Datos>({ config: CONFIG_INICIAL, meses: {} });
+  const [modo, setModo] = useState<Modo>("local");
+  const [listo, setListo] = useState(false);
+  const [mes, setMes] = useState(mesActual());
+  const [vista, setVista] = useState<Vista>("hoy");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    cargar().then(({ datos, modo }) => {
+      setDatos(datos);
+      setModo(modo);
+      const ultimos = Object.keys(datos.meses).sort();
+      if (ultimos.length) setMes(ultimos[ultimos.length - 1]);
+      setListo(true);
+    });
+    const h = window.location.hash.slice(1) as Vista;
+    if (VISTAS.some((v) => v.id === h)) setVista(h);
+  }, []);
+
+  const ir = useCallback((v: Vista) => {
+    setVista(v);
+    history.replaceState(null, "", `#${v}`);
+    window.scrollTo({ top: 0 });
+  }, []);
+
+  const r = useMemo(() => calcular(datos.meses[mes], mes, datos.config), [datos, mes]);
+  const opcionesMes = useMemo(() => [...new Set([mesActual(), mes, ...Object.keys(datos.meses)])].sort().reverse(), [datos.meses, mes]);
+
+  const conError = async (fn: () => Promise<void>) => {
+    try {
+      setError("");
+      await fn();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  const actualizarConfig = (cambio: (c: Config) => Config) => {
+    const nuevo = { ...datos, config: cambio(datos.config) };
+    setDatos(nuevo);
+    conError(() => guardarConfig(nuevo, modo));
+  };
+
+  async function guardarVentas(lineas: LineaVenta[], archivo: string) {
+    const meses = incorporar(datos.meses, lineas, archivo);
+    const cambiados = [...new Set(lineas.map((l) => l.fecha.slice(0, 7)))].sort();
+    const nombres = { ...datos.config.nombresArticulos };
+    for (const l of lineas) nombres[norm(l.articulo)] ??= l.articulo;
+    const nuevo = { config: { ...datos.config, nombresArticulos: nombres }, meses };
+    setDatos(nuevo);
+    setMes(cambiados[cambiados.length - 1]);
+    await guardarMeses(nuevo, cambiados, modo);
+    await guardarConfig(nuevo, modo);
+  }
+
+  function probarEjemplo() {
+    const hoy = new Date();
+    const m = mesActual();
+    const lineas = ventasEjemplo(m, Math.max(1, hoy.getDate() - 1));
+    const costos = { ...datos.config.costos };
+    for (const c of CATALOGO_EJEMPLO) costos[norm(c.n)] = c.c;
+    const config: Config = { ...datos.config, costos, gastosPorMes: { ...datos.config.gastosPorMes, [m]: GASTOS_EJEMPLO } };
+    const nuevo = { config, meses: incorporar(datos.meses, lineas, "datos de ejemplo") };
+    setDatos(nuevo);
+    setMes(m);
+    conError(async () => {
+      await guardarMeses(nuevo, [m], modo);
+      await guardarConfig(nuevo, modo);
+    });
+  }
+
+  if (!listo)
+    return <div className="vacio" style={{ minHeight: "100dvh", justifyContent: "center" }}><p className="muted">Cargando…</p></div>;
+
+  return (
+    <div className="app">
+      <header className="top">
+        <div className="top-in">
+          <div className="marca">
+            <img src="/icon.svg" alt="" />
+            <div>
+              <h1>{datos.config.nombreLocal || "Fiordo Café"}</h1>
+              <span>Punto de equilibrio</span>
+            </div>
+          </div>
+          {datos.meses[mes]?.archivos.includes("datos de ejemplo") && <span className="chip">Datos de ejemplo</span>}
+          <label className="sr-only" htmlFor="mes" style={{ position: "absolute", left: -9999 }}>Mes</label>
+          <select id="mes" className="mes-sel" value={mes} onChange={(e) => setMes(e.target.value)}>
+            {opcionesMes.map((m) => <option key={m} value={m}>{nombreMes(m)}</option>)}
+          </select>
+        </div>
+      </header>
+
+      <nav className="nav" aria-label="Secciones">
+        {VISTAS.map(({ id, nombre, Icono }) => (
+          <button key={id} aria-current={vista === id ? "page" : undefined} onClick={() => ir(id)}>
+            <Icono />
+            {nombre}
+          </button>
+        ))}
+      </nav>
+
+      <main className="main">
+        {error && <div className="aviso bad" role="alert">{error}</div>}
+        {vista === "hoy" && <Hoy r={r} irA={ir} probarEjemplo={probarEjemplo} />}
+        {vista === "cargar" && <Cargar meses={datos.meses} guardar={guardarVentas} />}
+        {vista === "productos" && (
+          <Productos
+            r={r}
+            costos={datos.config.costos}
+            margenMinimo={datos.config.parametros.margenMinimoPct}
+            cambiarCosto={(articulo, costo) =>
+              actualizarConfig((c) => {
+                const costos = { ...c.costos };
+                if (costo == null || !(costo > 0)) delete costos[norm(articulo)];
+                else costos[norm(articulo)] = costo;
+                return { ...c, costos };
+              })
+            }
+          />
+        )}
+        {vista === "gastos" && (
+          <Gastos
+            r={r}
+            config={datos.config}
+            modo={modo}
+            guardarGastos={(gastos: Gasto[], base: boolean) =>
+              actualizarConfig((c) => ({ ...c, gastosPorMes: { ...c.gastosPorMes, [mes]: gastos }, gastosBase: base ? gastos : c.gastosBase }))
+            }
+            guardarParametros={(p: Parametros, nombreLocal: string) => actualizarConfig((c) => ({ ...c, parametros: p, nombreLocal }))}
+            borrarMes={() => {
+              const meses = { ...datos.meses };
+              delete meses[mes];
+              const nuevo = { ...datos, meses };
+              setDatos(nuevo);
+              conError(() => borrarMes(nuevo, mes, modo));
+            }}
+          />
+        )}
+        {vista === "reportes" && <Reportes r={r} nombreLocal={datos.config.nombreLocal} />}
+      </main>
+    </div>
+  );
+}
