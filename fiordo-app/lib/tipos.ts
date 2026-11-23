@@ -6,6 +6,7 @@ export type LineaVenta = {
   importe: number;
   medio?: string;
   ticket?: string;
+  tickets?: number; // cantidad de tickets del día, cuando el reporte la trae resumida
 };
 
 /** Ventas de un mes, agregadas por día y artículo para que pesen poco. */

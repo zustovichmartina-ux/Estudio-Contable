@@ -52,7 +52,9 @@ function detectarMapeo(enc: string[]): Mapeo {
 function detectarEncabezado(filas: unknown[][]): number {
   for (let i = 0; i < Math.min(filas.length, 30); i++) {
     const n = (filas[i] ?? []).map((c) => norm(String(c ?? "")));
-    if (n.some((h) => /fecha|dia/.test(h)) && n.some((h) => /importe|total|monto|venta/.test(h))) return i;
+    const iF = n.findIndex((h) => /^fecha|^dia$/.test(h));
+    const iI = n.findIndex((h, j) => j !== iF && /importe|total|monto|venta|precio/.test(h));
+    if (iF >= 0 && iI >= 0 && n.filter(Boolean).length >= 3) return i;
   }
   for (let i = 0; i < Math.min(filas.length, 30); i++) {
     if ((filas[i] ?? []).filter((c) => typeof c === "string" && c.trim()).length >= 3) return i;
@@ -64,8 +66,8 @@ export async function leerArchivo(archivo: File): Promise<Hoja[]> {
   const buf = await archivo.arrayBuffer();
   const esTexto = /\.(csv|txt)$/i.test(archivo.name);
   const wb = esTexto
-    ? XLSX.read(new TextDecoder("utf-8").decode(buf).replace(/^﻿/, ""), { type: "string", cellDates: true, raw: false, FS: detectarSeparador(buf) })
-    : XLSX.read(buf, { type: "array", cellDates: true });
+    ? XLSX.read(new TextDecoder("utf-8").decode(buf).replace(/^﻿/, ""), { type: "string", raw: false, FS: detectarSeparador(buf) })
+    : XLSX.read(buf, { type: "array" }); // fechas como número de serie: no se corren por zona horaria
   return wb.SheetNames.map((nombre) => {
     const filas = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[nombre], { header: 1, raw: true, defval: null, blankrows: false });
     const filaEncabezado = detectarEncabezado(filas);
@@ -112,7 +114,8 @@ export function aNumero(v: unknown): number {
   return parseFloat(s);
 }
 
-export type ResultadoLectura = { lineas: LineaVenta[]; descartadas: number; desde?: string; hasta?: string; formato?: string };
+/** soloCompletar: el archivo no trae productos, así que solo carga días que todavía no tienen datos. */
+export type ResultadoLectura = { lineas: LineaVenta[]; descartadas: number; desde?: string; hasta?: string; formato?: string; soloCompletar?: boolean };
 
 // ---------------------------------------------------------------- Bistrosoft: Detalle de transacciones
 /**
@@ -164,8 +167,56 @@ function convertirBistrosoft(h: Hoja): ResultadoLectura {
   return { lineas, descartadas, desde: fechas[0], hasta: fechas[fechas.length - 1], formato: "Detalle de transacciones de Bistrosoft" };
 }
 
+// ---------------------------------------------------------------- Bistrosoft: Reporte de ventas por día
+/** Una fila por día con el total, los medios de pago y la cantidad de tickets. No trae productos. */
+export const VENTA_SIN_DETALLE = "Ventas sin detalle de productos";
+
+export function esBistrosoftDiario(h: Hoja): boolean {
+  const n = h.encabezados.map((e) => norm(e));
+  return n.includes("fecha") && n.some((e) => e.startsWith("total de ventas"));
+}
+
+function convertirBistrosoftDiario(h: Hoja): ResultadoLectura {
+  const n = h.encabezados.map((e) => norm(e));
+  const cFecha = n.indexOf("fecha");
+  const cTotal = n.findIndex((e) => e.startsWith("total de ventas"));
+  const cVentas = n.findIndex((e) => e.startsWith("cantidad ventas"));
+  const cComandas = n.findIndex((e) => e.startsWith("cantidad comandas"));
+  // columnas de medios de pago: las que están bajo el título "Ventas por medios de pago"
+  const grupos = (h.filas[h.filaEncabezado - 1] ?? []).map((c) => norm(String(c ?? "")));
+  const ini = grupos.findIndex((g) => g.includes("medios de pago"));
+  let fin = ini >= 0 ? grupos.findIndex((g, j) => j > ini && g !== "") : -1;
+  if (fin < 0) fin = n.length;
+  const medios = ini >= 0 ? Array.from({ length: fin - ini }, (_, k) => ini + k) : [];
+  const lineas: LineaVenta[] = [];
+  let descartadas = 0;
+  for (const fila of h.filas.slice(h.filaEncabezado + 1)) {
+    const fecha = aFechaISO(fila[cFecha]);
+    const total = aNumero(fila[cTotal]);
+    if (!fecha || !isFinite(total)) {
+      descartadas++; // fila de totales
+      continue;
+    }
+    const tickets = (aNumero(fila[cVentas]) || 0) + (aNumero(fila[cComandas]) || 0);
+    let asignado = 0;
+    const delDia: LineaVenta[] = [];
+    for (const c of medios) {
+      const v = aNumero(fila[c]);
+      if (!isFinite(v) || v === 0) continue;
+      asignado += v;
+      delDia.push({ fecha, articulo: VENTA_SIN_DETALLE, cantidad: 0, importe: v, medio: h.encabezados[c].replace(/\s*\(\$\)\s*$/, "") });
+    }
+    if (Math.abs(total - asignado) > 1) delDia.push({ fecha, articulo: VENTA_SIN_DETALLE, cantidad: 0, importe: total - asignado });
+    if (delDia.length) delDia[0].tickets = tickets || undefined;
+    lineas.push(...delDia);
+  }
+  const fechas = lineas.map((l) => l.fecha).sort();
+  return { lineas, descartadas, desde: fechas[0], hasta: fechas[fechas.length - 1], formato: "Ventas por día de Bistrosoft", soloCompletar: true };
+}
+
 export function convertir(h: Hoja, fechaFija?: string): ResultadoLectura {
   if (esBistrosoftDetalle(h)) return convertirBistrosoft(h);
+  if (esBistrosoftDiario(h)) return convertirBistrosoftDiario(h);
   const m = h.mapeo;
   const lineas: LineaVenta[] = [];
   let descartadas = 0;
@@ -193,7 +244,12 @@ export function convertir(h: Hoja, fechaFija?: string): ResultadoLectura {
 }
 
 /** Agrupa las líneas por mes y las suma en los meses existentes, reemplazando los días que vienen en el archivo. */
-export function incorporar(meses: Record<string, MesVentas>, lineas: LineaVenta[], archivo: string): Record<string, MesVentas> {
+export function incorporar(meses: Record<string, MesVentas>, lineas: LineaVenta[], archivo: string, soloCompletar = false): Record<string, MesVentas> {
+  if (soloCompletar) {
+    // solo se respetan los días que ya tienen el detalle por producto
+    const conDatos = new Set(Object.values(meses).flatMap((m) => m.items.filter((i) => i.articulo !== VENTA_SIN_DETALLE).map((i) => i.fecha)));
+    lineas = lineas.filter((l) => !conDatos.has(l.fecha));
+  }
   const porMes = new Map<string, LineaVenta[]>();
   for (const l of lineas) {
     const mes = l.fecha.slice(0, 7);
@@ -230,6 +286,7 @@ export function incorporar(meses: Record<string, MesVentas>, lineas: LineaVenta[
       }
     }
     for (const [f, s] of tk) tickets[f] = s.size;
+    for (const l of ls) if (l.tickets) tickets[l.fecha] = l.tickets;
     out[mes] = {
       mes,
       items: [...items.values()].map((i) => ({ ...i, importe: Math.round(i.importe * 100) / 100 })),

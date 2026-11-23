@@ -1,4 +1,5 @@
 import { Config, Gasto, MesVentas, norm } from "./tipos";
+import { VENTA_SIN_DETALLE } from "./lector";
 import { DIAS_SEMANA, corto, diaSemana, diasDelMes, fechaCorta, pct } from "./formato";
 
 export type Dia = { fecha: string; venta: number; tickets: number; cubrio: boolean; diferencia: number };
@@ -36,6 +37,7 @@ export type Resultado = {
   semana: DiaSemana[];
   medios: Medio[];
   sinCosto: string[];
+  diasSinDetalle: number;
   // derivados
   ultimo?: Dia;
   promedioDia: number;
@@ -100,7 +102,7 @@ export function calcular(mesVentas: MesVentas | undefined, mes: string, config: 
     }));
 
   const productos: Producto[] = [...porProd.values()]
-    .filter((x) => x.venta > 0)
+    .filter((x) => x.venta > 0 && x.articulo !== VENTA_SIN_DETALLE)
     .map((x) => {
       const margen = x.venta ? 1 - x.costo / x.venta : 0;
       return {
@@ -153,6 +155,7 @@ export function calcular(mesVentas: MesVentas | undefined, mes: string, config: 
     semana,
     medios,
     sinCosto: productos.filter((x) => !x.conCosto).map((x) => x.articulo).sort(),
+    diasSinDetalle: new Set(items.filter((i) => i.articulo === VENTA_SIN_DETALLE).map((i) => i.fecha)).size,
     ultimo,
     promedioDia,
     proyeccion,

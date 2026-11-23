@@ -5,7 +5,7 @@ import { LineaVenta, MesVentas } from "@/lib/tipos";
 import { fechaCorta, nombreMes, pesos } from "@/lib/formato";
 import { IcoCargar } from "./Iconos";
 
-export type Lote = { lineas: LineaVenta[]; archivo: string };
+export type Lote = { lineas: LineaVenta[]; archivo: string; soloCompletar?: boolean };
 type Props = {
   meses: Record<string, MesVentas>;
   guardar: (lotes: Lote[]) => Promise<void>;
@@ -43,7 +43,7 @@ export default function Cargar({ meses, guardar, deshacer, verResultado }: Props
         const reconocida = hs.find((h) => convertir(h).formato);
         if (reconocida) {
           const r = convertir(reconocida);
-          if (r.lineas.length) lotes.push({ lineas: r.lineas, archivo: f.name });
+          if (r.lineas.length) lotes.push({ lineas: r.lineas, archivo: f.name, soloCompletar: r.soloCompletar });
           else errores.push(`${f.name}: no tiene ventas`);
         } else if (!manual) manual = { nombre: f.name, hojas: hs };
         else errores.push(`${f.name}: formato no reconocido, subilo solo`);
@@ -58,8 +58,9 @@ export default function Cargar({ meses, guardar, deshacer, verResultado }: Props
         const lineas = lotes.flatMap((l) => l.lineas);
         const fechas = lineas.map((l) => l.fecha).sort();
         const total = lineas.reduce((s, l) => s + l.importe, 0);
-        const texto = `Se cargaron ventas por ${pesos(total)} del ${fechaCorta(fechas[0])} al ${fechaCorta(fechas[fechas.length - 1])}` +
+        const texto = `Se leyeron ventas por ${pesos(total)} del ${fechaCorta(fechas[0])} al ${fechaCorta(fechas[fechas.length - 1])}` +
           (lotes.length > 1 ? ` (${lotes.length} archivos)` : "") + "." +
+          (lotes.some((l) => l.soloCompletar) ? " Del reporte de ventas por día solo se tomaron los días que no tenían el detalle por producto." : "") +
           (errores.length ? ` No se cargó: ${errores.join("; ")}.` : "");
         setEstado({ tipo: "ok", texto });
         setListo(true);
@@ -222,11 +223,14 @@ export default function Cargar({ meses, guardar, deshacer, verResultado }: Props
           <div className="card-head"><h2>Qué bajar de Bistrosoft</h2></div>
           <ol style={{ margin: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 6 }}>
             <li>Entrá a Bistro Web (webaccess.bistrosoft.com) con el usuario del local.</li>
-            <li>Abrí el reporte <strong>Detalle de Transacciones</strong>.</li>
+            <li>Abrí el reporte <strong>Detalle de Transacciones</strong> (trae cada producto vendido).</li>
             <li>Elegí desde el <strong>día 1 del mes hasta hoy</strong>.</li>
             <li>Exportalo a <strong>Excel</strong> y subilo acá.</li>
           </ol>
-          <p className="small muted" style={{ marginTop: 10 }}>Podés subirlo todos los días o una vez por semana: los días repetidos se reemplazan, no se duplican. El archivo se llama algo como <em>DetalleDeTransacciones_FIORDO_CAFÉ…xlsx</em>.</p>
+          <p className="small muted" style={{ marginTop: 10 }}>
+            También sirve el <strong>Reporte de Ventas por Día</strong>: es más liviano y alcanza para el semáforo y el punto de equilibrio, pero no dice qué productos se vendieron. Si un día ya tiene el detalle, el reporte por día no lo pisa.
+            Podés subir los archivos todos los días o una vez por semana: los días repetidos se reemplazan, no se duplican.
+          </p>
         </section>
         <section className="card">
           <div className="card-head"><h2>Meses cargados</h2></div>

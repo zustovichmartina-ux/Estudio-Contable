@@ -77,7 +77,7 @@ export default function App() {
   async function guardarVentas(lotes: Lote[]) {
     setAnterior(datos);
     let meses = datos.meses;
-    for (const l of lotes) meses = incorporar(meses, l.lineas, l.archivo);
+    for (const l of lotes) meses = incorporar(meses, l.lineas, l.archivo, l.soloCompletar);
     const lineas = lotes.flatMap((l) => l.lineas);
     const cambiados = [...new Set(lineas.map((l) => l.fecha.slice(0, 7)))].sort();
     const nombres = { ...datos.config.nombresArticulos };

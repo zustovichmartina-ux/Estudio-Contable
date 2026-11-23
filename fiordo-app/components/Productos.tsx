@@ -31,6 +31,11 @@ export default function Productos({ r, costos, margenMinimo, nombreLocal, cambia
           <h2>Qué deja cada producto</h2>
           <span className="small muted">Mercadería promedio: {pct(r.insumosPct)} de la venta</span>
         </div>
+        {r.diasSinDetalle > 0 && (
+          <p className="aviso info small" style={{ marginBottom: 12 }}>
+            {r.diasSinDetalle} {r.diasSinDetalle === 1 ? "día se cargó" : "días se cargaron"} con el reporte de ventas por día, que no trae productos: esas ventas no aparecen en esta lista y su costo se estima. Subí el Detalle de Transacciones de esos días para verlas acá.
+          </p>
+        )}
         <p className="muted small" style={{ marginBottom: 12 }}>
           Cargá el <strong>costo de receta</strong> de cada producto: lo que cuestan los insumos de una unidad. Los productos sin costo se estiman y se marcan con un asterisco. Por debajo de {margenMinimo} % de margen se marcan para revisar el precio.
         </p>
