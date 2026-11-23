@@ -14,6 +14,8 @@
   --brand: #762303;
   --brand-ink: #ffeeda;
   --brand-soft: #ffedd9;
+  --header-bg: #762303;
+  --header-ink: #ffeeda;
   --accent: #a0553a;
   --beige: #e4e0c7;
   --ok: #4c7a34;
@@ -40,6 +42,8 @@
     --brand: #f0b48f;
     --brand-ink: #1c110b;
     --brand-soft: #3a2418;
+    --header-bg: #5c1c04;
+    --header-ink: #ffeeda;
     --accent: #d98c6b;
     --beige: #4a4231;
     --ok: #8cc46f;
@@ -80,17 +84,17 @@ button, input, select { font: inherit; color: inherit; }
 .app { min-height: 100dvh; padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 16px); }
 .top {
   position: sticky; top: 0; z-index: 20;
-  background: var(--brand); color: var(--brand-ink);
+  background: var(--header-bg); color: var(--header-ink);
   padding: calc(env(safe-area-inset-top, 0px) + 12px) max(16px, env(safe-area-inset-right, 0px)) 12px max(16px, env(safe-area-inset-left, 0px));
 }
 .top-in { max-width: 1100px; margin: 0 auto; display: flex; align-items: center; gap: 10px; }
 .marca { display: flex; align-items: center; gap: 10px; margin-right: auto; min-width: 0; }
 @media (max-width: 520px) { .top .marca span { display: none; } .top .chip { display: none; } }
-.marca h1 { font-size: 21px; color: var(--brand-ink); font-weight: 700; letter-spacing: 0; text-transform: lowercase; }
+.marca h1 { font-size: 21px; color: var(--header-ink); font-weight: 700; letter-spacing: 0; text-transform: lowercase; }
 .marca span { font-size: 12px; opacity: 0.8; display: block; line-height: 1.2; }
 .mes-sel {
-  background: color-mix(in srgb, var(--brand-ink) 14%, transparent); color: var(--brand-ink);
-  border: 1px solid color-mix(in srgb, var(--brand-ink) 30%, transparent); border-radius: 10px; padding: 7px 10px; font-weight: 600;
+  background: color-mix(in srgb, var(--header-ink) 14%, transparent); color: var(--header-ink);
+  border: 1px solid color-mix(in srgb, var(--header-ink) 30%, transparent); border-radius: 10px; padding: 7px 10px; font-weight: 600;
 }
 .mes-sel option { color: #15232b; }
 .main { max-width: 1100px; margin: 0 auto; padding: 18px max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 16px; }
@@ -214,4 +218,4 @@ tfoot td { font-weight: 600; border-bottom: 0; }
 .al-dia { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; font-size: 14px; }
 .al-dia .btn { min-height: 36px; }
 .arca-fijos { margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: var(--surface-2); display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
-.btn-instalar { min-height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--brand-ink) 45%, transparent); background: var(--brand-ink); color: var(--brand); font: inherit; font-weight: 600; font-size: 13.5px; cursor: pointer; white-space: nowrap; }
+.btn-instalar { min-height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--header-ink) 45%, transparent); background: var(--header-ink); color: var(--header-bg); font: inherit; font-weight: 600; font-size: 13.5px; cursor: pointer; white-space: nowrap; }
