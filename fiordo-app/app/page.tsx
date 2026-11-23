@@ -38,6 +38,23 @@ export default function App() {
   const [error, setError] = useState("");
   const [anterior, setAnterior] = useState<Datos | null>(null);
   const [cartel, setCartel] = useState("");
+  const [instalar, setInstalar] = useState<{ prompt: () => Promise<void> } | null>(null);
+
+  // App instalable: copia para abrir sin conexión y botón "Instalar app" cuando el navegador lo permite
+  useEffect(() => {
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+    const alOfrecer = (e: Event) => {
+      e.preventDefault();
+      setInstalar(e as unknown as { prompt: () => Promise<void> });
+    };
+    const alInstalar = () => setInstalar(null);
+    window.addEventListener("beforeinstallprompt", alOfrecer);
+    window.addEventListener("appinstalled", alInstalar);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", alOfrecer);
+      window.removeEventListener("appinstalled", alInstalar);
+    };
+  }, []);
 
   useEffect(() => {
     cargar().then(({ datos, modo }) => {
@@ -135,6 +152,9 @@ export default function App() {
             </div>
           </div>
           {datos.meses[mes]?.archivos.includes("datos de ejemplo") && <span className="chip">Datos de ejemplo</span>}
+          {instalar && (
+            <button className="btn-instalar" onClick={async () => { await instalar.prompt(); setInstalar(null); }}>Instalar app</button>
+          )}
           <label className="sr-only" htmlFor="mes" style={{ position: "absolute", left: -9999 }}>Mes</label>
           <select id="mes" className="mes-sel" value={mes} onChange={(e) => setMes(e.target.value)}>
             {opcionesMes.map((m) => <option key={m} value={m}>{nombreMes(m)}</option>)}

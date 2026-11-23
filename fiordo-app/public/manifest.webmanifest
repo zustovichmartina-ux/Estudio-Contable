@@ -1,9 +1,23 @@
 {
-  "name": "Fiordo · Punto de equilibrio",
+  "id": "/",
+  "name": "Fiordo · Números del café",
   "short_name": "Fiordo",
+  "description": "Ventas, gastos y punto de equilibrio de Fiordo Café",
+  "lang": "es-AR",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#FFF5EA",
   "theme_color": "#762303",
-  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "Cargar ventas", "url": "/#cargar", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Reportes", "url": "/#reportes", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
+  ]
 }

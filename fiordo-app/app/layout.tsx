@@ -5,7 +5,7 @@ export const metadata: Metadata = {
   title: "Fiordo · Números del café",
   description: "Control diario de ventas y punto de equilibrio de Fiordo Café",
   manifest: "/manifest.webmanifest",
-  icons: { icon: "/icon.svg", apple: "/icon.svg" },
+  icons: { icon: [{ url: "/icon.svg", type: "image/svg+xml" }, { url: "/icon-192.png", sizes: "192x192" }], apple: "/apple-touch-icon.png" },
   appleWebApp: { capable: true, title: "Fiordo", statusBarStyle: "default" },
 };
 

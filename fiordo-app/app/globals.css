@@ -214,3 +214,4 @@ tfoot td { font-weight: 600; border-bottom: 0; }
 .al-dia { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; font-size: 14px; }
 .al-dia .btn { min-height: 36px; }
 .arca-fijos { margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: var(--surface-2); display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.btn-instalar { min-height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--brand-ink) 45%, transparent); background: var(--brand-ink); color: var(--brand); font: inherit; font-weight: 600; font-size: 13.5px; cursor: pointer; white-space: nowrap; }
