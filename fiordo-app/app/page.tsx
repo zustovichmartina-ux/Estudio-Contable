@@ -36,6 +36,7 @@ export default function App() {
   const [vista, setVista] = useState<Vista>("hoy");
   const [error, setError] = useState("");
   const [anterior, setAnterior] = useState<Datos | null>(null);
+  const [cartel, setCartel] = useState("");
 
   useEffect(() => {
     cargar().then(({ datos, modo }) => {
@@ -150,8 +151,17 @@ export default function App() {
 
       <main className="main">
         {error && <div className="aviso bad" role="alert">{error}</div>}
+        {cartel && vista === "hoy" && (
+          <div className="cartel" role="status">
+            <span>✓ {cartel}</span>
+            <div className="fila" style={{ gap: 8 }}>
+              {anterior && <button className="btn sec" onClick={async () => { await deshacerCarga(); setCartel(""); }}>Deshacer</button>}
+              <button className="btn sec" aria-label="Cerrar aviso" onClick={() => setCartel("")}>✕</button>
+            </div>
+          </div>
+        )}
         {vista === "hoy" && <Hoy r={r} irA={ir} probarEjemplo={probarEjemplo} />}
-        {vista === "cargar" && <Cargar meses={datos.meses} guardar={guardarVentas} deshacer={anterior ? deshacerCarga : null} verResultado={() => ir("hoy")} />}
+        {vista === "cargar" && <Cargar meses={datos.meses} guardar={guardarVentas} deshacer={anterior ? deshacerCarga : null} verResultado={(m) => { setCartel(m); ir("hoy"); }} />}
         {vista === "productos" && (
           <Productos
             r={r}

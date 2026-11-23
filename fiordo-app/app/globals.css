@@ -184,6 +184,10 @@ tfoot td { font-weight: 600; border-bottom: 0; }
   background: var(--brand-soft);
 }
 .drop.sobre { border-color: var(--brand); }
+.drop svg { width: 32px; height: 32px; color: var(--brand); flex: none; }
+.drop { padding: 22px 16px; }
+.cartel { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-radius: 12px; background: var(--ok-soft); color: var(--ok); font-weight: 600; }
+.cartel .btn { min-height: 36px; }
 .drop input { position: absolute; opacity: 0; width: 1px; height: 1px; }
 .aviso { border-radius: 10px; padding: 12px 14px; font-size: 14px; }
 .aviso.ok { background: var(--ok-soft); color: var(--ok); }

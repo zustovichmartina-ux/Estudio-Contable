@@ -10,7 +10,7 @@ type Props = {
   meses: Record<string, MesVentas>;
   guardar: (lotes: Lote[]) => Promise<void>;
   deshacer: (() => Promise<void>) | null;
-  verResultado: () => void;
+  verResultado: (mensaje: string) => void;
 };
 
 export default function Cargar({ meses, guardar, deshacer, verResultado }: Props) {
@@ -58,13 +58,12 @@ export default function Cargar({ meses, guardar, deshacer, verResultado }: Props
         const lineas = lotes.flatMap((l) => l.lineas);
         const fechas = lineas.map((l) => l.fecha).sort();
         const total = lineas.reduce((s, l) => s + l.importe, 0);
-        setEstado({
-          tipo: "ok",
-          texto: `Listo: ventas por ${pesos(total)} del ${fechaCorta(fechas[0])} al ${fechaCorta(fechas[fechas.length - 1])}` +
-            (lotes.length > 1 ? ` (${lotes.length} archivos)` : "") + ". Si esos días ya estaban cargados, se reemplazaron." +
-            (errores.length ? ` No se cargó: ${errores.join("; ")}.` : ""),
-        });
+        const texto = `Se cargaron ventas por ${pesos(total)} del ${fechaCorta(fechas[0])} al ${fechaCorta(fechas[fechas.length - 1])}` +
+          (lotes.length > 1 ? ` (${lotes.length} archivos)` : "") + "." +
+          (errores.length ? ` No se cargó: ${errores.join("; ")}.` : "");
+        setEstado({ tipo: "ok", texto });
         setListo(true);
+        if (!manual) verResultado(texto);
       } catch (e) {
         setEstado({ tipo: "bad", texto: (e as Error).message });
       } finally {
@@ -102,6 +101,7 @@ export default function Cargar({ meses, guardar, deshacer, verResultado }: Props
     try {
       await guardar([{ lineas: lectura.lineas, archivo }]);
       setListo(true);
+      verResultado(`Se cargaron ventas por ${pesos(total)} del ${fechaCorta(lectura.desde!)} al ${fechaCorta(lectura.hasta!)}.`);
       setEstado({ tipo: "ok", texto: `Listo: se guardaron ${lectura.lineas.length.toLocaleString("es-AR")} líneas por ${pesos(total)}, del ${fechaCorta(lectura.desde!)} al ${fechaCorta(lectura.hasta!)}. Si esos días ya estaban cargados, se reemplazaron.` });
       setHojas([]);
     } catch (e) {
@@ -132,7 +132,7 @@ export default function Cargar({ meses, guardar, deshacer, verResultado }: Props
         {estado && <div className={`aviso ${estado.tipo}`} style={{ marginTop: 12 }} role="status">{estado.texto}</div>}
         {listo && (
           <div className="fila" style={{ marginTop: 12 }}>
-            <button className="btn" onClick={verResultado}>Ver cómo vamos</button>
+            <button className="btn" onClick={() => verResultado("")}>Ver cómo vamos</button>
             {deshacer && (
               <button className="btn sec" onClick={async () => { await deshacer(); setListo(false); setEstado({ tipo: "info", texto: "Se deshizo la última carga." }); }}>Deshacer</button>
             )}
