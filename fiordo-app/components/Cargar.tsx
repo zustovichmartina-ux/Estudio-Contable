@@ -5,9 +5,15 @@ import { LineaVenta, MesVentas } from "@/lib/tipos";
 import { fechaCorta, nombreMes, pesos } from "@/lib/formato";
 import { IcoCargar } from "./Iconos";
 
-type Props = { meses: Record<string, MesVentas>; guardar: (lineas: LineaVenta[], archivo: string) => Promise<void> };
+export type Lote = { lineas: LineaVenta[]; archivo: string };
+type Props = {
+  meses: Record<string, MesVentas>;
+  guardar: (lotes: Lote[]) => Promise<void>;
+  deshacer: (() => Promise<void>) | null;
+  verResultado: () => void;
+};
 
-export default function Cargar({ meses, guardar }: Props) {
+export default function Cargar({ meses, guardar, deshacer, verResultado }: Props) {
   const [archivo, setArchivo] = useState<string>("");
   const [hojas, setHojas] = useState<Hoja[]>([]);
   const [iHoja, setIHoja] = useState(0);
@@ -15,24 +21,64 @@ export default function Cargar({ meses, guardar }: Props) {
   const [estado, setEstado] = useState<{ tipo: "ok" | "bad" | "info"; texto: string } | null>(null);
   const [sobre, setSobre] = useState(false);
   const [guardando, setGuardando] = useState(false);
+  const [listo, setListo] = useState(false);
 
   const hoja = hojas[iHoja];
   const lectura = useMemo(() => (hoja ? convertir(hoja, fechaFija || undefined) : null), [hoja, fechaFija]);
   const total = lectura?.lineas.reduce((s, l) => s + l.importe, 0) ?? 0;
 
-  async function abrir(f: File | undefined) {
-    if (!f) return;
-    setEstado({ tipo: "info", texto: `Leyendo ${f.name}…` });
-    try {
-      const hs = await leerArchivo(f);
-      if (!hs.length) throw new Error("El archivo no tiene datos.");
-      setArchivo(f.name);
-      setHojas(hs);
+  async function abrir(lista: FileList | File[] | null | undefined) {
+    const archivos = Array.from(lista ?? []);
+    if (!archivos.length) return;
+    setListo(false);
+    setHojas([]);
+    setEstado({ tipo: "info", texto: archivos.length === 1 ? `Leyendo ${archivos[0].name}…` : `Leyendo ${archivos.length} archivos…` });
+    const lotes: Lote[] = [];
+    const errores: string[] = [];
+    let manual: { nombre: string; hojas: Hoja[] } | null = null;
+    for (const f of archivos) {
+      try {
+        const hs = await leerArchivo(f);
+        if (!hs.length) throw new Error("no tiene datos");
+        const reconocida = hs.find((h) => convertir(h).formato);
+        if (reconocida) {
+          const r = convertir(reconocida);
+          if (r.lineas.length) lotes.push({ lineas: r.lineas, archivo: f.name });
+          else errores.push(`${f.name}: no tiene ventas`);
+        } else if (!manual) manual = { nombre: f.name, hojas: hs };
+        else errores.push(`${f.name}: formato no reconocido, subilo solo`);
+      } catch (e) {
+        errores.push(`${f.name}: no se pudo leer (${(e as Error).message})`);
+      }
+    }
+    if (lotes.length) {
+      setGuardando(true);
+      try {
+        await guardar(lotes);
+        const lineas = lotes.flatMap((l) => l.lineas);
+        const fechas = lineas.map((l) => l.fecha).sort();
+        const total = lineas.reduce((s, l) => s + l.importe, 0);
+        setEstado({
+          tipo: "ok",
+          texto: `Listo: ventas por ${pesos(total)} del ${fechaCorta(fechas[0])} al ${fechaCorta(fechas[fechas.length - 1])}` +
+            (lotes.length > 1 ? ` (${lotes.length} archivos)` : "") + ". Si esos días ya estaban cargados, se reemplazaron." +
+            (errores.length ? ` No se cargó: ${errores.join("; ")}.` : ""),
+        });
+        setListo(true);
+      } catch (e) {
+        setEstado({ tipo: "bad", texto: (e as Error).message });
+      } finally {
+        setGuardando(false);
+      }
+    } else if (!manual) {
+      setEstado({ tipo: "bad", texto: `No se pudo cargar: ${errores.join("; ")}. Probá exportarlo de nuevo como Excel (.xlsx).` });
+    } else {
+      setEstado(errores.length ? { tipo: "bad", texto: `No se cargó: ${errores.join("; ")}.` } : null);
+    }
+    if (manual) {
+      setArchivo(manual.nombre);
+      setHojas(manual.hojas);
       setIHoja(0);
-      setEstado(null);
-    } catch (e) {
-      setHojas([]);
-      setEstado({ tipo: "bad", texto: `No pude leer ${f.name}. Probá exportarlo de nuevo como Excel (.xlsx) o CSV. (${(e as Error).message})` });
     }
   }
 
@@ -54,7 +100,8 @@ export default function Cargar({ meses, guardar }: Props) {
     if (!lectura?.lineas.length) return;
     setGuardando(true);
     try {
-      await guardar(lectura.lineas, archivo);
+      await guardar([{ lineas: lectura.lineas, archivo }]);
+      setListo(true);
       setEstado({ tipo: "ok", texto: `Listo: se guardaron ${lectura.lineas.length.toLocaleString("es-AR")} líneas por ${pesos(total)}, del ${fechaCorta(lectura.desde!)} al ${fechaCorta(lectura.hasta!)}. Si esos días ya estaban cargados, se reemplazaron.` });
       setHojas([]);
     } catch (e) {
@@ -75,14 +122,22 @@ export default function Cargar({ meses, guardar }: Props) {
           className={`drop${sobre ? " sobre" : ""}`}
           onDragOver={(e) => { e.preventDefault(); setSobre(true); }}
           onDragLeave={() => setSobre(false)}
-          onDrop={(e) => { e.preventDefault(); setSobre(false); abrir(e.dataTransfer.files[0]); }}
+          onDrop={(e) => { e.preventDefault(); setSobre(false); abrir(e.dataTransfer.files); }}
         >
           <IcoCargar />
-          <strong>Elegí el archivo de ventas</strong>
-          <span className="small muted">Excel (.xlsx, .xls) o CSV. En la compu también podés arrastrarlo acá.</span>
-          <input id="archivo" type="file" accept=".xlsx,.xls,.csv,.txt" onChange={(e) => { abrir(e.target.files?.[0]); e.target.value = ""; }} />
+          <strong>{guardando ? "Guardando…" : "Subí el Detalle de Transacciones de Bistrosoft"}</strong>
+          <span className="small muted">Se guarda solo. Podés elegir varios archivos a la vez. En la compu también podés arrastrarlos acá.</span>
+          <input id="archivo" type="file" multiple accept=".xlsx,.xls,.csv,.txt" onChange={(e) => { abrir(e.target.files); e.target.value = ""; }} />
         </label>
         {estado && <div className={`aviso ${estado.tipo}`} style={{ marginTop: 12 }} role="status">{estado.texto}</div>}
+        {listo && (
+          <div className="fila" style={{ marginTop: 12 }}>
+            <button className="btn" onClick={verResultado}>Ver cómo vamos</button>
+            {deshacer && (
+              <button className="btn sec" onClick={async () => { await deshacer(); setListo(false); setEstado({ tipo: "info", texto: "Se deshizo la última carga." }); }}>Deshacer</button>
+            )}
+          </div>
+        )}
       </section>
 
       {hoja && lectura && (
@@ -164,15 +219,14 @@ export default function Cargar({ meses, guardar }: Props) {
 
       <div className="grid-2">
         <section className="card">
-          <div className="card-head"><h2>Cómo sacar el Excel de Bistrosoft</h2></div>
+          <div className="card-head"><h2>Qué bajar de Bistrosoft</h2></div>
           <ol style={{ margin: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 6 }}>
             <li>Entrá a Bistro Web (webaccess.bistrosoft.com) con el usuario del local.</li>
-            <li>Andá a la sección de <strong>Reportes</strong> o <strong>Ventas</strong>.</li>
-            <li>Elegí el reporte con más detalle: <strong>ventas por artículo</strong> o <strong>detalle de ventas / tickets</strong>.</li>
-            <li>Poné el rango de fechas (por ejemplo, del 1 al último día del mes).</li>
-            <li>Tocá <strong>Exportar → Excel</strong> y subí ese archivo acá.</li>
+            <li>Abrí el reporte <strong>Detalle de Transacciones</strong>.</li>
+            <li>Elegí desde el <strong>día 1 del mes hasta hoy</strong>.</li>
+            <li>Exportalo a <strong>Excel</strong> y subilo acá.</li>
           </ol>
-          <p className="small muted" style={{ marginTop: 10 }}>Lo ideal es que tenga una fila por artículo vendido con fecha, cantidad e importe. Si además trae medio de pago y número de ticket, la app los usa.</p>
+          <p className="small muted" style={{ marginTop: 10 }}>Podés subirlo todos los días o una vez por semana: los días repetidos se reemplazan, no se duplican. El archivo se llama algo como <em>DetalleDeTransacciones_FIORDO_CAFÉ…xlsx</em>.</p>
         </section>
         <section className="card">
           <div className="card-head"><h2>Meses cargados</h2></div>

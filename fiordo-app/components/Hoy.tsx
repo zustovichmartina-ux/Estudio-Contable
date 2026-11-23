@@ -20,6 +20,23 @@ export default function Hoy({ r, irA, probarEjemplo }: Props) {
 
   const u = r.ultimo!;
   const sinGastos = r.fijos <= 0;
+  const conCosto = r.productos.filter((p) => p.conCosto).length;
+  const pasos: { titulo: string; detalle: string; hecho: boolean; ir: "cargar" | "productos" | "gastos"; boton: string }[] = [
+    { titulo: "Subir las ventas", detalle: "El Detalle de Transacciones de Bistrosoft.", hecho: r.hayDatos, ir: "cargar", boton: "Subir" },
+    { titulo: "Cargar los gastos fijos", detalle: "Alquiler, sueldos, servicios… Con esto sale el punto de equilibrio.", hecho: !sinGastos, ir: "gastos", boton: "Cargar" },
+    {
+      titulo: "Cargar el costo de los productos",
+      detalle: conCosto ? `${conCosto} de ${r.productos.length} productos con costo. Mientras tanto se estima.` : "Con la planilla de costos, todos de una vez. Mientras tanto se estima.",
+      hecho: r.productos.length > 0 && conCosto >= r.productos.length * 0.8,
+      ir: "productos",
+      boton: "Cargar",
+    },
+  ];
+  const pendientes = pasos.filter((p) => !p.hecho).length;
+  // días de atraso: solo si el mes que se mira es el actual
+  const hoy = new Date();
+  const esMesActual = r.mes === `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}`;
+  const atraso = esMesActual ? Math.floor((hoy.getTime() - new Date(u.fecha + "T00:00:00").getTime()) / 86400000) : 0;
   const escala = Math.max(r.peMes, r.proyeccion, r.ventasMes) * 1.05 || 1;
   const veredicto = sinGastos
     ? "Cargá los gastos fijos para saber si este día cubrió los costos."
@@ -29,12 +46,31 @@ export default function Hoy({ r, irA, probarEjemplo }: Props) {
 
   return (
     <>
-      {r.fijos <= 0 && (
-        <div className="aviso bad">
-          Falta cargar los gastos fijos del mes, así que el punto de equilibrio todavía no es real.{" "}
-          <button className="btn sec" style={{ minHeight: 32, marginLeft: 6 }} onClick={() => irA("gastos")}>Cargar gastos</button>
-        </div>
+      {pendientes > 0 && (
+        <section className="card pasos" aria-label="Primeros pasos">
+          <div className="card-head" style={{ marginBottom: 8 }}>
+            <h2>Primeros pasos</h2>
+            <span className="small muted">{3 - pendientes} de 3 listos</span>
+          </div>
+          <ul>
+            {pasos.map((p) => (
+              <li key={p.titulo} className={p.hecho ? "hecho" : ""}>
+                <span className="check" aria-hidden="true">{p.hecho ? "✓" : ""}</span>
+                <div>
+                  <strong>{p.titulo}</strong>
+                  <span className="small muted">{p.detalle}</span>
+                </div>
+                {!p.hecho && <button className="btn sec" onClick={() => irA(p.ir)}>{p.boton}</button>}
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
+
+      <div className="al-dia">
+        <span>Ventas cargadas hasta el <strong>{fechaCorta(u.fecha)}</strong>{atraso > 1 && <span className="muted"> · faltan {atraso - 1} días</span>}</span>
+        <button className="btn sec" onClick={() => irA("cargar")}>Actualizar ventas</button>
+      </div>
 
       <div className="grid-2">
         <section className={`semaforo ${sinGastos ? "neutro" : r.estadoDia}`} aria-label="Resultado del último día">

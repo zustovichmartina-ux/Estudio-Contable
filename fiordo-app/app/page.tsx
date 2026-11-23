@@ -3,12 +3,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Modo, borrarMes, cargar, guardarConfig, guardarMeses } from "@/lib/almacen";
 import { incorporar } from "@/lib/lector";
 import { calcular } from "@/lib/motor";
-import { CONFIG_INICIAL, Config, Datos, Gasto, LineaVenta, Parametros, norm } from "@/lib/tipos";
+import { CONFIG_INICIAL, Config, Datos, Gasto, Parametros, norm } from "@/lib/tipos";
 import { CATALOGO_EJEMPLO, GASTOS_EJEMPLO, ventasEjemplo } from "@/lib/ejemplo";
 import { nombreMes } from "@/lib/formato";
 import Hoy from "@/components/Hoy";
 import Logo from "@/components/Logo";
-import Cargar from "@/components/Cargar";
+import Cargar, { Lote } from "@/components/Cargar";
 import Productos from "@/components/Productos";
 import Gastos from "@/components/Gastos";
 import Reportes from "@/components/Reportes";
@@ -35,6 +35,7 @@ export default function App() {
   const [mes, setMes] = useState(mesActual());
   const [vista, setVista] = useState<Vista>("hoy");
   const [error, setError] = useState("");
+  const [anterior, setAnterior] = useState<Datos | null>(null);
 
   useEffect(() => {
     cargar().then(({ datos, modo }) => {
@@ -72,8 +73,11 @@ export default function App() {
     conError(() => guardarConfig(nuevo, modo));
   };
 
-  async function guardarVentas(lineas: LineaVenta[], archivo: string) {
-    const meses = incorporar(datos.meses, lineas, archivo);
+  async function guardarVentas(lotes: Lote[]) {
+    setAnterior(datos);
+    let meses = datos.meses;
+    for (const l of lotes) meses = incorporar(meses, l.lineas, l.archivo);
+    const lineas = lotes.flatMap((l) => l.lineas);
     const cambiados = [...new Set(lineas.map((l) => l.fecha.slice(0, 7)))].sort();
     const nombres = { ...datos.config.nombresArticulos };
     for (const l of lineas) nombres[norm(l.articulo)] ??= l.articulo;
@@ -82,6 +86,19 @@ export default function App() {
     setMes(cambiados[cambiados.length - 1]);
     await guardarMeses(nuevo, cambiados, modo);
     await guardarConfig(nuevo, modo);
+  }
+
+  async function deshacerCarga() {
+    if (!anterior) return;
+    const cambiados = Object.keys(datos.meses).filter((m) => datos.meses[m] !== anterior.meses[m]);
+    setDatos(anterior);
+    setAnterior(null);
+    await conError(async () => {
+      for (const m of cambiados) {
+        if (anterior.meses[m]) await guardarMeses(anterior, [m], modo);
+        else await borrarMes(anterior, m, modo);
+      }
+    });
   }
 
   function probarEjemplo() {
@@ -134,7 +151,7 @@ export default function App() {
       <main className="main">
         {error && <div className="aviso bad" role="alert">{error}</div>}
         {vista === "hoy" && <Hoy r={r} irA={ir} probarEjemplo={probarEjemplo} />}
-        {vista === "cargar" && <Cargar meses={datos.meses} guardar={guardarVentas} />}
+        {vista === "cargar" && <Cargar meses={datos.meses} guardar={guardarVentas} deshacer={anterior ? deshacerCarga : null} verResultado={() => ir("hoy")} />}
         {vista === "productos" && (
           <Productos
             r={r}

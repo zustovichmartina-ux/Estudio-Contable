@@ -197,3 +197,15 @@ tfoot td { font-weight: 600; border-bottom: 0; }
 .leyenda i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
 .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; background: color-mix(in srgb, var(--brand-ink) 14%, transparent); }
 @media (prefers-reduced-motion: no-preference) { .barra-fill { transition: width 0.4s ease; } }
+
+/* primeros pasos y aviso de datos al día */
+.pasos ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.pasos li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); }
+.pasos li > div { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.pasos li.hecho { background: var(--ok-soft); }
+.pasos li.hecho strong { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--ok) 60%, transparent); }
+.pasos .check { width: 26px; height: 26px; flex: none; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; font-weight: 700; color: var(--brand-ink); }
+.pasos li.hecho .check { background: var(--ok); border-color: var(--ok); }
+.pasos .btn { min-height: 38px; }
+.al-dia { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; font-size: 14px; }
+.al-dia .btn { min-height: 36px; }
