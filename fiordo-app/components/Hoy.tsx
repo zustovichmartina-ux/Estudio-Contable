@@ -23,7 +23,7 @@ export default function Hoy({ r, irA, probarEjemplo }: Props) {
   const conCosto = r.productos.filter((p) => p.conCosto).length;
   const pasos: { titulo: string; detalle: string; hecho: boolean; ir: "cargar" | "productos" | "gastos"; boton: string }[] = [
     { titulo: "Subir las ventas", detalle: "El Detalle de Transacciones de Bistrosoft.", hecho: r.hayDatos, ir: "cargar", boton: "Subir" },
-    { titulo: "Cargar los gastos fijos", detalle: "Alquiler, sueldos, servicios… Con esto sale el punto de equilibrio.", hecho: !sinGastos, ir: "gastos", boton: "Cargar" },
+    { titulo: "Cargar los gastos fijos", detalle: "Sueldos y alquiler a mano; los servicios facturados salen de las compras de ARCA.", hecho: !sinGastos, ir: "gastos", boton: "Cargar" },
     {
       titulo: "Cargar el costo de los productos",
       detalle: conCosto ? `${conCosto} de ${r.productos.length} productos con costo. Mientras tanto se estima.` : "Con la planilla de costos, todos de una vez. Mientras tanto se estima.",

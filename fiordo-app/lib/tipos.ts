@@ -17,9 +17,16 @@ export type MesVentas = {
   tickets: Record<string, number>; // fecha -> cantidad de tickets
   archivos: string[];
   actualizado: string; // ISO
+  compras?: Compra[]; // facturas de proveedores del mes (ARCA, Mis Comprobantes Recibidos)
 };
 
-export type Gasto = { concepto: string; importe: number };
+/** Factura de compra. costo = importe sin IVA ni percepciones (negativo si es nota de crédito). */
+export type Compra = { fecha: string; cuit: string; proveedor: string; tipo: string; numero: string; costo: number; total: number };
+
+/** Cómo se usa cada proveedor: mercadería (costo variable), gasto fijo (con su rubro) o no se incluye. */
+export type Proveedor = { nombre: string; categoria: "mercaderia" | "fijo" | "ignorar"; concepto: string };
+
+export type Gasto = { concepto: string; importe: number; origen?: "arca" };
 
 export type Parametros = {
   comisionPct: number; // tarjetas, QR, posnet
@@ -27,6 +34,8 @@ export type Parametros = {
   diasCerrados: number; // días del mes que el local no abre (feriados, vacaciones)
   costoDefectoPct: number; // artículos sin costo de receta
   margenMinimoPct: number; // por debajo se marca para revisar
+  mercaderiaSegun: "auto" | "compras" | "recetas"; // de dónde sale el costo de mercadería
+  ivaComputable: boolean; // Responsable Inscripto: el IVA de compras no es costo
 };
 
 export type Config = {
@@ -36,6 +45,7 @@ export type Config = {
   nombresArticulos: Record<string, string>; // normalizado -> como se escribe
   gastosBase: Gasto[]; // se copian a cada mes nuevo
   gastosPorMes: Record<string, Gasto[]>; // AAAA-MM -> gastos de ese mes
+  proveedores: Record<string, Proveedor>; // CUIT -> clasificación
 };
 
 export type Datos = { config: Config; meses: Record<string, MesVentas> };
@@ -46,6 +56,8 @@ export const PARAMETROS_INICIALES: Parametros = {
   diasCerrados: 0,
   costoDefectoPct: 32,
   margenMinimoPct: 55,
+  mercaderiaSegun: "auto",
+  ivaComputable: true,
 };
 
 export const GASTOS_INICIALES: Gasto[] = [
@@ -66,6 +78,7 @@ export const CONFIG_INICIAL: Config = {
   nombresArticulos: {},
   gastosBase: GASTOS_INICIALES,
   gastosPorMes: {},
+  proveedores: {},
 };
 
 export const norm = (s: string) =>

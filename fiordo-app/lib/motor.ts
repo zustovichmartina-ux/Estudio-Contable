@@ -1,5 +1,6 @@
 import { Config, Gasto, MesVentas, norm } from "./tipos";
 import { VENTA_SIN_DETALLE } from "./lector";
+import { ResumenCompras, resumirCompras } from "./compras";
 import { DIAS_SEMANA, corto, diaSemana, diasDelMes, fechaCorta, pct } from "./formato";
 
 export type Dia = { fecha: string; venta: number; tickets: number; cubrio: boolean; diferencia: number };
@@ -38,6 +39,9 @@ export type Resultado = {
   medios: Medio[];
   sinCosto: string[];
   diasSinDetalle: number;
+  compras: ResumenCompras;
+  fijosManuales: number;
+  mercaderiaSegun: "compras" | "recetas"; // de dónde salió el costo de mercadería de este mes
   // derivados
   ultimo?: Dia;
   promedioDia: number;
@@ -57,8 +61,11 @@ export function gastosDelMes(config: Config, mes: string): Gasto[] {
 
 export function calcular(mesVentas: MesVentas | undefined, mes: string, config: Config): Resultado {
   const p = config.parametros;
-  const gastos = gastosDelMes(config, mes);
-  const fijos = gastos.reduce((s, g) => s + (Number(g.importe) || 0), 0);
+  const manuales = gastosDelMes(config, mes);
+  const compras = resumirCompras(mesVentas?.compras, config);
+  const gastos: Gasto[] = [...manuales, ...compras.gastosFijos.map((g) => ({ ...g, origen: "arca" as const }))];
+  const fijosManuales = manuales.reduce((s, g) => s + (Number(g.importe) || 0), 0);
+  const fijos = fijosManuales + compras.fijos;
   const otrosVar = (p.comisionPct + p.iibbPct) / 100;
   const diasApertura = Math.max(1, diasDelMes(mes) - (p.diasCerrados || 0));
   const items = mesVentas?.items ?? [];
@@ -85,7 +92,9 @@ export function calcular(mesVentas: MesVentas | undefined, mes: string, config: 
     porProd.set(clave, prev);
   }
 
-  const insumosPct = ventasMes ? costoTotal / ventasMes : 0;
+  // Mercadería: lo comprado en el mes según ARCA, o el costo de receta de lo vendido
+  const usarCompras = p.mercaderiaSegun === "compras" || (p.mercaderiaSegun !== "recetas" && compras.mercaderia > 0);
+  const insumosPct = !ventasMes ? 0 : usarCompras ? compras.mercaderia / ventasMes : costoTotal / ventasMes;
   const variablesPct = insumosPct + otrosVar;
   const mc = 1 - variablesPct;
   const peMes = mc > 0 ? fijos / mc : Infinity;
@@ -156,6 +165,9 @@ export function calcular(mesVentas: MesVentas | undefined, mes: string, config: 
     medios,
     sinCosto: productos.filter((x) => !x.conCosto).map((x) => x.articulo).sort(),
     diasSinDetalle: new Set(items.filter((i) => i.articulo === VENTA_SIN_DETALLE).map((i) => i.fecha)).size,
+    compras,
+    fijosManuales,
+    mercaderiaSegun: usarCompras ? "compras" : "recetas",
     ultimo,
     promedioDia,
     proyeccion,

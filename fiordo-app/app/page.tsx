@@ -8,7 +8,8 @@ import { CATALOGO_EJEMPLO, GASTOS_EJEMPLO, ventasEjemplo } from "@/lib/ejemplo";
 import { nombreMes } from "@/lib/formato";
 import Hoy from "@/components/Hoy";
 import Logo from "@/components/Logo";
-import Cargar, { Lote } from "@/components/Cargar";
+import Cargar, { Lote, LoteCompras } from "@/components/Cargar";
+import { incorporarCompras } from "@/lib/compras";
 import Productos from "@/components/Productos";
 import Gastos from "@/components/Gastos";
 import Reportes from "@/components/Reportes";
@@ -74,12 +75,13 @@ export default function App() {
     conError(() => guardarConfig(nuevo, modo));
   };
 
-  async function guardarVentas(lotes: Lote[]) {
+  async function guardarVentas(lotes: Lote[], lotesCompras: LoteCompras[] = []) {
     setAnterior(datos);
     let meses = datos.meses;
     for (const l of lotes) meses = incorporar(meses, l.lineas, l.archivo, l.soloCompletar);
+    for (const l of lotesCompras) meses = incorporarCompras(meses, l.compras, l.archivo);
     const lineas = lotes.flatMap((l) => l.lineas);
-    const cambiados = [...new Set(lineas.map((l) => l.fecha.slice(0, 7)))].sort();
+    const cambiados = [...new Set([...lineas.map((l) => l.fecha), ...lotesCompras.flatMap((l) => l.compras.map((c) => c.fecha))].map((f) => f.slice(0, 7)))].sort();
     const nombres = { ...datos.config.nombresArticulos };
     for (const l of lineas) nombres[norm(l.articulo)] ??= l.articulo;
     const nuevo = { config: { ...datos.config, nombresArticulos: nombres }, meses };
@@ -151,7 +153,7 @@ export default function App() {
 
       <main className="main">
         {error && <div className="aviso bad" role="alert">{error}</div>}
-        {cartel && vista === "hoy" && (
+        {cartel && (vista === "hoy" || vista === "gastos") && (
           <div className="cartel" role="status">
             <span>✓ {cartel}</span>
             <div className="fila" style={{ gap: 8 }}>
@@ -161,7 +163,7 @@ export default function App() {
           </div>
         )}
         {vista === "hoy" && <Hoy r={r} irA={ir} probarEjemplo={probarEjemplo} />}
-        {vista === "cargar" && <Cargar meses={datos.meses} guardar={guardarVentas} deshacer={anterior ? deshacerCarga : null} verResultado={(m) => { setCartel(m); ir("hoy"); }} />}
+        {vista === "cargar" && <Cargar meses={datos.meses} ivaComputable={datos.config.parametros.ivaComputable} guardar={guardarVentas} deshacer={anterior ? deshacerCarga : null} verResultado={(m, v = "hoy") => { setCartel(m); ir(v); }} />}
         {vista === "productos" && (
           <Productos
             r={r}
@@ -194,6 +196,8 @@ export default function App() {
               actualizarConfig((c) => ({ ...c, gastosPorMes: { ...c.gastosPorMes, [mes]: gastos }, gastosBase: base ? gastos : c.gastosBase }))
             }
             guardarParametros={(p: Parametros, nombreLocal: string) => actualizarConfig((c) => ({ ...c, parametros: p, nombreLocal }))}
+            clasificarProveedor={(cuit, prov) => actualizarConfig((c) => ({ ...c, proveedores: { ...(c.proveedores ?? {}), [cuit]: prov } }))}
+            irACargar={() => ir("cargar")}
             borrarMes={() => {
               const meses = { ...datos.meses };
               delete meses[mes];

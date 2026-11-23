@@ -1,19 +1,22 @@
 "use client";
 import { useMemo, useState } from "react";
 import { CAMPOS, Campo, Hoja, convertir, leerArchivo } from "@/lib/lector";
-import { LineaVenta, MesVentas } from "@/lib/tipos";
+import { esArcaCompras, leerComprasArca } from "@/lib/compras";
+import { Compra, LineaVenta, MesVentas } from "@/lib/tipos";
 import { fechaCorta, nombreMes, pesos } from "@/lib/formato";
 import { IcoCargar } from "./Iconos";
 
 export type Lote = { lineas: LineaVenta[]; archivo: string; soloCompletar?: boolean };
+export type LoteCompras = { compras: Compra[]; archivo: string };
 type Props = {
   meses: Record<string, MesVentas>;
-  guardar: (lotes: Lote[]) => Promise<void>;
+  ivaComputable: boolean;
+  guardar: (lotes: Lote[], compras: LoteCompras[]) => Promise<void>;
   deshacer: (() => Promise<void>) | null;
-  verResultado: (mensaje: string) => void;
+  verResultado: (mensaje: string, vista?: "hoy" | "gastos") => void;
 };
 
-export default function Cargar({ meses, guardar, deshacer, verResultado }: Props) {
+export default function Cargar({ meses, ivaComputable, guardar, deshacer, verResultado }: Props) {
   const [archivo, setArchivo] = useState<string>("");
   const [hojas, setHojas] = useState<Hoja[]>([]);
   const [iHoja, setIHoja] = useState(0);
@@ -34,14 +37,20 @@ export default function Cargar({ meses, guardar, deshacer, verResultado }: Props
     setHojas([]);
     setEstado({ tipo: "info", texto: archivos.length === 1 ? `Leyendo ${archivos[0].name}…` : `Leyendo ${archivos.length} archivos…` });
     const lotes: Lote[] = [];
+    const lotesCompras: LoteCompras[] = [];
     const errores: string[] = [];
     let manual: { nombre: string; hojas: Hoja[] } | null = null;
     for (const f of archivos) {
       try {
         const hs = await leerArchivo(f);
         if (!hs.length) throw new Error("no tiene datos");
-        const reconocida = hs.find((h) => convertir(h).formato);
-        if (reconocida) {
+        const arca = hs.find(esArcaCompras);
+        const reconocida = arca ? undefined : hs.find((h) => convertir(h).formato);
+        if (arca) {
+          const cs = leerComprasArca(arca, ivaComputable);
+          if (cs.length) lotesCompras.push({ compras: cs, archivo: f.name });
+          else errores.push(`${f.name}: no tiene comprobantes`);
+        } else if (reconocida) {
           const r = convertir(reconocida);
           if (r.lineas.length) lotes.push({ lineas: r.lineas, archivo: f.name, soloCompletar: r.soloCompletar });
           else errores.push(`${f.name}: no tiene ventas`);
@@ -51,20 +60,27 @@ export default function Cargar({ meses, guardar, deshacer, verResultado }: Props
         errores.push(`${f.name}: no se pudo leer (${(e as Error).message})`);
       }
     }
-    if (lotes.length) {
+    if (lotes.length || lotesCompras.length) {
       setGuardando(true);
       try {
-        await guardar(lotes);
-        const lineas = lotes.flatMap((l) => l.lineas);
-        const fechas = lineas.map((l) => l.fecha).sort();
-        const total = lineas.reduce((s, l) => s + l.importe, 0);
-        const texto = `Se leyeron ventas por ${pesos(total)} del ${fechaCorta(fechas[0])} al ${fechaCorta(fechas[fechas.length - 1])}` +
-          (lotes.length > 1 ? ` (${lotes.length} archivos)` : "") + "." +
-          (lotes.some((l) => l.soloCompletar) ? " Del reporte de ventas por día solo se tomaron los días que no tenían el detalle por producto." : "") +
-          (errores.length ? ` No se cargó: ${errores.join("; ")}.` : "");
+        await guardar(lotes, lotesCompras);
+        const partes: string[] = [];
+        if (lotes.length) {
+          const lineas = lotes.flatMap((l) => l.lineas);
+          const fechas = lineas.map((l) => l.fecha).sort();
+          const total = lineas.reduce((s, l) => s + l.importe, 0);
+          partes.push(`Se leyeron ventas por ${pesos(total)} del ${fechaCorta(fechas[0])} al ${fechaCorta(fechas[fechas.length - 1])}.` +
+            (lotes.some((l) => l.soloCompletar) ? " Del reporte de ventas por día solo se tomaron los días que no tenían el detalle por producto." : ""));
+        }
+        if (lotesCompras.length) {
+          const cs = lotesCompras.flatMap((l) => l.compras);
+          const fechas = cs.map((c) => c.fecha).sort();
+          partes.push(`Se leyeron ${cs.length} facturas de compras de ARCA por ${pesos(cs.reduce((s, c) => s + c.costo, 0))} sin IVA, del ${fechaCorta(fechas[0])} al ${fechaCorta(fechas[fechas.length - 1])}. Revisá cómo quedó clasificado cada proveedor.`);
+        }
+        const texto = partes.join(" ") + (errores.length ? ` No se cargó: ${errores.join("; ")}.` : "");
         setEstado({ tipo: "ok", texto });
         setListo(true);
-        if (!manual) verResultado(texto);
+        if (!manual) verResultado(texto, lotesCompras.length && !lotes.length ? "gastos" : "hoy");
       } catch (e) {
         setEstado({ tipo: "bad", texto: (e as Error).message });
       } finally {
@@ -100,7 +116,7 @@ export default function Cargar({ meses, guardar, deshacer, verResultado }: Props
     if (!lectura?.lineas.length) return;
     setGuardando(true);
     try {
-      await guardar([{ lineas: lectura.lineas, archivo }]);
+      await guardar([{ lineas: lectura.lineas, archivo }], []);
       setListo(true);
       verResultado(`Se cargaron ventas por ${pesos(total)} del ${fechaCorta(lectura.desde!)} al ${fechaCorta(lectura.hasta!)}.`);
       setEstado({ tipo: "ok", texto: `Listo: se guardaron ${lectura.lineas.length.toLocaleString("es-AR")} líneas por ${pesos(total)}, del ${fechaCorta(lectura.desde!)} al ${fechaCorta(lectura.hasta!)}. Si esos días ya estaban cargados, se reemplazaron.` });
@@ -127,7 +143,7 @@ export default function Cargar({ meses, guardar, deshacer, verResultado }: Props
         >
           <IcoCargar />
           <strong>{guardando ? "Guardando…" : "Subí el Detalle de Transacciones de Bistrosoft"}</strong>
-          <span className="small muted">Se guarda solo. Podés elegir varios archivos a la vez. En la compu también podés arrastrarlos acá.</span>
+          <span className="small muted">También las compras de ARCA (Mis Comprobantes Recibidos). Se guarda solo y podés elegir varios archivos a la vez.</span>
           <input id="archivo" type="file" multiple accept=".xlsx,.xls,.csv,.txt" onChange={(e) => { abrir(e.target.files); e.target.value = ""; }} />
         </label>
         {estado && <div className={`aviso ${estado.tipo}`} style={{ marginTop: 12 }} role="status">{estado.texto}</div>}
@@ -231,6 +247,12 @@ export default function Cargar({ meses, guardar, deshacer, verResultado }: Props
             También sirve el <strong>Reporte de Ventas por Día</strong>: es más liviano y alcanza para el semáforo y el punto de equilibrio, pero no dice qué productos se vendieron. Si un día ya tiene el detalle, el reporte por día no lo pisa.
             Podés subir los archivos todos los días o una vez por semana: los días repetidos se reemplazan, no se duplican.
           </p>
+          <h3 style={{ marginTop: 14 }}>Compras de ARCA</h3>
+          <ol style={{ margin: "6px 0 0", paddingLeft: 20, display: "flex", flexDirection: "column", gap: 6 }}>
+            <li>Entrá a <strong>ARCA</strong> con la clave fiscal del café y abrí <strong>Mis Comprobantes</strong>.</li>
+            <li>Elegí <strong>Recibidos</strong>, poné las fechas del mes y tocá <strong>Buscar</strong>.</li>
+            <li>Exportá a <strong>Excel</strong> (o CSV) y subilo acá.</li>
+          </ol>
         </section>
         <section className="card">
           <div className="card-head"><h2>Meses cargados</h2></div>
@@ -239,13 +261,14 @@ export default function Cargar({ meses, guardar, deshacer, verResultado }: Props
           ) : (
             <div className="tabla-wrap">
               <table>
-                <thead><tr><th>Mes</th><th className="r">Días</th><th className="r">Venta</th><th>Archivos</th></tr></thead>
+                <thead><tr><th>Mes</th><th className="r">Días</th><th className="r">Venta</th><th className="r">Compras</th><th>Archivos</th></tr></thead>
                 <tbody>
                   {Object.values(meses).sort((a, b) => b.mes.localeCompare(a.mes)).map((m) => (
                     <tr key={m.mes}>
                       <td>{nombreMes(m.mes)}</td>
                       <td className="r num">{new Set(m.items.map((i) => i.fecha)).size}</td>
                       <td className="r num">{pesos(m.items.reduce((s, i) => s + i.importe, 0))}</td>
+                      <td className="r num">{m.compras?.length ? `${m.compras.length} fact.` : "–"}</td>
                       <td className="small muted" style={{ whiteSpace: "normal" }}>{m.archivos.join(", ")}</td>
                     </tr>
                   ))}
