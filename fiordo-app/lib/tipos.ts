@@ -29,7 +29,8 @@ export type Proveedor = { nombre: string; categoria: "mercaderia" | "fijo" | "ig
 export type Gasto = { concepto: string; importe: number; origen?: "arca" };
 
 export type Parametros = {
-  comisionPct: number; // tarjetas, QR, posnet
+  comisionPct: number; // comisión para medios sin tasa propia (o si el reporte no trae medios)
+  comisionesPorMedio: Record<string, number>; // "Efectivo" | "Tarjetas" | "QR" | "Online" … -> %
   iibbPct: number; // ingresos brutos
   diasCerrados: number; // días del mes que el local no abre (feriados, vacaciones)
   costoDefectoPct: number; // artículos sin costo de receta
@@ -51,8 +52,9 @@ export type Config = {
 export type Datos = { config: Config; meses: Record<string, MesVentas> };
 
 export const PARAMETROS_INICIALES: Parametros = {
-  comisionPct: 3.5,
-  iibbPct: 3.0,
+  comisionPct: 0,
+  comisionesPorMedio: { Efectivo: 0, Tarjetas: 3.5, QR: 1, Online: 4 },
+  iibbPct: 4.0,
   diasCerrados: 0,
   costoDefectoPct: 32,
   margenMinimoPct: 55,

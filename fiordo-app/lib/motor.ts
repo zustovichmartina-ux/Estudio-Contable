@@ -18,7 +18,30 @@ export type Producto = {
   revisar: boolean;
 };
 export type DiaSemana = { nombre: string; promedio: number; dias: number; cubiertos: number; vsNecesario: number };
-export type Medio = { medio: string; venta: number; participacion: number };
+export type Medio = { medio: string; venta: number; participacion: number; tasa: number; comision: number };
+
+/** Agrupa los nombres que usa Bistrosoft en cada reporte ("Tarjeta", "Tarjetas", "Qr", "QR"…). */
+export function medioCanonico(m: string): string {
+  const n = norm(m);
+  const partes = n.split(/\s*,\s*/).filter(Boolean);
+  if (partes.length > 1) return "Pago combinado";
+  if (/efectivo/.test(n)) return "Efectivo";
+  if (/tarjeta|debito|credito|posnet/.test(n)) return "Tarjetas";
+  if (/\bqr\b/.test(n)) return "QR";
+  if (/online|link|transferencia/.test(n)) return "Online";
+  return m.trim().charAt(0).toUpperCase() + m.trim().slice(1).toLowerCase();
+}
+
+/** Tasa de comisión de un medio: la cargada para ese medio, o la general para los que no tienen una. */
+export function tasaMedio(medio: string, p: Config["parametros"]): number {
+  const t = p.comisionesPorMedio?.[medio];
+  if (typeof t === "number") return t;
+  if (medio === "Pago combinado") {
+    const ts = ["Efectivo", "QR"].map((k) => p.comisionesPorMedio?.[k] ?? 0);
+    return ts.reduce((a, b) => a + b, 0) / ts.length;
+  }
+  return p.comisionPct;
+}
 export type Estado = "ok" | "warn" | "bad";
 
 export type Resultado = {
@@ -28,6 +51,7 @@ export type Resultado = {
   fijos: number;
   gastos: Gasto[];
   insumosPct: number;
+  comisionPct: number; // comisión promedio ponderada por medio de pago
   variablesPct: number;
   mc: number;
   peMes: number;
@@ -66,7 +90,21 @@ export function calcular(mesVentas: MesVentas | undefined, mes: string, config: 
   const gastos: Gasto[] = [...manuales, ...compras.gastosFijos.map((g) => ({ ...g, origen: "arca" as const }))];
   const fijosManuales = manuales.reduce((s, g) => s + (Number(g.importe) || 0), 0);
   const fijos = fijosManuales + compras.fijos;
-  const otrosVar = (p.comisionPct + p.iibbPct) / 100;
+  // Comisiones según cómo se cobró cada venta (efectivo 0 %, tarjetas, QR, online…)
+  const pm = new Map<string, number>();
+  for (const m of mesVentas?.medios ?? []) {
+    const c = medioCanonico(m.medio);
+    pm.set(c, (pm.get(c) ?? 0) + m.importe);
+  }
+  const totalMedios = [...pm.values()].reduce((s, v) => s + v, 0);
+  const medios: Medio[] = [...pm.entries()]
+    .map(([medio, venta]) => {
+      const tasa = tasaMedio(medio, p);
+      return { medio, venta, participacion: totalMedios ? venta / totalMedios : 0, tasa, comision: (venta * tasa) / 100 };
+    })
+    .sort((a, b) => b.venta - a.venta);
+  const comisionPct = totalMedios > 0 ? medios.reduce((s, m) => s + m.comision, 0) / totalMedios * 100 : p.comisionPct;
+  const otrosVar = (comisionPct + p.iibbPct) / 100;
   const diasApertura = Math.max(1, diasDelMes(mes) - (p.diasCerrados || 0));
   const items = mesVentas?.items ?? [];
 
@@ -132,13 +170,6 @@ export function calcular(mesVentas: MesVentas | undefined, mes: string, config: 
     return { nombre, promedio, dias: ds.length, cubiertos: ds.filter((d) => d.cubrio).length, vsNecesario: peDia ? promedio / peDia - 1 : 0 };
   }).filter((d) => d.dias > 0);
 
-  const pm = new Map<string, number>();
-  for (const m of mesVentas?.medios ?? []) pm.set(m.medio, (pm.get(m.medio) ?? 0) + m.importe);
-  const totalMedios = [...pm.values()].reduce((s, v) => s + v, 0);
-  const medios: Medio[] = [...pm.entries()]
-    .map(([medio, venta]) => ({ medio, venta, participacion: totalMedios ? venta / totalMedios : 0 }))
-    .sort((a, b) => b.venta - a.venta);
-
   const ultimo = dias[dias.length - 1];
   const promedioDia = dias.length ? ventasMes / dias.length : 0;
   const proyeccion = promedioDia * diasApertura;
@@ -167,6 +198,7 @@ export function calcular(mesVentas: MesVentas | undefined, mes: string, config: 
     diasSinDetalle: new Set(items.filter((i) => i.articulo === VENTA_SIN_DETALLE).map((i) => i.fecha)).size,
     compras,
     fijosManuales,
+    comisionPct,
     mercaderiaSegun: usarCompras ? "compras" : "recetas",
     ultimo,
     promedioDia,

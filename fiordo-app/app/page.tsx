@@ -64,8 +64,13 @@ export default function App() {
       if (ultimos.length) setMes(ultimos[ultimos.length - 1]);
       setListo(true);
     });
-    const h = window.location.hash.slice(1) as Vista;
-    if (VISTAS.some((v) => v.id === h)) setVista(h);
+    const leerHash = () => {
+      const h = window.location.hash.slice(1) as Vista;
+      if (VISTAS.some((v) => v.id === h)) setVista(h);
+    };
+    leerHash();
+    window.addEventListener("hashchange", leerHash);
+    return () => window.removeEventListener("hashchange", leerHash);
   }, []);
 
   const ir = useCallback((v: Vista) => {

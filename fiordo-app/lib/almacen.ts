@@ -29,7 +29,7 @@ function completar(d: Partial<Datos> & { config?: Partial<Config> | null }): Dat
     config: {
       ...CONFIG_INICIAL,
       ...c,
-      parametros: { ...PARAMETROS_INICIALES, ...(c.parametros ?? {}) },
+      parametros: migrarParametros({ ...PARAMETROS_INICIALES, ...(c.parametros ?? {}) }, c.parametros),
     } as Config,
     meses: (d.meses ?? {}) as Record<string, MesVentas>,
   };
@@ -68,4 +68,14 @@ export async function guardarMeses(datos: Datos, mesesCambiados: string[], modo:
 export async function borrarMes(datos: Datos, mes: string, modo: Modo) {
   escribirLocal(datos);
   if (modo === "nube") await fetch(`/api/datos?mes=${mes}`, { method: "DELETE" });
+}
+
+/** Ajustes de versiones anteriores: IIBB pasó de 3 % (referencia) a 4 %, y las comisiones van por medio de pago. */
+function migrarParametros(p: Config["parametros"], guardado?: Partial<Config["parametros"]>): Config["parametros"] {
+  const out = { ...p };
+  if (guardado && guardado.comisionesPorMedio === undefined) {
+    if (guardado.iibbPct === 3) out.iibbPct = 4;
+    out.comisionPct = 0; // antes era una tasa pareja para todo; ahora se usa por medio
+  }
+  return out;
 }

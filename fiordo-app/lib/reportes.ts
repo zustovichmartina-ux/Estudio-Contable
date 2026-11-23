@@ -193,6 +193,7 @@ export async function reporteExcel(r: Resultado, nombreLocal: string) {
     ["Ventas del mes", Math.round(r.ventasMes)],
     ["Gastos fijos", Math.round(r.fijos)],
     ["Mercadería / insumos %", +(r.insumosPct * 100).toFixed(2)],
+    ["Comisiones medios de pago % (promedio)", +r.comisionPct.toFixed(2)],
     ["Total variables %", +(r.variablesPct * 100).toFixed(2)],
     ["Margen de contribución %", +(r.mc * 100).toFixed(2)],
     ["Punto de equilibrio mensual", Math.round(r.peMes)],
@@ -219,9 +220,9 @@ export async function reporteExcel(r: Resultado, nombreLocal: string) {
   ], [12, 16, 8, 10, 20]), "Por día de semana");
   if (r.medios.length)
     XLSX.utils.book_append_sheet(wb, hoja([
-      ["Medio de pago", "Venta", "%"],
-      ...r.medios.map((m) => [m.medio, Math.round(m.venta), +(m.participacion * 100).toFixed(1)]),
-    ], [20, 14, 8]), "Medios de pago");
+      ["Medio de pago", "Venta", "% de la venta", "Comisión %", "Costo comisión"],
+      ...r.medios.map((m) => [m.medio, Math.round(m.venta), +(m.participacion * 100).toFixed(1), m.tasa, Math.round(m.comision)]),
+    ], [20, 14, 14, 12, 16]), "Medios de pago");
   XLSX.utils.book_append_sheet(wb, hoja([["Concepto", "Importe"], ...r.gastos.map((g) => [g.concepto, g.importe]), ["Total", r.fijos]], [32, 14]), "Gastos fijos");
   const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
   descargar(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), `punto_equilibrio_${slug(nombreLocal)}_${r.mes}.xlsx`);

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Resultado } from "@/lib/motor";
 import { Config, Gasto, Parametros, Proveedor } from "@/lib/tipos";
 import { CONCEPTOS_FIJOS } from "@/lib/compras";
+import { tasaMedio } from "@/lib/motor";
 import { diasDelMes, nombreMes, pct, pesos } from "@/lib/formato";
 import { Modo } from "@/lib/almacen";
 import { IcoBorrar, IcoMas } from "./Iconos";
@@ -33,6 +34,13 @@ export default function Gastos({ r, config, modo, guardarGastos, guardarParametr
   useEffect(() => { setP(config.parametros); setNombre(config.nombreLocal); }, [config.parametros, config.nombreLocal]);
 
   const total = gastos.reduce((s, g) => s + (Number(g.importe) || 0), 0);
+  // medios con ventas del mes + los habituales aunque no tengan ventas
+  const mediosTabla = [
+    ...r.medios,
+    ...["Efectivo", "Tarjetas", "QR", "Online"].filter((m) => !r.medios.some((x) => x.medio === m)).map((medio) => ({ medio, venta: 0, participacion: 0 })),
+  ];
+  const totalMedios = r.medios.reduce((s, m) => s + m.venta, 0);
+  const comisionPrev = totalMedios ? r.medios.reduce((s, m) => s + m.venta * tasaMedio(m.medio, p), 0) / totalMedios : p.comisionPct;
   const avisar = (t: string) => { setGuardado(t); setTimeout(() => setGuardado(""), 2500); };
 
   return (
@@ -82,7 +90,6 @@ export default function Gastos({ r, config, modo, guardarGastos, guardarParametr
             Mercadería este mes: <strong>{pct(r.insumosPct)}</strong> de la venta, {r.mercaderiaSegun === "compras" ? "según las compras de ARCA" : "según el costo de cada producto"}. Acá van los demás gastos que suben con cada venta.
           </p>
           <div className="kpis" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>
-            <div className="campo"><label htmlFor="p-com">Comisiones tarjetas y QR (%)</label><input id="p-com" className="input r" type="number" step="0.1" inputMode="decimal" value={p.comisionPct} onChange={(e) => setP({ ...p, comisionPct: Number(e.target.value) || 0 })} /></div>
             <div className="campo"><label htmlFor="p-iibb">Ingresos brutos (%)</label><input id="p-iibb" className="input r" type="number" step="0.1" inputMode="decimal" value={p.iibbPct} onChange={(e) => setP({ ...p, iibbPct: Number(e.target.value) || 0 })} /></div>
             <div className="campo"><label htmlFor="p-dias">Días que cierra en el mes</label><input id="p-dias" className="input r" type="number" min={0} max={30} inputMode="numeric" value={p.diasCerrados} onChange={(e) => setP({ ...p, diasCerrados: Math.max(0, Math.min(30, Number(e.target.value) || 0)) })} /></div>
             <div className="campo"><label htmlFor="p-def">Costo estimado si falta receta (%)</label><input id="p-def" className="input r" type="number" step="1" inputMode="decimal" value={p.costoDefectoPct} onChange={(e) => setP({ ...p, costoDefectoPct: Number(e.target.value) || 0 })} /></div>
@@ -96,6 +103,30 @@ export default function Gastos({ r, config, modo, guardarGastos, guardarParametr
               </select>
             </div>
             <div className="campo"><label htmlFor="p-nombre">Nombre del local</label><input id="p-nombre" className="input" value={nombre} onChange={(e) => setNombre(e.target.value)} /></div>
+          </div>
+          <h3 style={{ marginTop: 16 }}>Comisiones por medio de pago</h3>
+          <p className="small muted" style={{ margin: "4px 0 8px" }}>
+            Todas las ventas cuentan igual, se cobren como se cobren. La comisión se calcula sobre lo vendido con cada medio, según los reportes de Bistrosoft.
+          </p>
+          <div className="tabla-wrap">
+            <table>
+              <thead><tr><th>Medio</th><th className="r">Ventas</th><th className="r">Comisión %</th><th className="r">Costo</th></tr></thead>
+              <tbody>
+                {mediosTabla.map((m) => (
+                  <tr key={m.medio}>
+                    <td>{m.medio}</td>
+                    <td className="r num">{m.venta ? pct(m.participacion, 0) : "–"}</td>
+                    <td className="r">
+                      <input className="input r" style={{ width: 80 }} type="number" step="0.1" min={0} inputMode="decimal" aria-label={`Comisión de ${m.medio}`}
+                        value={tasaMedio(m.medio, p)}
+                        onChange={(e) => setP({ ...p, comisionesPorMedio: { ...(p.comisionesPorMedio ?? {}), [m.medio]: Number(e.target.value) || 0 } })} />
+                    </td>
+                    <td className="r num">{m.venta ? pesos((m.venta * tasaMedio(m.medio, p)) / 100) : "–"}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot><tr><td>Promedio sobre las ventas</td><td></td><td className="r num">{pct(comisionPrev / 100)}</td><td></td></tr></tfoot>
+            </table>
           </div>
           <label className="fila small" style={{ gap: 6, marginTop: 10 }}>
             <input type="checkbox" checked={p.ivaComputable} onChange={(e) => setP({ ...p, ivaComputable: e.target.checked })} /> Es Responsable Inscripto: el IVA de las compras no es costo (aplica a las compras que se suban desde ahora)
