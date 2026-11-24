@@ -14,7 +14,7 @@ export default function Grafico({ r, neutro = false }: { r: Resultado; neutro?: 
     return () => ro.disconnect();
   }, []);
 
-  const H = w < 500 ? 200 : 250;
+  const H = w < 500 ? 170 : 210;
   const padL = 44, padR = 8, padT = 18, padB = 26;
   const n = Math.max(r.diasApertura, r.dias.length ? Number(r.dias[r.dias.length - 1].fecha.slice(8)) : 0);
   const max = Math.max(isFinite(r.peDia) ? r.peDia : 0, ...r.dias.map((d) => d.venta), 1) * 1.12;
@@ -43,7 +43,7 @@ export default function Grafico({ r, neutro = false }: { r: Resultado; neutro?: 
           return (
             <g key={dia}>
               {d ? (
-                <rect x={x} y={y(d.venta)} width={bwi} height={y(0) - y(d.venta)} rx={2} fill={neutro ? "var(--accent)" : d.cubrio ? "var(--ok)" : "var(--bad)"}>
+                <rect x={x} y={y(d.venta)} width={bwi} height={y(0) - y(d.venta)} rx={3} fill={neutro ? "var(--accent)" : d.cubrio ? "var(--ok)" : "var(--bad)"}>
                   <title>{`${fechaCorta(d.fecha)}: ${pesos(d.venta)}`}</title>
                 </rect>
               ) : (
@@ -57,7 +57,7 @@ export default function Grafico({ r, neutro = false }: { r: Resultado; neutro?: 
         })}
         {isFinite(r.peDia) && r.peDia > 0 && (
           <>
-            <line x1={padL} x2={w - padR} y1={y(r.peDia)} y2={y(r.peDia)} stroke="var(--ink)" strokeWidth={2} strokeDasharray="6 4" />
+            <line x1={padL} x2={w - padR} y1={y(r.peDia)} y2={y(r.peDia)} stroke="var(--ink)" strokeWidth={1.5} strokeDasharray="5 4" />
             <text x={w - padR} y={y(r.peDia) - 6} textAnchor="end" style={{ fill: "var(--ink)", fontWeight: 600 }}>
               {`${corto(r.peDia)} por día`}
             </text>

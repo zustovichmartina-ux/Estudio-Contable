@@ -78,10 +78,10 @@ export default function Hoy({ r, irA, probarEjemplo }: Props) {
           </div>
         </section>
 
-        <section className="card" aria-label="Avance del mes" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <section className="card" aria-label="Avance del mes" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <div>
             <span className="eyebrow">Vendido en {nombreMes(r.mes)}</span>
-            <p className="num" style={{ fontFamily: "var(--font-display)", fontSize: 30, fontWeight: 700 }}>{pesos(r.ventasMes)}</p>
+            <p className="num" style={{ fontFamily: "var(--font-display)", fontSize: 24, fontWeight: 700, lineHeight: 1.15 }}>{pesos(r.ventasMes)}</p>
           </div>
           <div className="barra" role="img" aria-label={`Vendido ${pesos(r.ventasMes)} de ${pesos(r.peMes)} necesarios`}>
             <div className="barra-fill" style={{ width: `${Math.min(100, (r.ventasMes / escala) * 100)}%` }} />
