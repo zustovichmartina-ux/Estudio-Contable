@@ -71,6 +71,60 @@ export function leerComprasArca(h: Hoja, ivaComputable: boolean): Compra[] {
   return out;
 }
 
+// ---------------------------------------------------------------- Tango: listado por imputación contable
+/**
+ * "Listado por Imputación Contable" de Tango (Compras): un renglón por cuenta de cada comprobante,
+ * con Debe y Haber. Se toma lo imputado a cada cuenta (Debe − Haber) y se descartan las cuentas
+ * de IVA, percepciones, retenciones y la contrapartida de proveedores: así queda el neto sin impuestos.
+ */
+function columnasTango(h: Hoja) {
+  const n = h.encabezados.map((e) => norm(e));
+  return {
+    cuenta: n.findIndex((e) => e === "cuenta"),
+    fecha: n.findIndex((e) => e === "fecha"),
+    tipo: n.findIndex((e) => e.startsWith("tipo comprobante") || e.startsWith("tipo de comprobante")),
+    numero: n.findIndex((e) => e.startsWith("numero comprobante") || e.startsWith("nro. comprobante")),
+    codigo: n.findIndex((e) => e.startsWith("cliente / proveedor") || e === "proveedor" || e.startsWith("cod")),
+    nombre: n.findIndex((e) => e.startsWith("razon social")),
+    debe: n.findIndex((e) => e === "debe"),
+    haber: n.findIndex((e) => e === "haber"),
+  };
+}
+
+export function esTangoImputacion(h: Hoja): boolean {
+  const c = columnasTango(h);
+  return c.cuenta >= 0 && c.fecha >= 0 && c.debe >= 0 && c.haber >= 0;
+}
+
+/** Cuentas que no son costo: impuestos recuperables y la deuda con el proveedor. */
+const CUENTA_SIN_COSTO = /\b(iva|percep|retenc|proveedores|acreedores|deudas|anticipo)/;
+
+export function leerComprasTango(h: Hoja): Compra[] {
+  const c = columnasTango(h);
+  const out: Compra[] = [];
+  for (const fila of h.filas.slice(h.filaEncabezado + 1)) {
+    const cuenta = String(fila[c.cuenta] ?? "").trim();
+    const fecha = aFechaISO(fila[c.fecha]);
+    if (!cuenta || !fecha) continue;
+    const codigo = cuenta.match(/^\d+/)?.[0] ?? "";
+    if (codigo.startsWith("2") || CUENTA_SIN_COSTO.test(norm(cuenta))) continue;
+    const importe = (aNumero(fila[c.debe]) || 0) - (aNumero(fila[c.haber]) || 0);
+    if (!importe) continue;
+    const neto = Math.round(importe * 100) / 100;
+    out.push({
+      fecha,
+      cuit: String(fila[c.codigo] ?? "").trim() || "sin-codigo",
+      proveedor: String(fila[c.nombre] ?? "").trim() || "Sin nombre",
+      tipo: String(fila[c.tipo] ?? "").trim(),
+      numero: String(fila[c.numero] ?? "").trim(),
+      costo: neto,
+      total: neto,
+      cuenta,
+    });
+  }
+  return out;
+}
+
 /** Guarda las compras por mes; reemplaza las que ya había en el rango de fechas del archivo. */
 export function incorporarCompras(meses: Record<string, MesVentas>, compras: Compra[], archivo: string): Record<string, MesVentas> {
   if (!compras.length) return meses;
@@ -112,7 +166,7 @@ export const CONCEPTOS_FIJOS = [
 ];
 
 const REGLAS: [RegExp, Proveedor["categoria"], string][] = [
-  [/\b(edea|edenor|edesur|epec|camuzzi|metrogas|naturgy|litoral gas|osse|aysa|aguas|telecom|personal|movistar|claro|fibertel|telefonica|cablevision|iplan|starlink|telered)\b/, "fijo", "Luz, gas, agua e internet"],
+  [/\b(edea|edenor|edesur|epec|camuzzi|metrogas|naturgy|litoral gas|osse|aysa|aguas|telecom|personal|movistar|claro|amx argentina|fibertel|telefonica|cablevision|iplan|starlink|telered)\b/, "fijo", "Luz, gas, agua e internet"],
   [/\b(seguro|seguros|sancor|federacion patronal|la caja|mapfre|allianz|zurich|rivadavia|la segunda|mercantil andina)\b/, "fijo", "Seguros"],
   [/\b(bistrosoft|fudo|google|microsoft|meta platforms|canva|spotify)\b/, "fijo", "Sistema de gestión"],
   [/\b(inmobiliaria|propiedades|alquiler)\b/, "fijo", "Alquiler"],
@@ -132,13 +186,65 @@ export function clasificar(config: Config, cuit: string, nombre: string): Provee
   return p ? { ...p, sugerido: false } : { ...sugerirProveedor(nombre), sugerido: true };
 }
 
+/** Nombre de la cuenta sin el código: "42422 - Alquileres Pagados" -> "Alquileres Pagados". */
+export const nombreCuenta = (cuenta: string) => cuenta.replace(/^\s*\d+\s*-\s*/, "").trim() || cuenta;
+
+/** Sugerencia por cuenta de Tango: mercaderías = costo de mercadería; bienes de uso = no incluir; resultados = gasto fijo. */
+export function sugerirCuenta(cuenta: string): Proveedor {
+  const n = norm(cuenta);
+  const codigo = cuenta.match(/^\d+/)?.[0] ?? "";
+  const nombre = nombreCuenta(cuenta);
+  if (/mercader|materia prima|insumo/.test(n)) return { nombre, categoria: "mercaderia", concepto: "" };
+  if (codigo.startsWith("1")) return { nombre, categoria: "ignorar", concepto: "" }; // bienes de uso y otros activos
+  return { nombre, categoria: "fijo", concepto: nombre };
+}
+
+/** Clave por nombre del proveedor, tolerante a "S.A." / "SA" / "Sociedad Anónima", puntos y espacios. */
+export function claveNombre(nombre: string): string {
+  const n = norm(nombre)
+    .replace(/sociedad anonima|sociedad de responsabilidad limitada|s\.?\s?a\.?\s?u\.?|s\.?\s?r\.?\s?l\.?|s\.?\s?a\.?\s?s\.?|s\.?\s?a\.?(?=\s|$)/g, " ")
+    .replace(/[^a-z0-9]+/g, "");
+  return `nombre:${n}`;
+}
+
+/**
+ * Aprende del listado de Tango cómo se imputa cada proveedor (la cuenta donde más compró, sin contar
+ * bienes de uso), para clasificar solas las compras de ARCA de ese proveedor. Devuelve claves por CUIT
+ * (cuando Tango trae el CUIT) y por nombre.
+ */
+export function aprenderDeTango(compras: Compra[]): Record<string, Proveedor> {
+  const porProv = new Map<string, { nombre: string; cuit: string; cuentas: Map<string, number> }>();
+  for (const c of compras) {
+    if (!c.cuenta) continue;
+    const k = claveNombre(c.proveedor);
+    const p = porProv.get(k) ?? { nombre: c.proveedor, cuit: c.cuit, cuentas: new Map<string, number>() };
+    p.cuentas.set(c.cuenta, (p.cuentas.get(c.cuenta) ?? 0) + Math.abs(c.costo));
+    porProv.set(k, p);
+  }
+  const out: Record<string, Proveedor> = {};
+  for (const [k, p] of porProv) {
+    const ordenadas = [...p.cuentas.entries()].sort((a, b) => b[1] - a[1]);
+    const principal = ordenadas.find(([cta]) => sugerirCuenta(cta).categoria !== "ignorar") ?? ordenadas[0];
+    if (!principal) continue;
+    const s = sugerirCuenta(principal[0]);
+    const prov: Proveedor = { nombre: p.nombre, categoria: s.categoria, concepto: s.concepto };
+    out[k] = prov;
+    if (/^\d{11}$/.test(p.cuit)) out[p.cuit] = prov;
+  }
+  return out;
+}
+
+/** Clave con la que se recuerda la clasificación de cada cuenta. */
+export const claveCuenta = (cuenta: string) => `cuenta:${cuenta.match(/^\d+/)?.[0] ?? norm(cuenta)}`;
+
 export type ResumenCompras = {
   cantidad: number;
   mercaderia: number;
   fijos: number;
   ignorado: number;
   gastosFijos: { concepto: string; importe: number }[];
-  proveedores: { cuit: string; nombre: string; comprobantes: number; costo: number; categoria: Proveedor["categoria"]; concepto: string; sugerido: boolean }[];
+  // un renglón por proveedor (compras de ARCA) o por cuenta contable (listado de Tango)
+  proveedores: { cuit: string; nombre: string; detalle: string; comprobantes: number; costo: number; categoria: Proveedor["categoria"]; concepto: string; sugerido: boolean }[];
 };
 
 export function resumirCompras(compras: Compra[] | undefined, config: Config): ResumenCompras {
@@ -147,17 +253,29 @@ export function resumirCompras(compras: Compra[] | undefined, config: Config): R
   const fijos = new Map<string, number>();
   for (const c of compras ?? []) {
     r.cantidad++;
-    const k = clasificar(config, c.cuit, c.proveedor);
+    const clave = c.cuenta ? claveCuenta(c.cuenta) : c.cuit;
+    // ARCA: lo elegido a mano para ese CUIT; si no, lo aprendido del listado de Tango por nombre
+    const guardado = config.proveedores?.[clave] ?? (c.cuenta ? undefined : config.proveedores?.[claveNombre(c.proveedor)]);
+    const k = guardado ? { ...guardado, sugerido: false } : { ...(c.cuenta ? sugerirCuenta(c.cuenta) : sugerirProveedor(c.proveedor)), sugerido: true };
     if (k.categoria === "mercaderia") r.mercaderia += c.costo;
     else if (k.categoria === "fijo") {
       r.fijos += c.costo;
       const concepto = k.concepto || "Otros gastos fijos";
       fijos.set(concepto, (fijos.get(concepto) ?? 0) + c.costo);
     } else r.ignorado += c.costo;
-    const p = prov.get(c.cuit) ?? { cuit: c.cuit, nombre: c.proveedor, comprobantes: 0, costo: 0, categoria: k.categoria, concepto: k.concepto, sugerido: k.sugerido };
+    const p = prov.get(clave) ?? {
+      cuit: clave,
+      nombre: c.cuenta ? nombreCuenta(c.cuenta) : c.proveedor,
+      detalle: c.cuenta ? `Cuenta ${c.cuenta.match(/^\d+/)?.[0] ?? ""} de Tango` : `CUIT ${c.cuit}`,
+      comprobantes: 0,
+      costo: 0,
+      categoria: k.categoria,
+      concepto: k.concepto,
+      sugerido: k.sugerido,
+    };
     p.comprobantes++;
     p.costo += c.costo;
-    prov.set(c.cuit, p);
+    prov.set(clave, p);
   }
   r.gastosFijos = [...fijos.entries()].map(([concepto, importe]) => ({ concepto, importe })).sort((a, b) => b.importe - a.importe);
   r.proveedores = [...prov.values()].sort((a, b) => b.costo - a.costo);

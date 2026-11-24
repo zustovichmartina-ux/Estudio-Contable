@@ -21,7 +21,16 @@ export type MesVentas = {
 };
 
 /** Factura de compra. costo = importe sin IVA ni percepciones (negativo si es nota de crédito). */
-export type Compra = { fecha: string; cuit: string; proveedor: string; tipo: string; numero: string; costo: number; total: number };
+export type Compra = {
+  fecha: string;
+  cuit: string;
+  proveedor: string;
+  tipo: string;
+  numero: string;
+  costo: number;
+  total: number;
+  cuenta?: string; // cuenta contable, cuando viene del listado de imputación de Tango ("11505 - Mercaderias")
+};
 
 /** Cómo se usa cada proveedor: mercadería (costo variable), gasto fijo (con su rubro) o no se incluye. */
 export type Proveedor = { nombre: string; categoria: "mercaderia" | "fijo" | "ignorar"; concepto: string };

@@ -52,7 +52,13 @@ no se usan para eso.
 4. **ARCA – Mis Comprobantes Recibidos** (xlsx/csv, formato viejo o nuevo): compras sin IVA ni percepciones
    (Responsable Inscripto, configurable), notas de crédito restan, moneda extranjera × tipo de cambio.
    Cada proveedor (por CUIT) se clasifica: mercadería / gasto fijo (con rubro) / no incluir; sugerencia automática
-   por nombre (`lib/compras.ts`), se recuerda. **Probado solo con un archivo inventado**: falta probar con uno real.
+   por nombre (`lib/compras.ts`), se recuerda. Probado con el formato completo real (nov 2026); un archivo con
+   columnas borradas (sin CUIT ni IVA) no se reconoce.
+5. **Tango – Listado por Imputación Contable** (Compras, xlsx): un renglón por cuenta de cada comprobante con Debe/Haber.
+   Se toma Debe − Haber por cuenta y se descartan IVA, percepciones, retenciones y cuentas 2xxxx (proveedores).
+   Por cuenta: mercaderías → CMV; 1xxxx (bienes de uso) → no incluir; resultados → gasto fijo con el nombre de la cuenta.
+   Al subirlo, la app aprende la cuenta principal de cada proveedor y con eso clasifica las compras de ARCA (por CUIT o
+   nombre). Verificado con un listado real: el total de mercaderías coincide con la cuenta del listado.
 
 Los archivos reales del cliente **no están en el repo** (son datos privados). Pedíselos a la usuaria si hacen falta.
 

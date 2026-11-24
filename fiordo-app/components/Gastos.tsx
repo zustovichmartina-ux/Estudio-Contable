@@ -139,11 +139,11 @@ export default function Gastos({ r, config, modo, guardarGastos, guardarParametr
 
       <section className="card">
         <div className="card-head">
-          <h2>Compras de ARCA de {nombreMes(r.mes)}</h2>
+          <h2>Compras de {nombreMes(r.mes)}</h2>
           <button className="btn sec" style={{ minHeight: 36 }} onClick={irACargar}>Subir compras</button>
         </div>
         {r.compras.cantidad === 0 ? (
-          <p className="muted">Todavía no hay compras de este mes. Bajá <strong>Mis Comprobantes Recibidos</strong> de ARCA y subilo en Cargar: la mercadería y los gastos facturados se calculan solos.</p>
+          <p className="muted">Todavía no hay compras de este mes. Subí en Cargar el <strong>Listado por imputación contable</strong> de Tango (recomendado: ya trae la cuenta de cada compra) o <strong>Mis Comprobantes Recibidos</strong> de ARCA.</p>
         ) : (
           <>
             <div className="kpis" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", marginBottom: 14 }}>
@@ -151,14 +151,14 @@ export default function Gastos({ r, config, modo, guardarGastos, guardarParametr
               <div className="kpi"><span className="eyebrow">Gastos fijos</span><span className="val num">{pesos(r.compras.fijos)}</span><span className="hint">Se suman a los gastos del mes</span></div>
               <div className="kpi"><span className="eyebrow">No incluido</span><span className="val num">{pesos(r.compras.ignorado)}</span><span className="hint">{r.compras.cantidad} facturas en total, sin IVA</span></div>
             </div>
-            <p className="small muted" style={{ marginBottom: 10 }}>Revisá cada proveedor una sola vez: la app lo recuerda para los meses siguientes. Los marcados con • son sugerencias automáticas.</p>
+            <p className="small muted" style={{ marginBottom: 10 }}>Las compras de Tango se agrupan por cuenta contable; las de ARCA, por proveedor. Revisá cada uno una sola vez: la app lo recuerda para los meses siguientes. Los marcados con • son sugerencias automáticas.</p>
             <div className="tabla-wrap">
               <table>
-                <thead><tr><th>Proveedor</th><th className="r">Fact.</th><th className="r">Sin IVA</th><th>Es</th><th>Rubro</th></tr></thead>
+                <thead><tr><th>Cuenta / proveedor</th><th className="r">Renglones</th><th className="r">Sin IVA</th><th>Es</th><th>Rubro</th></tr></thead>
                 <tbody>
                   {r.compras.proveedores.map((pv) => (
                     <tr key={pv.cuit}>
-                      <td style={{ whiteSpace: "normal", minWidth: 160 }}>{pv.sugerido && <span title="Sugerencia automática" style={{ color: "var(--accent)" }}>• </span>}{pv.nombre}<br /><span className="small muted">CUIT {pv.cuit}</span></td>
+                      <td style={{ whiteSpace: "normal", minWidth: 160 }}>{pv.sugerido && <span title="Sugerencia automática" style={{ color: "var(--accent)" }}>• </span>}{pv.nombre}<br /><span className="small muted">{pv.detalle}</span></td>
                       <td className="r num">{pv.comprobantes}</td>
                       <td className="r num">{pesos(pv.costo)}</td>
                       <td>
@@ -174,7 +174,7 @@ export default function Gastos({ r, config, modo, guardarGastos, guardarParametr
                       <td>
                         {pv.categoria === "fijo" ? (
                           <select className="input" aria-label={`Rubro de ${pv.nombre}`} value={pv.concepto || "Otros gastos fijos"} onChange={(e) => clasificarProveedor(pv.cuit, { nombre: pv.nombre, categoria: "fijo", concepto: e.target.value })}>
-                            {CONCEPTOS_FIJOS.map((c) => <option key={c} value={c}>{c}</option>)}
+                            {[...new Set([pv.concepto || "Otros gastos fijos", ...CONCEPTOS_FIJOS])].map((c) => <option key={c} value={c}>{c}</option>)}
                           </select>
                         ) : <span className="muted">–</span>}
                       </td>

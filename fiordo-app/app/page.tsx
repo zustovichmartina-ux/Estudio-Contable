@@ -9,7 +9,7 @@ import { nombreMes } from "@/lib/formato";
 import Hoy from "@/components/Hoy";
 import Logo from "@/components/Logo";
 import Cargar, { Lote, LoteCompras } from "@/components/Cargar";
-import { incorporarCompras } from "@/lib/compras";
+import { aprenderDeTango, incorporarCompras } from "@/lib/compras";
 import Productos from "@/components/Productos";
 import Gastos from "@/components/Gastos";
 import Reportes from "@/components/Reportes";
@@ -106,7 +106,10 @@ export default function App() {
     const cambiados = [...new Set([...lineas.map((l) => l.fecha), ...lotesCompras.flatMap((l) => l.compras.map((c) => c.fecha))].map((f) => f.slice(0, 7)))].sort();
     const nombres = { ...datos.config.nombresArticulos };
     for (const l of lineas) nombres[norm(l.articulo)] ??= l.articulo;
-    const nuevo = { config: { ...datos.config, nombresArticulos: nombres }, meses };
+    // lo imputado en Tango sirve para clasificar solas las compras de ARCA (sin pisar lo elegido a mano)
+    const aprendido = aprenderDeTango(lotesCompras.flatMap((l) => l.compras));
+    const proveedores = { ...aprendido, ...(datos.config.proveedores ?? {}) };
+    const nuevo = { config: { ...datos.config, nombresArticulos: nombres, proveedores }, meses };
     setDatos(nuevo);
     setMes(cambiados[cambiados.length - 1]);
     await guardarMeses(nuevo, cambiados, modo);

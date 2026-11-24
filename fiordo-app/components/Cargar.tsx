@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { CAMPOS, Campo, Hoja, convertir, leerArchivo } from "@/lib/lector";
-import { esArcaCompras, leerComprasArca } from "@/lib/compras";
+import { esArcaCompras, esTangoImputacion, leerComprasArca, leerComprasTango } from "@/lib/compras";
 import { Compra, LineaVenta, MesVentas } from "@/lib/tipos";
 import { fechaCorta, nombreMes, pesos } from "@/lib/formato";
 import { IcoCargar } from "./Iconos";
@@ -44,9 +44,14 @@ export default function Cargar({ meses, ivaComputable, guardar, deshacer, verRes
       try {
         const hs = await leerArchivo(f);
         if (!hs.length) throw new Error("no tiene datos");
-        const arca = hs.find(esArcaCompras);
-        const reconocida = arca ? undefined : hs.find((h) => convertir(h).formato);
-        if (arca) {
+        const tango = hs.find(esTangoImputacion);
+        const arca = tango ? undefined : hs.find(esArcaCompras);
+        const reconocida = tango || arca ? undefined : hs.find((h) => convertir(h).formato);
+        if (tango) {
+          const cs = leerComprasTango(tango);
+          if (cs.length) lotesCompras.push({ compras: cs, archivo: f.name });
+          else errores.push(`${f.name}: no tiene compras imputadas a cuentas de costo o gasto`);
+        } else if (arca) {
           const cs = leerComprasArca(arca, ivaComputable);
           if (cs.length) lotesCompras.push({ compras: cs, archivo: f.name });
           else errores.push(`${f.name}: no tiene comprobantes`);
@@ -75,7 +80,10 @@ export default function Cargar({ meses, ivaComputable, guardar, deshacer, verRes
         if (lotesCompras.length) {
           const cs = lotesCompras.flatMap((l) => l.compras);
           const fechas = cs.map((c) => c.fecha).sort();
-          partes.push(`Se leyeron ${cs.length} facturas de compras de ARCA por ${pesos(cs.reduce((s, c) => s + c.costo, 0))} sin IVA, del ${fechaCorta(fechas[0])} al ${fechaCorta(fechas[fechas.length - 1])}. Revisá cómo quedó clasificado cada proveedor.`);
+          const deTango = cs.some((c) => c.cuenta);
+          partes.push(deTango
+            ? `Se leyeron ${cs.length} imputaciones de compras de Tango por ${pesos(cs.reduce((s, c) => s + c.costo, 0))} sin IVA, del ${fechaCorta(fechas[0])} al ${fechaCorta(fechas[fechas.length - 1])}. Cada cuenta se clasificó sola; revisala en Gastos.`
+            : `Se leyeron ${cs.length} facturas de compras de ARCA por ${pesos(cs.reduce((s, c) => s + c.costo, 0))} sin IVA, del ${fechaCorta(fechas[0])} al ${fechaCorta(fechas[fechas.length - 1])}. Revisá cómo quedó clasificado cada proveedor.`);
         }
         const texto = partes.join(" ") + (errores.length ? ` No se cargó: ${errores.join("; ")}.` : "");
         setEstado({ tipo: "ok", texto });
