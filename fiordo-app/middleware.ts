@@ -1,22 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
+import { COOKIE, credenciales, fichaSesion } from "./lib/sesion";
 
 /**
- * Si APP_PASSWORD está definida, pide usuario y contraseña para entrar.
- * En localhost sin variable, la app abre directo.
+ * Si APP_PASSWORD está definida, hay que entrar con usuario y contraseña en /entrar.
+ * Queda recordado en el dispositivo (cookie) por un año. En localhost sin variable, la app abre directo.
  */
-export function middleware(req: NextRequest) {
-  const clave = process.env.APP_PASSWORD;
-  if (!clave) return NextResponse.next();
-  const usuario = process.env.APP_USER ?? "fiordo";
+export async function middleware(req: NextRequest) {
+  const cred = credenciales();
+  if (!cred) return NextResponse.next();
+  const { pathname } = req.nextUrl;
+  if (pathname === "/entrar" || pathname === "/api/entrar") return NextResponse.next();
+
+  const ficha = req.cookies.get(COOKIE)?.value;
+  if (ficha && ficha === (await fichaSesion(cred.usuario, cred.clave))) return NextResponse.next();
+
+  // también acepta el usuario y contraseña "a la antigua" (cartel del navegador)
   const auth = req.headers.get("authorization") ?? "";
   if (auth.startsWith("Basic ")) {
-    const [u, p] = atob(auth.slice(6)).split(":");
-    if (u === usuario && p === clave) return NextResponse.next();
+    const txt = atob(auth.slice(6));
+    const i = txt.indexOf(":");
+    if (i >= 0 && txt.slice(0, i) === cred.usuario && txt.slice(i + 1) === cred.clave) return NextResponse.next();
   }
-  return new NextResponse("Ingresá usuario y contraseña", {
-    status: 401,
-    headers: { "WWW-Authenticate": 'Basic realm="Fiordo", charset="UTF-8"' },
-  });
+
+  if (pathname.startsWith("/api/")) return NextResponse.json({ error: "sin sesión" }, { status: 401 });
+  const url = req.nextUrl.clone();
+  url.pathname = "/entrar";
+  url.search = "";
+  url.hash = "";
+  return NextResponse.redirect(url);
 }
 
 export const config = { matcher: ["/((?!_next/static|_next/image|favicon.ico|icon|apple-touch-icon|manifest.webmanifest|sw.js).*)"] };

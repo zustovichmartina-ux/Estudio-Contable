@@ -1,6 +1,6 @@
 // Fiordo: permite abrir la app sin conexión. Siempre intenta traer lo último de internet
 // y solo usa la copia guardada si no hay red. Los datos (/api) nunca se guardan acá.
-const CACHE = "fiordo-v1";
+const CACHE = "fiordo-v2";
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => {
@@ -12,7 +12,7 @@ self.addEventListener("activate", (e) => {
 self.addEventListener("fetch", (e) => {
   const req = e.request;
   const url = new URL(req.url);
-  if (req.method !== "GET" || url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
+  if (req.method !== "GET" || url.origin !== self.location.origin || url.pathname.startsWith("/api/") || url.pathname === "/entrar") return;
   e.respondWith(
     fetch(req)
       .then((res) => {
