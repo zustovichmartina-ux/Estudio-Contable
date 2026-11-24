@@ -223,3 +223,11 @@ tbody tr:last-child td { border-bottom: 0; }
 .al-dia .btn { min-height: 32px; font-size: 12.5px; }
 .arca-fijos { margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: var(--surface-2); display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
 .btn-instalar { min-height: 32px; padding: 0 12px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--header-ink) 45%, transparent); background: var(--header-ink); color: var(--header-bg); font: inherit; font-weight: 600; font-size: 13.5px; cursor: pointer; white-space: nowrap; }
+
+/* estado de resultados */
+.er td:first-child { white-space: normal; }
+.er tr.er-sub td { font-weight: 600; background: var(--surface-2); }
+.er tfoot tr.er-total td { font-family: var(--font-display); font-size: 15px; font-weight: 700; border-top: 2px solid var(--line); padding-top: 9px; }
+.er tfoot tr.er-total.ok td { color: var(--ok); }
+.er tfoot tr.er-total.bad td { color: var(--bad); }
+.er-veredicto { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 10px; color: var(--muted); }

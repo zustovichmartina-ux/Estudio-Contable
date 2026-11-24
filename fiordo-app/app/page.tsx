@@ -185,7 +185,7 @@ export default function App() {
             </div>
           </div>
         )}
-        {vista === "hoy" && <Hoy r={r} irA={ir} probarEjemplo={probarEjemplo} />}
+        {vista === "hoy" && <Hoy r={r} iibbPct={datos.config.parametros.iibbPct} irA={ir} probarEjemplo={probarEjemplo} />}
         {vista === "cargar" && <Cargar meses={datos.meses} ivaComputable={datos.config.parametros.ivaComputable} guardar={guardarVentas} deshacer={anterior ? deshacerCarga : null} verResultado={(m, v = "hoy") => { setCartel(m); ir(v); }} />}
         {vista === "productos" && (
           <Productos r={r} />
@@ -210,7 +210,7 @@ export default function App() {
             }}
           />
         )}
-        {vista === "reportes" && <Reportes r={r} nombreLocal={datos.config.nombreLocal} />}
+        {vista === "reportes" && <Reportes r={r} nombreLocal={datos.config.nombreLocal} iibbPct={datos.config.parametros.iibbPct} />}
       </main>
     </div>
   );

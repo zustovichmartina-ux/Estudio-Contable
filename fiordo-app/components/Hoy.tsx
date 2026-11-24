@@ -1,11 +1,59 @@
 "use client";
-import { Resultado } from "@/lib/motor";
+import { Resultado, estadoResultados } from "@/lib/motor";
 import { corto, fechaCorta, nombreMes, pct, pesos } from "@/lib/formato";
 import Grafico from "./Grafico";
 
-type Props = { r: Resultado; irA: (v: "cargar" | "productos" | "gastos") => void; probarEjemplo: () => void };
+type Props = { r: Resultado; iibbPct: number; irA: (v: "cargar" | "productos" | "gastos") => void; probarEjemplo: () => void };
 
-export default function Hoy({ r, irA, probarEjemplo }: Props) {
+function EstadoMes({ r, iibbPct }: { r: Resultado; iibbPct: number }) {
+  const e = estadoResultados(r, iibbPct);
+  const gana = e.resultado >= 0;
+  const fila = (concepto: string, importe: number, opc: { menos?: boolean; sub?: boolean; total?: boolean } = {}) => (
+    <tr key={concepto} className={opc.total ? "er-total" : opc.sub ? "er-sub" : undefined}>
+      <td>{concepto}</td>
+      <td className="r num">{opc.menos && importe ? "– " : ""}{pesos(Math.abs(importe))}</td>
+      <td className="r num muted">{e.ventas ? pct(importe / e.ventas, 1) : "–"}</td>
+    </tr>
+  );
+  return (
+    <section className="card">
+      <div className="card-head">
+        <h2>Resultado de {nombreMes(r.mes).toLowerCase()}</h2>
+        <span className="small muted">{e.proyectado ? `Proyectado al cierre (${r.dias.length} de ${r.diasApertura} días cargados)` : "Mes completo"}</span>
+      </div>
+      <div className="tabla-wrap">
+        <table className="er">
+          <thead><tr><th>Concepto</th><th className="r">Importe</th><th className="r">% venta</th></tr></thead>
+          <tbody>
+            {fila(e.proyectado ? "Ventas Bistrosoft (proyectadas)" : "Ventas Bistrosoft", e.ventas, { sub: true })}
+            {fila(r.sinMercaderia ? "Costo de mercadería (falta subir compras)" : "Costo de mercadería (CMV)", e.cmv, { menos: true })}
+            {fila("Comisiones por medio de pago", e.comisiones, { menos: true })}
+            {fila(`Ingresos brutos (${iibbPct} %)`, e.iibb, { menos: true })}
+            {fila("Contribución", e.contribucion, { sub: true })}
+            {e.fijos.map((g) => fila(g.origen === "arca" ? `${g.concepto} (ARCA)` : g.concepto, Number(g.importe), { menos: true }))}
+            {fila("Total gastos fijos", e.totalFijos, { menos: true, sub: true })}
+          </tbody>
+          <tfoot>
+            <tr className={`er-total ${gana ? "ok" : "bad"}`}>
+              <td>{gana ? "Ganancia" : "Pérdida"}</td>
+              <td className="r num">{pesos(e.resultado)}</td>
+              <td className="r num">{pct(e.margen, 1)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div className="er-veredicto">
+        <span className={`pill ${gana ? "ok" : "bad"}`}>{gana ? "El ingreso cubre los gastos" : "El ingreso no cubre los gastos"}</span>
+        <span className="small">
+          Gastos totales {pesos(e.totalGastos)} · Margen {pct(e.margen, 1)} ·{" "}
+          {r.fijos <= 0 ? "Falta cargar los gastos fijos" : e.llegaEquilibrio ? `Supera el punto de equilibrio (${corto(r.peMes)})` : `No llega al punto de equilibrio (${corto(r.peMes)})`}
+        </span>
+      </div>
+    </section>
+  );
+}
+
+export default function Hoy({ r, iibbPct, irA, probarEjemplo }: Props) {
   if (!r.hayDatos)
     return (
       <div className="card vacio">
@@ -115,6 +163,8 @@ export default function Hoy({ r, irA, probarEjemplo }: Props) {
           <span className="hint">Cuánto pueden caer las ventas sin perder</span>
         </div>
       </section>
+
+      <EstadoMes r={r} iibbPct={iibbPct} />
 
       <section className="card">
         <div className="card-head">

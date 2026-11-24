@@ -224,3 +224,45 @@ export function recomendaciones(r: Resultado): string[] {
     out.push(`Días que en promedio no cubren los gastos: ${flojos.map((d) => d.nombre.toLowerCase()).join(", ")}. Conviene revisar horarios, personal o promociones.`);
   return out;
 }
+
+export type EstadoResultados = {
+  proyectado: boolean; // el mes no terminó: se usa la venta proyectada al cierre
+  ventas: number;
+  cmv: number;
+  comisiones: number;
+  iibb: number;
+  contribucion: number;
+  fijos: Gasto[];
+  totalFijos: number;
+  totalGastos: number;
+  resultado: number;
+  margen: number; // resultado ÷ ventas
+  llegaEquilibrio: boolean;
+};
+
+/** Estado de resultados del mes: ventas de Bistrosoft menos todos los gastos (variables y fijos). */
+export function estadoResultados(r: Resultado, iibbPct: number): EstadoResultados {
+  const proyectado = r.diasRestantes > 0;
+  const ventas = proyectado ? r.proyeccion : r.ventasMes;
+  const cmv = ventas * r.insumosPct;
+  const comisiones = (ventas * r.comisionPct) / 100;
+  const iibb = (ventas * iibbPct) / 100;
+  const contribucion = ventas - cmv - comisiones - iibb;
+  const fijos = r.gastos.filter((g) => Number(g.importe));
+  const totalFijos = r.fijos;
+  const resultado = contribucion - totalFijos;
+  return {
+    proyectado,
+    ventas,
+    cmv,
+    comisiones,
+    iibb,
+    contribucion,
+    fijos,
+    totalFijos,
+    totalGastos: cmv + comisiones + iibb + totalFijos,
+    resultado,
+    margen: ventas ? resultado / ventas : 0,
+    llegaEquilibrio: isFinite(r.peMes) && ventas >= r.peMes,
+  };
+}

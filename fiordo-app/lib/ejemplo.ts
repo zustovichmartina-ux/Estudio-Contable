@@ -24,6 +24,7 @@ export const GASTOS_EJEMPLO: Gasto[] = [
   { concepto: "Seguros", importe: 250000 },
   { concepto: "Mantenimiento y limpieza", importe: 400000 },
   { concepto: "Tasas municipales", importe: 500000 },
+  { concepto: "Amortizaciones", importe: 300000 },
 ];
 
 const FACTOR = [0.75, 0.8, 0.85, 0.9, 1.1, 1.35, 1.25]; // lunes..domingo

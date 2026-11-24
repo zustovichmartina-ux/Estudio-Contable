@@ -1,4 +1,4 @@
-import { CONFIG_INICIAL, Config, Datos, MesVentas, PARAMETROS_INICIALES } from "./tipos";
+import { CONFIG_INICIAL, Config, Datos, Gasto, MesVentas, PARAMETROS_INICIALES } from "./tipos";
 
 /** "nube" = base compartida en Vercel (celular y compu ven lo mismo); "local" = solo este navegador. */
 export type Modo = "nube" | "local";
@@ -23,12 +23,20 @@ function escribirLocal(d: Datos) {
   }
 }
 
+/** Suma el renglón "Amortizaciones" (en $ 0) a las listas de gastos que no lo tienen. */
+function conAmortizaciones(gs: Gasto[]): Gasto[] {
+  return gs.some((g) => /amortiz/i.test(g.concepto)) ? gs : [...gs, { concepto: "Amortizaciones", importe: 0 }];
+}
+
 function completar(d: Partial<Datos> & { config?: Partial<Config> | null }): Datos {
   const c: Partial<Config> = d.config ?? {};
+  const porMes = Object.fromEntries(Object.entries(c.gastosPorMes ?? {}).map(([m, gs]) => [m, conAmortizaciones(gs)]));
   return {
     config: {
       ...CONFIG_INICIAL,
       ...c,
+      gastosBase: conAmortizaciones(c.gastosBase ?? CONFIG_INICIAL.gastosBase),
+      gastosPorMes: porMes,
       parametros: migrarParametros({ ...PARAMETROS_INICIALES, ...(c.parametros ?? {}) }, c.parametros),
     } as Config,
     meses: (d.meses ?? {}) as Record<string, MesVentas>,

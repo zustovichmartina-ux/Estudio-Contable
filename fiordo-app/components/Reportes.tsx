@@ -5,7 +5,7 @@ import { nombreMes } from "@/lib/formato";
 import { reporteExcel, reportePDF } from "@/lib/reportes";
 import { IcoCopiar, IcoDescarga, IcoWhats } from "./Iconos";
 
-export default function Reportes({ r, nombreLocal }: { r: Resultado; nombreLocal: string }) {
+export default function Reportes({ r, nombreLocal, iibbPct }: { r: Resultado; nombreLocal: string; iibbPct: number }) {
   const [estado, setEstado] = useState("");
   const [generando, setGenerando] = useState<"" | "pdf" | "xlsx">("");
   const texto = avisoWhatsapp(r, nombreLocal);
@@ -14,8 +14,8 @@ export default function Reportes({ r, nombreLocal }: { r: Resultado; nombreLocal
   async function generar(tipo: "pdf" | "xlsx") {
     setGenerando(tipo);
     try {
-      if (tipo === "pdf") await reportePDF(r, nombreLocal);
-      else await reporteExcel(r, nombreLocal);
+      if (tipo === "pdf") await reportePDF(r, nombreLocal, iibbPct);
+      else await reporteExcel(r, nombreLocal, iibbPct);
     } catch (e) {
       setEstado(`No se pudo generar el archivo: ${(e as Error).message}`);
     } finally {

@@ -57,13 +57,15 @@ export const PARAMETROS_INICIALES: Parametros = {
 
 export const GASTOS_INICIALES: Gasto[] = [
   { concepto: "Alquiler", importe: 0 },
-  { concepto: "Sueldos y cargas sociales", importe: 0 },
+  { concepto: "Sueldos", importe: 0 },
+  { concepto: "Cargas sociales", importe: 0 },
   { concepto: "Luz, gas, agua e internet", importe: 0 },
   { concepto: "Honorarios del estudio", importe: 0 },
   { concepto: "Sistema de gestión", importe: 0 },
   { concepto: "Seguros", importe: 0 },
   { concepto: "Mantenimiento y limpieza", importe: 0 },
   { concepto: "Tasas municipales", importe: 0 },
+  { concepto: "Amortizaciones", importe: 0 },
 ];
 
 export const CONFIG_INICIAL: Config = {

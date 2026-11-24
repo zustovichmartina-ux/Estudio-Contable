@@ -1,4 +1,4 @@
-import { Resultado, recomendaciones } from "./motor";
+import { EstadoResultados, Resultado, estadoResultados, recomendaciones } from "./motor";
 import { corto, fechaCorta, nombreMes, pct, pesos } from "./formato";
 import { MARCA, hexARgb } from "./tema";
 
@@ -17,7 +17,22 @@ function descargar(blob: Blob, nombre: string) {
 const slug = (s: string) => s.normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "_").toLowerCase();
 
 // ---------------------------------------------------------------- PDF mensual
-export async function reportePDF(r: Resultado, nombreLocal: string) {
+/** Renglones del estado de resultados: [concepto, importe con signo, % de la venta]. */
+function filasEstado(e: EstadoResultados, iibbPct: number): [string, number, number][] {
+  const p = (v: number) => (e.ventas ? v / e.ventas : 0);
+  return [
+    [e.proyectado ? "Ventas Bistrosoft (proyectadas al cierre)" : "Ventas Bistrosoft", e.ventas, 1],
+    ["Costo de mercadería (CMV)", -e.cmv, -p(e.cmv)],
+    ["Comisiones por medio de pago", -e.comisiones, -p(e.comisiones)],
+    [`Ingresos brutos (${iibbPct} %)`, -e.iibb, -p(e.iibb)],
+    ["Contribución", e.contribucion, p(e.contribucion)],
+    ...e.fijos.map((g): [string, number, number] => [g.origen === "arca" ? `${g.concepto} (ARCA)` : g.concepto, -Number(g.importe), -p(Number(g.importe))]),
+    ["Total gastos fijos", -e.totalFijos, -p(e.totalFijos)],
+    [e.resultado >= 0 ? "Ganancia" : "Pérdida", e.resultado, e.margen],
+  ];
+}
+
+export async function reportePDF(r: Resultado, nombreLocal: string, iibbPct: number) {
   const { jsPDF } = await import("jspdf");
   const autoTable = (await import("jspdf-autotable")).default;
   const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -135,9 +150,13 @@ export async function reportePDF(r: Resultado, nombreLocal: string) {
   autoTable(doc, {
     ...estilo,
     startY: y,
-    head: [["Gastos fijos del mes", "Importe"]],
-    body: [...r.gastos.filter((g) => g.importe).map((g) => [g.concepto, pesos(g.importe)]), ["Total", pesos(r.fijos)]],
-    columnStyles: { 1: { halign: "right" } },
+    head: [["Resultado del mes", "Importe", "% venta"]],
+    body: filasEstado(estadoResultados(r, iibbPct), iibbPct).map(([c, v, x]) => [c, pesos(v), pct(x, 1)]),
+    columnStyles: { 1: { halign: "right" }, 2: { halign: "right" } },
+    didParseCell: (c) => {
+      const n = (c.table.body as unknown[]).length;
+      if (c.section === "body" && [0, 4, n - 2, n - 1].includes(c.row.index)) c.cell.styles.fontStyle = "bold";
+    },
   });
   autoTable(doc, {
     ...estilo,
@@ -176,7 +195,7 @@ export async function reportePDF(r: Resultado, nombreLocal: string) {
 }
 
 // ---------------------------------------------------------------- Excel
-export async function reporteExcel(r: Resultado, nombreLocal: string) {
+export async function reporteExcel(r: Resultado, nombreLocal: string, iibbPct: number) {
   const XLSX = await import("xlsx");
   const wb = XLSX.utils.book_new();
   const hoja = (filas: (string | number)[][], anchos: number[]) => {
@@ -203,6 +222,10 @@ export async function reporteExcel(r: Resultado, nombreLocal: string) {
     ["Conclusiones"],
     ...recomendaciones(r).map((t) => [t]),
   ], [34, 18]), "Resumen");
+  XLSX.utils.book_append_sheet(wb, hoja([
+    ["Concepto", "Importe", "% de la venta"],
+    ...filasEstado(estadoResultados(r, iibbPct), iibbPct).map(([c, v, x]) => [c, Math.round(v), +(x * 100).toFixed(1)]),
+  ], [40, 16, 14]), "Resultado");
   XLSX.utils.book_append_sheet(wb, hoja([
     ["Fecha", "Día", "Venta", "Necesario", "Diferencia", "Cubrió", "Tickets"],
     ...r.dias.map((d) => [d.fecha, fechaCorta(d.fecha), Math.round(d.venta), Math.round(r.peDia), Math.round(d.diferencia), d.cubrio ? "Sí" : "No", d.tickets]),
