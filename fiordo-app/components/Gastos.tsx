@@ -87,21 +87,16 @@ export default function Gastos({ r, config, modo, guardarGastos, guardarParametr
         <section className="card">
           <div className="card-head"><h2>Gastos variables y datos del local</h2></div>
           <p className="small muted" style={{ marginBottom: 12 }}>
-            Mercadería este mes: <strong>{pct(r.insumosPct)}</strong> de la venta, {r.mercaderiaSegun === "compras" ? "según las compras de ARCA" : "según el costo de cada producto"}. Acá van los demás gastos que suben con cada venta.
+            {r.sinMercaderia ? (
+              <>Mercadería este mes: <strong>sin compras cargadas</strong>. Subí las compras de ARCA y marcá los proveedores de mercadería; mientras tanto se calcula con 0 %.</>
+            ) : (
+              <>Mercadería este mes: <strong>{pct(r.insumosPct)}</strong> de la venta, según las compras de ARCA.</>
+            )}{" "}
+            Acá van los demás gastos que suben con cada venta.
           </p>
           <div className="kpis" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>
             <div className="campo"><label htmlFor="p-iibb">Ingresos brutos (%)</label><input id="p-iibb" className="input r" type="number" step="0.1" inputMode="decimal" value={p.iibbPct} onChange={(e) => setP({ ...p, iibbPct: Number(e.target.value) || 0 })} /></div>
             <div className="campo"><label htmlFor="p-dias">Días que cierra en el mes</label><input id="p-dias" className="input r" type="number" min={0} max={30} inputMode="numeric" value={p.diasCerrados} onChange={(e) => setP({ ...p, diasCerrados: Math.max(0, Math.min(30, Number(e.target.value) || 0)) })} /></div>
-            <div className="campo"><label htmlFor="p-def">Costo estimado si falta receta (%)</label><input id="p-def" className="input r" type="number" step="1" inputMode="decimal" value={p.costoDefectoPct} onChange={(e) => setP({ ...p, costoDefectoPct: Number(e.target.value) || 0 })} /></div>
-            <div className="campo"><label htmlFor="p-min">Margen mínimo aceptable (%)</label><input id="p-min" className="input r" type="number" step="1" inputMode="decimal" value={p.margenMinimoPct} onChange={(e) => setP({ ...p, margenMinimoPct: Number(e.target.value) || 0 })} /></div>
-            <div className="campo">
-              <label htmlFor="p-merc">Costo de mercadería según</label>
-              <select id="p-merc" className="input" value={p.mercaderiaSegun} onChange={(e) => setP({ ...p, mercaderiaSegun: e.target.value as Parametros["mercaderiaSegun"] })}>
-                <option value="auto">Automático (compras si hay)</option>
-                <option value="compras">Compras de ARCA</option>
-                <option value="recetas">Costo de recetas</option>
-              </select>
-            </div>
             <div className="campo"><label htmlFor="p-nombre">Nombre del local</label><input id="p-nombre" className="input" value={nombre} onChange={(e) => setNombre(e.target.value)} /></div>
           </div>
           <h3 style={{ marginTop: 16 }}>Comisiones por medio de pago</h3>

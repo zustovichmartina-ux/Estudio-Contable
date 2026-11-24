@@ -8,14 +8,8 @@ export type Producto = {
   articulo: string;
   unidades: number;
   venta: number;
-  costo: number;
   precioProm: number;
-  costoU: number;
-  margen: number;
-  aporte: number;
   participacion: number;
-  conCosto: boolean;
-  revisar: boolean;
 };
 export type DiaSemana = { nombre: string; promedio: number; dias: number; cubiertos: number; vsNecesario: number };
 export type Medio = { medio: string; venta: number; participacion: number; tasa: number; comision: number };
@@ -50,7 +44,7 @@ export type Resultado = {
   ventasMes: number;
   fijos: number;
   gastos: Gasto[];
-  insumosPct: number;
+  insumosPct: number; // mercadería: compras de ARCA clasificadas como mercadería ÷ ventas
   comisionPct: number; // comisión promedio ponderada por medio de pago
   variablesPct: number;
   mc: number;
@@ -61,11 +55,10 @@ export type Resultado = {
   productos: Producto[];
   semana: DiaSemana[];
   medios: Medio[];
-  sinCosto: string[];
   diasSinDetalle: number;
   compras: ResumenCompras;
   fijosManuales: number;
-  mercaderiaSegun: "compras" | "recetas"; // de dónde salió el costo de mercadería de este mes
+  sinMercaderia: boolean; // hay ventas pero no hay compras de mercadería cargadas en el mes
   // derivados
   ultimo?: Dia;
   promedioDia: number;
@@ -109,30 +102,21 @@ export function calcular(mesVentas: MesVentas | undefined, mes: string, config: 
   const items = mesVentas?.items ?? [];
 
   const porDia = new Map<string, number>();
-  const porProd = new Map<string, { articulo: string; unidades: number; venta: number; costo: number; conCosto: boolean }>();
+  const porProd = new Map<string, { articulo: string; unidades: number; venta: number }>();
   let ventasMes = 0;
-  let costoTotal = 0;
 
   for (const it of items) {
     ventasMes += it.importe;
     porDia.set(it.fecha, (porDia.get(it.fecha) ?? 0) + it.importe);
     const clave = norm(it.articulo);
-    const cu = config.costos[clave];
-    const tieneCosto = typeof cu === "number" && cu > 0;
-    // un descuento baja la venta pero no el costo de la mercadería
-    const costo = it.importe <= 0 ? 0 : tieneCosto ? cu * it.cantidad : (it.importe * p.costoDefectoPct) / 100;
-    costoTotal += costo;
-    const prev = porProd.get(clave) ?? { articulo: config.nombresArticulos[clave] ?? it.articulo, unidades: 0, venta: 0, costo: 0, conCosto: true };
+    const prev = porProd.get(clave) ?? { articulo: config.nombresArticulos[clave] ?? it.articulo, unidades: 0, venta: 0 };
     prev.unidades += it.cantidad;
     prev.venta += it.importe;
-    prev.costo += costo;
-    prev.conCosto = prev.conCosto && tieneCosto;
     porProd.set(clave, prev);
   }
 
-  // Mercadería: lo comprado en el mes según ARCA, o el costo de receta de lo vendido
-  const usarCompras = p.mercaderiaSegun === "compras" || (p.mercaderiaSegun !== "recetas" && compras.mercaderia > 0);
-  const insumosPct = !ventasMes ? 0 : usarCompras ? compras.mercaderia / ventasMes : costoTotal / ventasMes;
+  // Mercadería: lo comprado en el mes según ARCA (proveedores marcados "Mercadería") ÷ lo vendido
+  const insumosPct = ventasMes > 0 ? Math.max(0, compras.mercaderia) / ventasMes : 0;
   const variablesPct = insumosPct + otrosVar;
   const mc = 1 - variablesPct;
   const peMes = mc > 0 ? fijos / mc : Infinity;
@@ -150,19 +134,12 @@ export function calcular(mesVentas: MesVentas | undefined, mes: string, config: 
 
   const productos: Producto[] = [...porProd.values()]
     .filter((x) => x.venta > 0 && x.articulo !== VENTA_SIN_DETALLE)
-    .map((x) => {
-      const margen = x.venta ? 1 - x.costo / x.venta : 0;
-      return {
-        ...x,
-        precioProm: x.unidades ? x.venta / x.unidades : 0,
-        costoU: x.unidades ? x.costo / x.unidades : 0,
-        margen,
-        aporte: x.venta * (1 - otrosVar) - x.costo,
-        participacion: ventasMes ? x.venta / ventasMes : 0,
-        revisar: margen < p.margenMinimoPct / 100,
-      };
-    })
-    .sort((a, b) => b.aporte - a.aporte);
+    .map((x) => ({
+      ...x,
+      precioProm: x.unidades ? x.venta / x.unidades : 0,
+      participacion: ventasMes ? x.venta / ventasMes : 0,
+    }))
+    .sort((a, b) => b.venta - a.venta);
 
   const semana: DiaSemana[] = DIAS_SEMANA.map((nombre, i) => {
     const ds = dias.filter((d) => diaSemana(d.fecha) === i);
@@ -194,12 +171,11 @@ export function calcular(mesVentas: MesVentas | undefined, mes: string, config: 
     productos,
     semana,
     medios,
-    sinCosto: productos.filter((x) => !x.conCosto).map((x) => x.articulo).sort(),
     diasSinDetalle: new Set(items.filter((i) => i.articulo === VENTA_SIN_DETALLE).map((i) => i.fecha)).size,
     compras,
     fijosManuales,
     comisionPct,
-    mercaderiaSegun: usarCompras ? "compras" : "recetas",
+    sinMercaderia: ventasMes > 0 && compras.mercaderia <= 0,
     ultimo,
     promedioDia,
     proyeccion,
@@ -229,8 +205,6 @@ export function avisoWhatsapp(r: Resultado, nombreLocal: string): string {
   const flojo = [...r.semana].filter((d) => d.vsNecesario < 0).sort((a, b) => a.vsNecesario - b.vsNecesario)[0];
   if (flojo)
     l.push("", `Los ${flojo.nombre.toLowerCase()} son el día más flojo: venden en promedio ${corto(flojo.promedio)}, ${pct(-flojo.vsNecesario, 0)} menos de lo necesario.`);
-  const peor = r.productos.filter((x) => x.revisar).sort((a, b) => a.margen - b.margen)[0];
-  if (peor) l.push("", `Ojo: ${peor.articulo} deja solo ${pct(peor.margen, 0)} de margen. Conviene revisar el precio.`);
   return l.join("\n");
 }
 
@@ -238,6 +212,8 @@ export function recomendaciones(r: Resultado): string[] {
   if (!r.hayDatos) return [];
   const out: string[] = [];
   if (r.fijos <= 0) out.push("Todavía no hay gastos fijos cargados para este mes: el punto de equilibrio no es real hasta cargarlos.");
+  if (r.sinMercaderia)
+    out.push("Todavía no hay compras de mercadería cargadas para este mes: se calcula con 0 % de mercadería y el punto de equilibrio queda más bajo de lo real. Subí las compras de ARCA.");
   if (r.margenSeguridad < 0)
     out.push(`Al ritmo actual el mes cierra con pérdida de ${corto(-r.resultadoProyectado)}. Hace falta vender ${corto(r.peDia)} por día en promedio o bajar gastos fijos.`);
   else if (r.margenSeguridad < 0.1)
@@ -246,8 +222,5 @@ export function recomendaciones(r: Resultado): string[] {
   const flojos = r.semana.filter((d) => d.vsNecesario < 0);
   if (flojos.length)
     out.push(`Días que en promedio no cubren los gastos: ${flojos.map((d) => d.nombre.toLowerCase()).join(", ")}. Conviene revisar horarios, personal o promociones.`);
-  for (const x of r.productos.filter((x) => x.revisar)) out.push(`${x.articulo}: margen de ${pct(x.margen, 0)}. Revisar precio o costo de receta.`);
-  if (r.sinCosto.length)
-    out.push(`${r.sinCosto.length} artículos sin costo de receta cargado; se estimó su costo. Cargarlos en Productos mejora la precisión.`);
   return out;
 }

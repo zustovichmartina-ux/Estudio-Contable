@@ -33,16 +33,12 @@ export type Parametros = {
   comisionesPorMedio: Record<string, number>; // "Efectivo" | "Tarjetas" | "QR" | "Online" … -> %
   iibbPct: number; // ingresos brutos
   diasCerrados: number; // días del mes que el local no abre (feriados, vacaciones)
-  costoDefectoPct: number; // artículos sin costo de receta
-  margenMinimoPct: number; // por debajo se marca para revisar
-  mercaderiaSegun: "auto" | "compras" | "recetas"; // de dónde sale el costo de mercadería
   ivaComputable: boolean; // Responsable Inscripto: el IVA de compras no es costo
 };
 
 export type Config = {
   nombreLocal: string;
   parametros: Parametros;
-  costos: Record<string, number>; // artículo (normalizado) -> costo unitario
   nombresArticulos: Record<string, string>; // normalizado -> como se escribe
   gastosBase: Gasto[]; // se copian a cada mes nuevo
   gastosPorMes: Record<string, Gasto[]>; // AAAA-MM -> gastos de ese mes
@@ -56,9 +52,6 @@ export const PARAMETROS_INICIALES: Parametros = {
   comisionesPorMedio: { Efectivo: 0, Tarjetas: 3.5, QR: 1, Online: 4 },
   iibbPct: 4.0,
   diasCerrados: 0,
-  costoDefectoPct: 32,
-  margenMinimoPct: 55,
-  mercaderiaSegun: "auto",
   ivaComputable: true,
 };
 
@@ -76,7 +69,6 @@ export const GASTOS_INICIALES: Gasto[] = [
 export const CONFIG_INICIAL: Config = {
   nombreLocal: "Fiordo Café",
   parametros: PARAMETROS_INICIALES,
-  costos: {},
   nombresArticulos: {},
   gastosBase: GASTOS_INICIALES,
   gastosPorMes: {},

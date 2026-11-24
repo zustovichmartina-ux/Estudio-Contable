@@ -298,25 +298,3 @@ export function incorporar(meses: Record<string, MesVentas>, lineas: LineaVenta[
   }
   return out;
 }
-
-// ---------------------------------------------------------------- costos de productos
-/**
- * Lee una planilla de costos: la que descarga la app desde Productos, o el reporte
- * "Costo de Mercaderías" de Bistrosoft (Nombre de Producto, Sku, Costo, Precio x Unidad).
- */
-export async function leerCostos(archivo: File): Promise<{ articulo: string; costo: number }[]> {
-  const hojas = await leerArchivo(archivo);
-  for (const h of hojas) {
-    for (let i = 0; i < Math.min(h.filas.length, 20); i++) {
-      const enc = (h.filas[i] ?? []).map((c) => norm(String(c ?? "")));
-      const cP = enc.findIndex((e) => /producto|articulo|nombre/.test(e));
-      const cC = enc.findIndex((e) => /^costo/.test(e));
-      if (cP < 0 || cC < 0) continue;
-      return h.filas
-        .slice(i + 1)
-        .map((f) => ({ articulo: tituloArticulo(String(f[cP] ?? "")), costo: aNumero(f[cC]) }))
-        .filter((x) => x.articulo && isFinite(x.costo) && x.costo > 0);
-    }
-  }
-  throw new Error("No encontré columnas de producto y costo en el archivo.");
-}

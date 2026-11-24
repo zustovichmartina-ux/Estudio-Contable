@@ -149,12 +149,9 @@ export async function reportePDF(r: Resultado, nombreLocal: string) {
   autoTable(doc, {
     ...estilo,
     startY: ultimaY() + 6,
-    head: [["Producto", "Unidades", "Venta", "Precio prom.", "Costo u.", "Margen", "Aporte"]],
-    body: r.productos.map((p) => [p.articulo + (p.conCosto ? "" : " *"), Math.round(p.unidades), pesos(p.venta), pesos(p.precioProm), pesos(p.costoU), pct(p.margen, 0), pesos(p.aporte)]),
-    columnStyles: { 1: { halign: "right" }, 2: { halign: "right" }, 3: { halign: "right" }, 4: { halign: "right" }, 5: { halign: "right" }, 6: { halign: "right" } },
-    didParseCell: (c) => {
-      if (c.section === "body" && c.column.index === 5 && r.productos[c.row.index]?.revisar) c.cell.styles.textColor = hexARgb(MARCA.mal);
-    },
+    head: [["Producto", "Unidades", "Precio prom.", "Venta", "% de la venta"]],
+    body: r.productos.map((p) => [p.articulo, Math.round(p.unidades), pesos(p.precioProm), pesos(p.venta), pct(p.participacion, 1)]),
+    columnStyles: { 1: { halign: "right" }, 2: { halign: "right" }, 3: { halign: "right" }, 4: { halign: "right" } },
   });
   autoTable(doc, {
     ...estilo,
@@ -172,7 +169,7 @@ export async function reportePDF(r: Resultado, nombreLocal: string) {
     doc.setPage(i);
     doc.setFontSize(7);
     doc.setTextColor(...gris);
-    doc.text("* costo estimado: falta cargar el costo de receta.  Punto de equilibrio = gastos fijos ÷ margen de contribución.", M, 290);
+    doc.text("Punto de equilibrio = gastos fijos ÷ margen de contribución. Mercadería = compras de ARCA ÷ ventas del mes.", M, 290);
     doc.text(`${i} / ${paginas}`, W - M, 290, { align: "right" });
   }
   descargar(doc.output("blob"), `punto_equilibrio_${slug(nombreLocal)}_${r.mes}.pdf`);
@@ -211,9 +208,9 @@ export async function reporteExcel(r: Resultado, nombreLocal: string) {
     ...r.dias.map((d) => [d.fecha, fechaCorta(d.fecha), Math.round(d.venta), Math.round(r.peDia), Math.round(d.diferencia), d.cubrio ? "Sí" : "No", d.tickets]),
   ], [12, 10, 14, 14, 14, 8, 8]), "Por día");
   XLSX.utils.book_append_sheet(wb, hoja([
-    ["Producto", "Unidades", "Venta", "Precio promedio", "Costo unitario", "Costo total", "Margen %", "Aporte", "% de la venta", "Costo cargado"],
-    ...r.productos.map((p) => [p.articulo, Math.round(p.unidades), Math.round(p.venta), Math.round(p.precioProm), Math.round(p.costoU), Math.round(p.costo), +(p.margen * 100).toFixed(1), Math.round(p.aporte), +(p.participacion * 100).toFixed(1), p.conCosto ? "Sí" : "Estimado"]),
-  ], [26, 10, 14, 14, 14, 14, 10, 14, 12, 12]), "Por producto");
+    ["Producto", "Unidades", "Precio promedio", "Venta", "% de la venta"],
+    ...r.productos.map((p) => [p.articulo, Math.round(p.unidades), Math.round(p.precioProm), Math.round(p.venta), +(p.participacion * 100).toFixed(1)]),
+  ], [26, 10, 14, 14, 12]), "Por producto");
   XLSX.utils.book_append_sheet(wb, hoja([
     ["Día", "Venta promedio", "Días", "Cubrieron", "Contra lo necesario %"],
     ...r.semana.map((d) => [d.nombre, Math.round(d.promedio), d.dias, d.cubiertos, +(d.vsNecesario * 100).toFixed(1)]),
@@ -226,22 +223,4 @@ export async function reporteExcel(r: Resultado, nombreLocal: string) {
   XLSX.utils.book_append_sheet(wb, hoja([["Concepto", "Importe"], ...r.gastos.map((g) => [g.concepto, g.importe]), ["Total", r.fijos]], [32, 14]), "Gastos fijos");
   const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
   descargar(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), `punto_equilibrio_${slug(nombreLocal)}_${r.mes}.xlsx`);
-}
-
-/** Planilla para completar el costo de receta de cada producto y volver a subirla. */
-export async function planillaCostos(r: Resultado, costos: Record<string, number>, nombreLocal: string) {
-  const XLSX = await import("xlsx");
-  const { norm } = await import("./tipos");
-  const filas: (string | number)[][] = [
-    ["Producto", "Precio promedio de venta", "Unidades vendidas en el mes", "Costo"],
-    ...[...r.productos]
-      .sort((a, b) => b.venta - a.venta)
-      .map((p) => [p.articulo, Math.round(p.precioProm), Math.round(p.unidades), costos[norm(p.articulo)] ?? ""]),
-  ];
-  const ws = XLSX.utils.aoa_to_sheet(filas);
-  ws["!cols"] = [{ wch: 32 }, { wch: 22 }, { wch: 24 }, { wch: 12 }];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Costos");
-  const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
-  descargar(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), `costos_${slug(nombreLocal)}.xlsx`);
 }

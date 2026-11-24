@@ -4,7 +4,7 @@ import { Modo, borrarMes, cargar, guardarConfig, guardarMeses } from "@/lib/alma
 import { incorporar } from "@/lib/lector";
 import { calcular } from "@/lib/motor";
 import { CONFIG_INICIAL, Config, Datos, Gasto, Parametros, norm } from "@/lib/tipos";
-import { CATALOGO_EJEMPLO, GASTOS_EJEMPLO, ventasEjemplo } from "@/lib/ejemplo";
+import { GASTOS_EJEMPLO, comprasEjemplo, ventasEjemplo } from "@/lib/ejemplo";
 import { nombreMes } from "@/lib/formato";
 import Hoy from "@/components/Hoy";
 import Logo from "@/components/Logo";
@@ -130,10 +130,8 @@ export default function App() {
     const hoy = new Date();
     const m = mesActual();
     const lineas = ventasEjemplo(m, Math.max(1, hoy.getDate() - 1));
-    const costos = { ...datos.config.costos };
-    for (const c of CATALOGO_EJEMPLO) costos[norm(c.n)] = c.c;
-    const config: Config = { ...datos.config, costos, gastosPorMes: { ...datos.config.gastosPorMes, [m]: GASTOS_EJEMPLO } };
-    const nuevo = { config, meses: incorporar(datos.meses, lineas, "datos de ejemplo") };
+    const config: Config = { ...datos.config, gastosPorMes: { ...datos.config.gastosPorMes, [m]: GASTOS_EJEMPLO } };
+    const nuevo = { config, meses: incorporarCompras(incorporar(datos.meses, lineas, "datos de ejemplo"), comprasEjemplo(lineas), "datos de ejemplo") };
     setDatos(nuevo);
     setMes(m);
     conError(async () => {
@@ -190,27 +188,7 @@ export default function App() {
         {vista === "hoy" && <Hoy r={r} irA={ir} probarEjemplo={probarEjemplo} />}
         {vista === "cargar" && <Cargar meses={datos.meses} ivaComputable={datos.config.parametros.ivaComputable} guardar={guardarVentas} deshacer={anterior ? deshacerCarga : null} verResultado={(m, v = "hoy") => { setCartel(m); ir(v); }} />}
         {vista === "productos" && (
-          <Productos
-            r={r}
-            costos={datos.config.costos}
-            margenMinimo={datos.config.parametros.margenMinimoPct}
-            nombreLocal={datos.config.nombreLocal}
-            importarCostos={(lista) =>
-              actualizarConfig((c) => {
-                const costos = { ...c.costos };
-                for (const x of lista) costos[norm(x.articulo)] = x.costo;
-                return { ...c, costos };
-              })
-            }
-            cambiarCosto={(articulo, costo) =>
-              actualizarConfig((c) => {
-                const costos = { ...c.costos };
-                if (costo == null || !(costo > 0)) delete costos[norm(articulo)];
-                else costos[norm(articulo)] = costo;
-                return { ...c, costos };
-              })
-            }
-          />
+          <Productos r={r} />
         )}
         {vista === "gastos" && (
           <Gastos

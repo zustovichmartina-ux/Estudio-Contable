@@ -20,17 +20,10 @@ export default function Hoy({ r, irA, probarEjemplo }: Props) {
 
   const u = r.ultimo!;
   const sinGastos = r.fijos <= 0;
-  const conCosto = r.productos.filter((p) => p.conCosto).length;
   const pasos: { titulo: string; detalle: string; hecho: boolean; ir: "cargar" | "productos" | "gastos"; boton: string }[] = [
     { titulo: "Subir las ventas", detalle: "El Detalle de Transacciones de Bistrosoft.", hecho: r.hayDatos, ir: "cargar", boton: "Subir" },
+    { titulo: "Subir las compras", detalle: "Mis Comprobantes Recibidos de ARCA: de ahí sale la mercadería y parte de los gastos fijos.", hecho: !r.sinMercaderia, ir: "cargar", boton: "Subir" },
     { titulo: "Cargar los gastos fijos", detalle: "Sueldos y alquiler a mano; los servicios facturados salen de las compras de ARCA.", hecho: !sinGastos, ir: "gastos", boton: "Cargar" },
-    {
-      titulo: "Cargar el costo de los productos",
-      detalle: conCosto ? `${conCosto} de ${r.productos.length} productos con costo. Mientras tanto se estima.` : "Con la planilla de costos, todos de una vez. Mientras tanto se estima.",
-      hecho: r.productos.length > 0 && conCosto >= r.productos.length * 0.8,
-      ir: "productos",
-      boton: "Cargar",
-    },
   ];
   const pendientes = pasos.filter((p) => !p.hecho).length;
   // días de atraso: solo si el mes que se mira es el actual
@@ -154,16 +147,16 @@ export default function Hoy({ r, irA, probarEjemplo }: Props) {
           </div>
         </section>
         <section className="card">
-          <div className="card-head"><h2>Lo que más aporta</h2><button className="btn sec" style={{ minHeight: 34 }} onClick={() => irA("productos")}>Ver todos</button></div>
+          <div className="card-head"><h2>Lo que más se vende</h2><button className="btn sec" style={{ minHeight: 34 }} onClick={() => irA("productos")}>Ver todos</button></div>
           <div className="tabla-wrap">
             <table>
-              <thead><tr><th>Producto</th><th className="r">Margen</th><th className="r">Aporte</th></tr></thead>
+              <thead><tr><th>Producto</th><th className="r">Venta</th><th className="r">% de la venta</th></tr></thead>
               <tbody>
                 {r.productos.slice(0, 6).map((p) => (
                   <tr key={p.articulo}>
                     <td>{p.articulo}</td>
-                    <td className="r"><span className={`pill ${p.revisar ? "bad" : p.margen < 0.65 ? "warn" : "ok"}`}>{pct(p.margen, 0)}</span></td>
-                    <td className="r num">{corto(p.aporte)}</td>
+                    <td className="r num">{corto(p.venta)}</td>
+                    <td className="r num">{pct(p.participacion, 0)}</td>
                   </tr>
                 ))}
               </tbody>

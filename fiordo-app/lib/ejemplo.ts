@@ -1,4 +1,4 @@
-import { Gasto, LineaVenta } from "./tipos";
+import { Compra, Gasto, LineaVenta } from "./tipos";
 
 /** Datos INVENTADOS para probar la app. Se borran desde Gastos > Borrar datos del mes. */
 export const CATALOGO_EJEMPLO: { n: string; p: number; c: number; u: number }[] = [
@@ -73,4 +73,25 @@ export function ventasEjemplo(mes: string, hastaDia: number): LineaVenta[] {
     }
   }
   return out;
+}
+
+/** Compras de mercadería INVENTADAS para el ejemplo: una factura por semana a un proveedor ficticio. */
+export function comprasEjemplo(lineas: LineaVenta[]): Compra[] {
+  const porSemana = new Map<string, number>();
+  for (const l of lineas) {
+    const p = CATALOGO_EJEMPLO.find((c) => c.n === l.articulo);
+    if (!p) continue;
+    const d = Number(l.fecha.slice(8, 10));
+    const fecha = `${l.fecha.slice(0, 8)}${String(Math.floor((d - 1) / 7) * 7 + 1).padStart(2, "0")}`;
+    porSemana.set(fecha, (porSemana.get(fecha) ?? 0) + p.c * l.cantidad);
+  }
+  return [...porSemana.entries()].map(([fecha, costo], i) => ({
+    fecha,
+    cuit: "30000000007",
+    proveedor: "Distribuidora de ejemplo",
+    tipo: "Factura A",
+    numero: `0001-${String(i + 1).padStart(8, "0")}`,
+    costo: Math.round(costo),
+    total: Math.round(costo * 1.21),
+  }));
 }

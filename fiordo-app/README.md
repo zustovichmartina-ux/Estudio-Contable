@@ -9,7 +9,7 @@ Se usa desde la compu y desde el celular. Las ventas se cargan desde el Excel qu
 |---|---|
 | **Hoy** | Semáforo del último día, avance del mes contra el punto de equilibrio, proyección, margen de seguridad, ventas por día y por día de la semana. |
 | **Cargar** | Subir el Excel de ventas. Reconoce directo el **Detalle de Transacciones** de Bistrosoft; para otros archivos detecta la fila de títulos y las columnas, y se pueden corregir antes de guardar. Si un día ya estaba cargado, se reemplaza (no se duplica). |
-| **Productos** | Margen y aporte de cada producto. Costo de receta uno por uno, o todos juntos: **Bajar planilla de costos** → completar en Excel → **Subir costos** (acepta también el reporte "Costo de Mercaderías" de Bistrosoft). |
+| **Productos** | Ranking de ventas: unidades, precio promedio, venta y % de la venta de cada producto. |
 | **Gastos** | Gastos fijos del mes, comisiones, ingresos brutos y días que cierra el local. |
 | **Reportes** | Informe mensual en **PDF**, detalle en **Excel** y aviso listo para mandar por **WhatsApp**. |
 

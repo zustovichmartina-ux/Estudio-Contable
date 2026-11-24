@@ -27,14 +27,14 @@ no se usan para eso.
 - **Gastos fijos** = cargados a mano (pestaña Gastos; se copian a los meses siguientes) + facturas de ARCA de
   proveedores clasificados como "Gasto fijo" (sin IVA).
 - **Variables (% de la venta):**
-  - Mercadería: compras de ARCA clasificadas "Mercadería" ÷ ventas del mes (si hay); si no, costo de receta por
-    producto; si falta, estimado (32 % por defecto). Configurable: auto / compras / recetas.
+  - Mercadería: SOLO compras de ARCA clasificadas "Mercadería" ÷ ventas del mes. Sin compras cargadas da 0 % y
+    la app avisa. (24/11/2026: se sacó el costo por receta, la planilla de costos y el 32 % estimado, a pedido de la usuaria.)
   - Comisiones: **por medio de pago** sobre lo vendido con cada medio (Efectivo 0 %, Tarjetas 3,5 %, QR 1 %, Online 4 %:
     valores de referencia editables, a confirmar con el cliente).
   - Ingresos brutos: **4 %** (confirmado por la usuaria).
 - Margen de contribución = 1 − variables. **Punto de equilibrio = fijos ÷ margen**. Por día = ÷ días que abre
   (días del mes − días cerrados; Fiordo abre todos los días).
-- Semáforo diario, proyección, margen de seguridad, análisis por día de semana, aporte por producto.
+- Semáforo diario, proyección, margen de seguridad, análisis por día de semana, ranking de ventas por producto.
 
 ## Datos que entran (archivos reales del cliente, verificados)
 
@@ -48,7 +48,7 @@ no se usan para eso.
    se guarda como "Ventas sin detalle de productos" y **solo completa días que no tienen detalle** (el Detalle siempre gana).
    Verificado: noviembre 1–22 = $ 19.549.038.
 3. **Bistrosoft – Costo de Mercaderías**: vino **vacío** (el cliente no cargó costos en Bistrosoft). Por eso existe la
-   "planilla de costos" (Productos → bajar, completar, subir).
+   "planilla de costos" (ya eliminada: la mercadería sale de las compras de ARCA).
 4. **ARCA – Mis Comprobantes Recibidos** (xlsx/csv, formato viejo o nuevo): compras sin IVA ni percepciones
    (Responsable Inscripto, configurable), notas de crédito restan, moneda extranjera × tipo de cambio.
    Cada proveedor (por CUIT) se clasifica: mercadería / gasto fijo (con rubro) / no incluir; sugerencia automática
@@ -66,7 +66,7 @@ components/             Hoy, Cargar, Productos, Gastos, Reportes, Grafico, Logo,
 lib/motor.ts            cálculo, medios de pago, aviso de WhatsApp, conclusiones
 lib/lector.ts           lectura de Excel/CSV, formatos de Bistrosoft, incorporar ventas por día
 lib/compras.ts          compras de ARCA y clasificación de proveedores
-lib/reportes.ts         PDF mensual, Excel, planilla de costos
+lib/reportes.ts         PDF mensual y Excel
 lib/almacen.ts          nube (Redis) o navegador (localStorage) + migraciones de configuración
 lib/tipos.ts            tipos y valores iniciales
 public/                 íconos, manifest, sw.js (app instalable y uso sin conexión)
