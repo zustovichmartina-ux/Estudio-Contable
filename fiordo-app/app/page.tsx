@@ -2,7 +2,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Modo, borrarMes, cargar, guardarConfig, guardarMeses } from "@/lib/almacen";
 import { incorporar } from "@/lib/lector";
-import { calcular } from "@/lib/motor";
+import { calcular, gastosDelMes } from "@/lib/motor";
+import { SueldosMes, aplicarSueldos } from "@/lib/sueldos";
 import { CONFIG_INICIAL, Config, Datos, Gasto, Parametros, norm } from "@/lib/tipos";
 import { GASTOS_EJEMPLO, comprasEjemplo, ventasEjemplo } from "@/lib/ejemplo";
 import { nombreMes } from "@/lib/formato";
@@ -97,22 +98,29 @@ export default function App() {
     conError(() => guardarConfig(nuevo, modo));
   };
 
-  async function guardarVentas(lotes: Lote[], lotesCompras: LoteCompras[] = []) {
+  async function guardarVentas(lotes: Lote[], lotesCompras: LoteCompras[] = [], sueldos: SueldosMes[] = []) {
     setAnterior(datos);
     let meses = datos.meses;
     for (const l of lotes) meses = incorporar(meses, l.lineas, l.archivo, l.soloCompletar);
     for (const l of lotesCompras) meses = incorporarCompras(meses, l.compras, l.archivo);
     const lineas = lotes.flatMap((l) => l.lineas);
-    const cambiados = [...new Set([...lineas.map((l) => l.fecha), ...lotesCompras.flatMap((l) => l.compras.map((c) => c.fecha))].map((f) => f.slice(0, 7)))].sort();
+    const cambiados = [...new Set([
+      ...lineas.map((l) => l.fecha.slice(0, 7)),
+      ...lotesCompras.flatMap((l) => l.compras.map((c) => c.fecha.slice(0, 7))),
+      ...sueldos.map((s) => s.mes),
+    ])].sort();
+    // sueldos y cargas de la liquidación: reemplazan esos renglones en los gastos de cada mes
+    const gastosPorMes = { ...datos.config.gastosPorMes };
+    for (const s of sueldos) gastosPorMes[s.mes] = aplicarSueldos(gastosDelMes(datos.config, s.mes), s);
     const nombres = { ...datos.config.nombresArticulos };
     for (const l of lineas) nombres[norm(l.articulo)] ??= l.articulo;
     // lo imputado en Tango sirve para clasificar solas las compras de ARCA (sin pisar lo elegido a mano)
     const aprendido = aprenderDeTango(lotesCompras.flatMap((l) => l.compras));
     const proveedores = { ...aprendido, ...(datos.config.proveedores ?? {}) };
-    const nuevo = { config: { ...datos.config, nombresArticulos: nombres, proveedores }, meses };
+    const nuevo = { config: { ...datos.config, nombresArticulos: nombres, proveedores, gastosPorMes }, meses };
     setDatos(nuevo);
     setMes(cambiados[cambiados.length - 1]);
-    await guardarMeses(nuevo, cambiados, modo);
+    await guardarMeses(nuevo, cambiados.filter((m) => nuevo.meses[m]), modo);
     await guardarConfig(nuevo, modo);
   }
 
@@ -126,6 +134,7 @@ export default function App() {
         if (anterior.meses[m]) await guardarMeses(anterior, [m], modo);
         else await borrarMes(anterior, m, modo);
       }
+      if (anterior.config !== datos.config) await guardarConfig(anterior, modo);
     });
   }
 

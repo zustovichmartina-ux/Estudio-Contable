@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { CAMPOS, Campo, Hoja, convertir, leerArchivo } from "@/lib/lector";
 import { esArcaCompras, esTangoImputacion, leerComprasArca, leerComprasTango } from "@/lib/compras";
 import { Compra, LineaVenta, MesVentas } from "@/lib/tipos";
+import { SueldosMes, esLiquidacionSueldos, leerLiquidacion } from "@/lib/sueldos";
 import { fechaCorta, nombreMes, pesos } from "@/lib/formato";
 import { IcoCargar } from "./Iconos";
 
@@ -11,7 +12,7 @@ export type LoteCompras = { compras: Compra[]; archivo: string };
 type Props = {
   meses: Record<string, MesVentas>;
   ivaComputable: boolean;
-  guardar: (lotes: Lote[], compras: LoteCompras[]) => Promise<void>;
+  guardar: (lotes: Lote[], compras: LoteCompras[], sueldos: SueldosMes[]) => Promise<void>;
   deshacer: (() => Promise<void>) | null;
   verResultado: (mensaje: string, vista?: "hoy" | "gastos") => void;
 };
@@ -38,12 +39,20 @@ export default function Cargar({ meses, ivaComputable, guardar, deshacer, verRes
     setEstado({ tipo: "info", texto: archivos.length === 1 ? `Leyendo ${archivos[0].name}…` : `Leyendo ${archivos.length} archivos…` });
     const lotes: Lote[] = [];
     const lotesCompras: LoteCompras[] = [];
+    const sueldos: SueldosMes[] = [];
     const errores: string[] = [];
     let manual: { nombre: string; hojas: Hoja[] } | null = null;
     for (const f of archivos) {
       try {
         const hs = await leerArchivo(f);
         if (!hs.length) throw new Error("no tiene datos");
+        const liquidacion = hs.filter(esLiquidacionSueldos);
+        if (liquidacion.length) {
+          const leidos = liquidacion.map(leerLiquidacion).filter((x): x is SueldosMes => !!x);
+          if (leidos.length) sueldos.push(...leidos);
+          else errores.push(`${f.name}: no encontré los totales de la liquidación`);
+          continue;
+        }
         const tango = hs.find(esTangoImputacion);
         const arca = tango ? undefined : hs.find(esArcaCompras);
         const reconocida = tango || arca ? undefined : hs.find((h) => convertir(h).formato);
@@ -65,10 +74,10 @@ export default function Cargar({ meses, ivaComputable, guardar, deshacer, verRes
         errores.push(`${f.name}: no se pudo leer (${(e as Error).message})`);
       }
     }
-    if (lotes.length || lotesCompras.length) {
+    if (lotes.length || lotesCompras.length || sueldos.length) {
       setGuardando(true);
       try {
-        await guardar(lotes, lotesCompras);
+        await guardar(lotes, lotesCompras, sueldos);
         const partes: string[] = [];
         if (lotes.length) {
           const lineas = lotes.flatMap((l) => l.lineas);
@@ -85,10 +94,14 @@ export default function Cargar({ meses, ivaComputable, guardar, deshacer, verRes
             ? `Se leyeron ${cs.length} imputaciones de compras de Tango por ${pesos(cs.reduce((s, c) => s + c.costo, 0))} sin IVA, del ${fechaCorta(fechas[0])} al ${fechaCorta(fechas[fechas.length - 1])}. Cada cuenta se clasificó sola; revisala en Gastos.`
             : `Se leyeron ${cs.length} facturas de compras de ARCA por ${pesos(cs.reduce((s, c) => s + c.costo, 0))} sin IVA, del ${fechaCorta(fechas[0])} al ${fechaCorta(fechas[fechas.length - 1])}. Revisá cómo quedó clasificado cada proveedor.`);
         }
+        if (sueldos.length) {
+          const orden = [...sueldos].sort((a, b) => a.mes.localeCompare(b.mes));
+          partes.push(`Se leyó la liquidación de sueldos: ${orden.map((s) => `${nombreMes(s.mes).toLowerCase()} sueldos ${pesos(s.sueldos)} y cargas ${pesos(s.cargas)}`).join("; ")}. Quedaron cargados en Gastos de cada mes.`);
+        }
         const texto = partes.join(" ") + (errores.length ? ` No se cargó: ${errores.join("; ")}.` : "");
         setEstado({ tipo: "ok", texto });
         setListo(true);
-        if (!manual) verResultado(texto, lotesCompras.length && !lotes.length ? "gastos" : "hoy");
+        if (!manual) verResultado(texto, (lotesCompras.length || sueldos.length) && !lotes.length ? "gastos" : "hoy");
       } catch (e) {
         setEstado({ tipo: "bad", texto: (e as Error).message });
       } finally {
@@ -124,7 +137,7 @@ export default function Cargar({ meses, ivaComputable, guardar, deshacer, verRes
     if (!lectura?.lineas.length) return;
     setGuardando(true);
     try {
-      await guardar([{ lineas: lectura.lineas, archivo }], []);
+      await guardar([{ lineas: lectura.lineas, archivo }], [], []);
       setListo(true);
       verResultado(`Se cargaron ventas por ${pesos(total)} del ${fechaCorta(lectura.desde!)} al ${fechaCorta(lectura.hasta!)}.`);
       setEstado({ tipo: "ok", texto: `Listo: se guardaron ${lectura.lineas.length.toLocaleString("es-AR")} líneas por ${pesos(total)}, del ${fechaCorta(lectura.desde!)} al ${fechaCorta(lectura.hasta!)}. Si esos días ya estaban cargados, se reemplazaron.` });
@@ -151,7 +164,7 @@ export default function Cargar({ meses, ivaComputable, guardar, deshacer, verRes
         >
           <IcoCargar />
           <strong>{guardando ? "Guardando…" : "Subí el Detalle de Transacciones de Bistrosoft"}</strong>
-          <span className="small muted">También las compras: el Listado por imputación contable de Tango o Mis Comprobantes Recibidos de ARCA. Se guarda solo y podés elegir varios archivos a la vez.</span>
+          <span className="small muted">También las compras (listado por imputación de Tango o Mis Comprobantes de ARCA) y la liquidación de sueldos. Se guarda solo y podés elegir varios archivos a la vez.</span>
           <input id="archivo" type="file" multiple accept=".xlsx,.xls,.csv,.txt" onChange={(e) => { abrir(e.target.files); e.target.value = ""; }} />
         </label>
         {estado && <div className={`aviso ${estado.tipo}`} style={{ marginTop: 12 }} role="status">{estado.texto}</div>}
