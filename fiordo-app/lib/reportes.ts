@@ -21,13 +21,9 @@ const slug = (s: string) => s.normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(
 function filasEstado(e: EstadoResultados, iibbPct: number): [string, number, number][] {
   const p = (v: number) => (e.ventas ? v / e.ventas : 0);
   return [
-    [e.proyectado ? "Ventas Bistrosoft (proyectadas al cierre)" : "Ventas Bistrosoft", e.ventas, 1],
-    ["Costo de mercadería (CMV)", -e.cmv, -p(e.cmv)],
-    ["Comisiones por medio de pago", -e.comisiones, -p(e.comisiones)],
-    [`Ingresos brutos (${iibbPct} %)`, -e.iibb, -p(e.iibb)],
-    ["Contribución", e.contribucion, p(e.contribucion)],
-    ...e.fijos.map((g): [string, number, number] => [g.origen === "arca" ? `${g.concepto} (ARCA)` : g.concepto, -Number(g.importe), -p(Number(g.importe))]),
-    ["Total gastos fijos", -e.totalFijos, -p(e.totalFijos)],
+    [e.proyectado ? "Ingresos Bistrosoft (proyectados al cierre)" : "Ingresos Bistrosoft", e.ventas, 1],
+    ...e.gastos.map((g): [string, number, number] => [g.concepto, -g.importe, -p(g.importe)]),
+    ["Total gastos", -e.totalGastos, -p(e.totalGastos)],
     [e.resultado >= 0 ? "Ganancia" : "Pérdida", e.resultado, e.margen],
   ];
 }
@@ -61,7 +57,7 @@ export async function reportePDF(r: Resultado, nombreLocal: string, iibbPct: num
     ["Punto de equilibrio", pesos(r.peMes)],
     ["Necesario por día", pesos(r.peDia)],
     ["Proyección del mes", pesos(r.proyeccion)],
-    ["Margen de contribución", pct(r.mc)],
+    ["Para cubrir los gastos hay que vender", pesos(r.peMes)],
     ["Margen de seguridad", pct(r.margenSeguridad)],
     ["Resultado proyectado", pesos(r.resultadoProyectado)],
     ["Ticket promedio", r.ticketPromedio ? pesos(r.ticketPromedio) : "–"],
@@ -155,7 +151,7 @@ export async function reportePDF(r: Resultado, nombreLocal: string, iibbPct: num
     columnStyles: { 1: { halign: "right" }, 2: { halign: "right" } },
     didParseCell: (c) => {
       const n = (c.table.body as unknown[]).length;
-      if (c.section === "body" && [0, 4, n - 2, n - 1].includes(c.row.index)) c.cell.styles.fontStyle = "bold";
+      if (c.section === "body" && [0, n - 2, n - 1].includes(c.row.index)) c.cell.styles.fontStyle = "bold";
     },
   });
   autoTable(doc, {
@@ -188,7 +184,7 @@ export async function reportePDF(r: Resultado, nombreLocal: string, iibbPct: num
     doc.setPage(i);
     doc.setFontSize(7);
     doc.setTextColor(...gris);
-    doc.text("Punto de equilibrio = gastos fijos ÷ margen de contribución. Mercadería = compras de ARCA ÷ ventas del mes.", M, 290);
+    doc.text("Punto de equilibrio = lo que hay que vender para cubrir todos los gastos del mes. Mercadería según las compras.", M, 290);
     doc.text(`${i} / ${paginas}`, W - M, 290, { align: "right" });
   }
   descargar(doc.output("blob"), `punto_equilibrio_${slug(nombreLocal)}_${r.mes}.pdf`);
@@ -207,11 +203,10 @@ export async function reporteExcel(r: Resultado, nombreLocal: string, iibbPct: n
     [`${nombreLocal} · ${nombreMes(r.mes)}`],
     [],
     ["Ventas del mes", Math.round(r.ventasMes)],
-    ["Gastos fijos", Math.round(r.fijos)],
+    ["Gastos que no dependen de la venta", Math.round(r.fijos)],
     ["Mercadería / insumos %", +(r.insumosPct * 100).toFixed(2)],
     ["Comisiones medios de pago % (promedio)", +r.comisionPct.toFixed(2)],
-    ["Total variables %", +(r.variablesPct * 100).toFixed(2)],
-    ["Margen de contribución %", +(r.mc * 100).toFixed(2)],
+    ["Mercadería, IIBB y comisiones (% de la venta)", +(r.variablesPct * 100).toFixed(2)],
     ["Punto de equilibrio mensual", Math.round(r.peMes)],
     ["Punto de equilibrio diario", Math.round(r.peDia)],
     ["Días con ventas cargadas", r.dias.length],
@@ -243,7 +238,7 @@ export async function reporteExcel(r: Resultado, nombreLocal: string, iibbPct: n
       ["Medio de pago", "Venta", "% de la venta", "Comisión %", "Costo comisión"],
       ...r.medios.map((m) => [m.medio, Math.round(m.venta), +(m.participacion * 100).toFixed(1), m.tasa, Math.round(m.comision)]),
     ], [20, 14, 14, 12, 16]), "Medios de pago");
-  XLSX.utils.book_append_sheet(wb, hoja([["Concepto", "Importe"], ...r.gastos.map((g) => [g.concepto, g.importe]), ["Total", r.fijos]], [32, 14]), "Gastos fijos");
+  XLSX.utils.book_append_sheet(wb, hoja([["Concepto", "Importe"], ...r.gastos.map((g) => [g.concepto, g.importe]), ["Total", r.fijos]], [32, 14]), "Gastos del mes");
   const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
   descargar(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), `punto_equilibrio_${slug(nombreLocal)}_${r.mes}.xlsx`);
 }

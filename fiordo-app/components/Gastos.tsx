@@ -47,7 +47,7 @@ export default function Gastos({ r, config, modo, guardarGastos, guardarParametr
     <>
       <div className="grid-2">
         <section className="card">
-          <div className="card-head"><h2>Gastos fijos de {nombreMes(r.mes)}</h2><span className="small muted">Se pagan vendas o no</span></div>
+          <div className="card-head"><h2>Gastos de {nombreMes(r.mes)}</h2><span className="small muted">Sueldos, cargas, alquiler, amortizaciones…</span></div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {gastos.map((g, i) => (
               <div key={i} className="fila" style={{ flexWrap: "nowrap", gap: 8 }}>
@@ -70,7 +70,7 @@ export default function Gastos({ r, config, modo, guardarGastos, guardarParametr
                 </div>
               ))}
               <div className="fila" style={{ justifyContent: "space-between", borderTop: "1px solid var(--line)", paddingTop: 8 }}>
-                <strong>Total gastos fijos</strong><strong className="num">{pesos(total + r.compras.fijos)}</strong>
+                <strong>Total</strong><strong className="num">{pesos(total + r.compras.fijos)}</strong>
               </div>
               <span className="small muted">No cargues a mano lo que ya viene en las compras de Tango o ARCA: se sumaría dos veces.</span>
             </div>
@@ -85,14 +85,14 @@ export default function Gastos({ r, config, modo, guardarGastos, guardarParametr
         </section>
 
         <section className="card">
-          <div className="card-head"><h2>Gastos variables y datos del local</h2></div>
+          <div className="card-head"><h2>Mercadería, impuestos y comisiones</h2></div>
           <p className="small muted" style={{ marginBottom: 12 }}>
             {r.sinMercaderia ? (
               <>Mercadería este mes: <strong>sin compras cargadas</strong>. Subí las compras de ARCA y marcá los proveedores de mercadería; mientras tanto se calcula con 0 %.</>
             ) : (
               <>Mercadería este mes: <strong>{pct(r.insumosPct)}</strong> de la venta, según las compras (Tango o ARCA).</>
             )}{" "}
-            Acá van los demás gastos que suben con cada venta.
+            Estos gastos se calculan como % de lo que se vende.
           </p>
           <div className="kpis" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>
             <div className="campo"><label htmlFor="p-iibb">Ingresos brutos (%)</label><input id="p-iibb" className="input r" type="number" step="0.1" inputMode="decimal" value={p.iibbPct} onChange={(e) => setP({ ...p, iibbPct: Number(e.target.value) || 0 })} /></div>
@@ -131,8 +131,8 @@ export default function Gastos({ r, config, modo, guardarGastos, guardarParametr
             <span className="small muted">Abre {r.diasApertura} de {diasDelMes(r.mes)} días en {nombreMes(r.mes).split(" ")[0].toLowerCase()}.</span>
           </div>
           <div className="formula aviso info" style={{ marginTop: 14 }}>
-            <strong>Punto de equilibrio</strong> = gastos fijos ÷ margen de contribución<br />
-            {pesos(r.fijos)} ÷ {pct(r.mc)} = <strong>{isFinite(r.peMes) ? pesos(r.peMes) : "–"}</strong> por mes
+            <strong>Para cubrir todos los gastos</strong> hay que vender <strong>{isFinite(r.peMes) && r.fijos > 0 ? pesos(r.peMes) : "–"}</strong> por mes.<br />
+            <span className="small muted">Mercadería, ingresos brutos y comisiones suben con la venta ({pct(r.variablesPct)} de cada venta); el resto ({pesos(r.fijos)}) se paga igual.</span>
           </div>
         </section>
       </div>
@@ -148,7 +148,7 @@ export default function Gastos({ r, config, modo, guardarGastos, guardarParametr
           <>
             <div className="kpis" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", marginBottom: 14 }}>
               <div className="kpi"><span className="eyebrow">Mercadería</span><span className="val num">{pesos(r.compras.mercaderia)}</span><span className="hint">{r.hayDatos ? `${pct(r.compras.mercaderia / r.ventasMes)} de la venta` : "Sin ventas cargadas"}</span></div>
-              <div className="kpi"><span className="eyebrow">Gastos fijos</span><span className="val num">{pesos(r.compras.fijos)}</span><span className="hint">Se suman a los gastos del mes</span></div>
+              <div className="kpi"><span className="eyebrow">Otros gastos</span><span className="val num">{pesos(r.compras.fijos)}</span><span className="hint">Se suman a los gastos del mes</span></div>
               <div className="kpi"><span className="eyebrow">No incluido</span><span className="val num">{pesos(r.compras.ignorado)}</span><span className="hint">{r.compras.cantidad} facturas en total, sin IVA</span></div>
             </div>
             <p className="small muted" style={{ marginBottom: 10 }}>Las compras de Tango se agrupan por cuenta contable; las de ARCA, por proveedor. Revisá cada uno una sola vez: la app lo recuerda para los meses siguientes. Los marcados con • son sugerencias automáticas.</p>
@@ -167,7 +167,7 @@ export default function Gastos({ r, config, modo, guardarGastos, guardarParametr
                           clasificarProveedor(pv.cuit, { nombre: pv.nombre, categoria, concepto: categoria === "fijo" ? pv.concepto || "Otros gastos fijos" : "" });
                         }}>
                           <option value="mercaderia">Mercadería</option>
-                          <option value="fijo">Gasto fijo</option>
+                          <option value="fijo">Gasto</option>
                           <option value="ignorar">No incluir</option>
                         </select>
                       </td>

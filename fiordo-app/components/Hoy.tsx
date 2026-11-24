@@ -25,13 +25,9 @@ function EstadoMes({ r, iibbPct }: { r: Resultado; iibbPct: number }) {
         <table className="er">
           <thead><tr><th>Concepto</th><th className="r">Importe</th><th className="r">% venta</th></tr></thead>
           <tbody>
-            {fila(e.proyectado ? "Ventas Bistrosoft (proyectadas)" : "Ventas Bistrosoft", e.ventas, { sub: true })}
-            {fila(r.sinMercaderia ? "Costo de mercadería (falta subir compras)" : "Costo de mercadería (CMV)", e.cmv, { menos: true })}
-            {fila("Comisiones por medio de pago", e.comisiones, { menos: true })}
-            {fila(`Ingresos brutos (${iibbPct} %)`, e.iibb, { menos: true })}
-            {fila("Contribución", e.contribucion, { sub: true })}
-            {e.fijos.map((g) => fila(g.origen === "arca" ? `${g.concepto} (ARCA)` : g.concepto, Number(g.importe), { menos: true }))}
-            {fila("Total gastos fijos", e.totalFijos, { menos: true, sub: true })}
+            {fila(e.proyectado ? "Ingresos Bistrosoft (proyectados al cierre)" : "Ingresos Bistrosoft", e.ventas, { sub: true })}
+            {e.gastos.map((g) => fila(g.concepto, g.importe, { menos: true }))}
+            {fila("Total gastos", e.totalGastos, { menos: true, sub: true })}
           </tbody>
           <tfoot>
             <tr className={`er-total ${gana ? "ok" : "bad"}`}>
@@ -44,11 +40,17 @@ function EstadoMes({ r, iibbPct }: { r: Resultado; iibbPct: number }) {
       </div>
       <div className="er-veredicto">
         <span className={`pill ${gana ? "ok" : "bad"}`}>{gana ? "El ingreso cubre los gastos" : "El ingreso no cubre los gastos"}</span>
-        <span className="small">
-          Gastos totales {pesos(e.totalGastos)} · Margen {pct(e.margen, 1)} ·{" "}
-          {r.fijos <= 0 ? "Falta cargar los gastos fijos" : e.llegaEquilibrio ? `Supera el punto de equilibrio (${corto(r.peMes)})` : `No llega al punto de equilibrio (${corto(r.peMes)})`}
-        </span>
+        <span className="small">Margen {pct(e.margen, 1)}</span>
       </div>
+      {r.fijos > 0 && isFinite(r.peMes) && (
+        <p className="er-equilibrio">
+          Para cubrir todos los gastos hay que vender <strong>{pesos(r.peMes)}</strong> en el mes (<strong>{corto(r.peDia)}</strong> por día).{" "}
+          {e.llegaEquilibrio
+            ? <>{e.proyectado ? "Al ritmo actual vas" : "Se vendió"} <strong style={{ color: "var(--ok)" }}>{pct(e.ventas / r.peMes - 1, 0)} por encima</strong>.</>
+            : <>{e.proyectado ? "Al ritmo actual vas" : "Se vendió"} <strong style={{ color: "var(--bad)" }}>{pct(1 - e.ventas / r.peMes, 0)} por debajo</strong>.</>}
+        </p>
+      )}
+      {r.fijos <= 0 && <p className="er-equilibrio">Cargá los gastos del mes (sueldos, alquiler, servicios) para ver cuánto hay que vender para cubrirlos.</p>}
     </section>
   );
 }
@@ -70,8 +72,8 @@ export default function Hoy({ r, iibbPct, irA, probarEjemplo }: Props) {
   const sinGastos = r.fijos <= 0;
   const pasos: { titulo: string; detalle: string; hecho: boolean; ir: "cargar" | "productos" | "gastos"; boton: string }[] = [
     { titulo: "Subir las ventas", detalle: "El Detalle de Transacciones de Bistrosoft.", hecho: r.hayDatos, ir: "cargar", boton: "Subir" },
-    { titulo: "Subir las compras", detalle: "Mis Comprobantes Recibidos de ARCA: de ahí sale la mercadería y parte de los gastos fijos.", hecho: !r.sinMercaderia, ir: "cargar", boton: "Subir" },
-    { titulo: "Cargar los gastos fijos", detalle: "Sueldos y alquiler a mano; los servicios facturados salen de las compras de ARCA.", hecho: !sinGastos, ir: "gastos", boton: "Cargar" },
+    { titulo: "Subir las compras", detalle: "El listado por imputación contable de Tango (o Mis Comprobantes Recibidos de ARCA).", hecho: !r.sinMercaderia, ir: "cargar", boton: "Subir" },
+    { titulo: "Cargar sueldos y otros gastos", detalle: "Sueldos, cargas y amortizaciones a mano; lo facturado sale de las compras.", hecho: !sinGastos, ir: "gastos", boton: "Cargar" },
   ];
   const pendientes = pasos.filter((p) => !p.hecho).length;
   // días de atraso: solo si el mes que se mira es el actual
@@ -80,7 +82,7 @@ export default function Hoy({ r, iibbPct, irA, probarEjemplo }: Props) {
   const atraso = esMesActual ? Math.floor((hoy.getTime() - new Date(u.fecha + "T00:00:00").getTime()) / 86400000) : 0;
   const escala = Math.max(r.peMes, r.proyeccion, r.ventasMes) * 1.05 || 1;
   const veredicto = sinGastos
-    ? "Cargá los gastos fijos para saber si este día cubrió los costos."
+    ? "Cargá los gastos del mes para saber si este día cubrió los costos."
     : r.estadoDia === "ok" ? `Cubriste los gastos del día, con ${corto(u.diferencia)} de sobra.`
     : r.estadoDia === "warn" ? `Quedaste cerca: faltaron ${corto(-u.diferencia)} para cubrir el día.`
     : `No alcanzó: faltaron ${corto(-u.diferencia)} para cubrir el día.`;
@@ -141,9 +143,9 @@ export default function Hoy({ r, iibbPct, irA, probarEjemplo }: Props) {
           </div>
           <p>
             {sinGastos ? (
-              <>Promedio por día: <strong>{corto(r.promedioDia)}</strong>. Con los gastos fijos cargados vas a ver cuánto falta para cubrir el mes.</>
+              <>Promedio por día: <strong>{corto(r.promedioDia)}</strong>. Con los gastos del mes cargados vas a ver cuánto falta para cubrirlos.</>
             ) : r.falta <= 0 ? (
-              <><strong>Ya cubriste los gastos del mes.</strong> Desde acá, cada venta deja {pct(r.mc, 0)} de ganancia antes de impuestos.</>
+              <><strong>Ya cubriste los gastos del mes.</strong> Desde acá, de cada $ 100 que vendas quedan $ {Math.round(r.mc * 100)} de ganancia antes de impuestos.</>
             ) : r.diasRestantes > 0 ? (
               <>Te faltan <strong>{corto(r.falta)}</strong>. En los {r.diasRestantes} días que quedan necesitás vender <strong>{corto(r.necesarioRestante)} por día</strong>.</>
             ) : (
@@ -154,8 +156,8 @@ export default function Hoy({ r, iibbPct, irA, probarEjemplo }: Props) {
       </div>
 
       <section className="kpis" aria-label="Indicadores">
-        <div className="kpi"><span className="eyebrow">Punto de equilibrio</span><span className="val num">{sinGastos ? "–" : corto(r.peMes)}</span><span className="hint">Lo mínimo a vender en el mes</span></div>
-        <div className="kpi"><span className="eyebrow">Margen de contribución</span><span className="val num">{pct(r.mc)}</span><span className="hint">De cada $100, lo que queda para gastos fijos</span></div>
+        <div className="kpi"><span className="eyebrow">Punto de equilibrio</span><span className="val num">{sinGastos ? "–" : corto(r.peMes)}</span><span className="hint">Lo que hay que vender para cubrir los gastos</span></div>
+        <div className="kpi"><span className="eyebrow">Gastos del mes</span><span className="val num">{sinGastos ? "–" : corto(estadoResultados(r, iibbPct).totalGastos)}</span><span className="hint">Todos, al ritmo de venta actual</span></div>
         <div className="kpi"><span className="eyebrow">Proyección</span><span className="val num">{corto(r.proyeccion)}</span><span className="hint">{sinGastos ? "Al ritmo actual, mes completo" : `Resultado estimado: ${corto(r.resultadoProyectado)}`}</span></div>
         <div className="kpi">
           <span className="eyebrow">Margen de seguridad</span>

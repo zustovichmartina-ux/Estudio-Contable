@@ -211,11 +211,11 @@ export function avisoWhatsapp(r: Resultado, nombreLocal: string): string {
 export function recomendaciones(r: Resultado): string[] {
   if (!r.hayDatos) return [];
   const out: string[] = [];
-  if (r.fijos <= 0) out.push("Todavía no hay gastos fijos cargados para este mes: el punto de equilibrio no es real hasta cargarlos.");
+  if (r.fijos <= 0) out.push("Todavía no hay gastos cargados para este mes (sueldos, alquiler, servicios): el punto de equilibrio no es real hasta cargarlos.");
   if (r.sinMercaderia)
     out.push("Todavía no hay compras de mercadería cargadas para este mes: se calcula con 0 % de mercadería y el punto de equilibrio queda más bajo de lo real. Subí las compras de ARCA.");
   if (r.margenSeguridad < 0)
-    out.push(`Al ritmo actual el mes cierra con pérdida de ${corto(-r.resultadoProyectado)}. Hace falta vender ${corto(r.peDia)} por día en promedio o bajar gastos fijos.`);
+    out.push(`Al ritmo actual el mes cierra con pérdida de ${corto(-r.resultadoProyectado)}. Hace falta vender ${corto(r.peDia)} por día en promedio o bajar gastos.`);
   else if (r.margenSeguridad < 0.1)
     out.push(`El margen de seguridad es bajo (${pct(r.margenSeguridad)}): una caída chica de ventas deja el mes en pérdida.`);
   else out.push(`Las ventas proyectadas superan el punto de equilibrio en ${pct(r.margenSeguridad)}.`);
@@ -231,36 +231,39 @@ export type EstadoResultados = {
   cmv: number;
   comisiones: number;
   iibb: number;
-  contribucion: number;
-  fijos: Gasto[];
-  totalFijos: number;
+  gastos: { concepto: string; importe: number }[]; // todos los gastos del mes en una sola lista
   totalGastos: number;
   resultado: number;
   margen: number; // resultado ÷ ventas
   llegaEquilibrio: boolean;
 };
 
-/** Estado de resultados del mes: ventas de Bistrosoft menos todos los gastos (variables y fijos). */
+/**
+ * Ingresos menos gastos del mes, en una sola lista. Por dentro, mercadería, ingresos brutos y comisiones
+ * se calculan como % de la venta (suben si se vende más), para que el punto de equilibrio sea correcto.
+ */
 export function estadoResultados(r: Resultado, iibbPct: number): EstadoResultados {
   const proyectado = r.diasRestantes > 0;
   const ventas = proyectado ? r.proyeccion : r.ventasMes;
   const cmv = ventas * r.insumosPct;
   const comisiones = (ventas * r.comisionPct) / 100;
   const iibb = (ventas * iibbPct) / 100;
-  const contribucion = ventas - cmv - comisiones - iibb;
-  const fijos = r.gastos.filter((g) => Number(g.importe));
-  const totalFijos = r.fijos;
-  const resultado = contribucion - totalFijos;
+  const gastos = [
+    { concepto: r.sinMercaderia ? "Mercadería (falta subir compras)" : "Mercadería", importe: cmv },
+    ...r.gastos.filter((g) => Number(g.importe)).map((g) => ({ concepto: g.concepto, importe: Number(g.importe) })),
+    { concepto: `Ingresos brutos (${iibbPct} %)`, importe: iibb },
+    { concepto: "Comisiones de tarjetas, QR y online", importe: comisiones },
+  ];
+  const totalGastos = gastos.reduce((s, g) => s + g.importe, 0);
+  const resultado = ventas - totalGastos;
   return {
     proyectado,
     ventas,
     cmv,
     comisiones,
     iibb,
-    contribucion,
-    fijos,
-    totalFijos,
-    totalGastos: cmv + comisiones + iibb + totalFijos,
+    gastos,
+    totalGastos,
     resultado,
     margen: ventas ? resultado / ventas : 0,
     llegaEquilibrio: isFinite(r.peMes) && ventas >= r.peMes,

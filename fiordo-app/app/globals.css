@@ -231,3 +231,9 @@ tbody tr:last-child td { border-bottom: 0; }
 .er tfoot tr.er-total.ok td { color: var(--ok); }
 .er tfoot tr.er-total.bad td { color: var(--bad); }
 .er-veredicto { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 10px; color: var(--muted); }
+.er-equilibrio { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); font-size: 13.5px; }
+@media (max-width: 520px) {
+  .er th:nth-child(3), .er td:nth-child(3) { display: none; }
+  .er td { white-space: normal; }
+  .er td.num { white-space: nowrap; }
+}
