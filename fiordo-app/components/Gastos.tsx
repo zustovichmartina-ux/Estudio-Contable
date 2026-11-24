@@ -63,7 +63,7 @@ export default function Gastos({ r, config, modo, guardarGastos, guardarParametr
           </div>
           {deArca.length > 0 && (
             <div className="arca-fijos">
-              <span className="eyebrow">Facturados en ARCA (sin IVA)</span>
+              <span className="eyebrow">De las compras (Tango o ARCA, sin IVA)</span>
               {deArca.map((g) => (
                 <div key={g.concepto} className="fila" style={{ justifyContent: "space-between" }}>
                   <span>{g.concepto}</span><span className="num">{pesos(g.importe)}</span>
@@ -72,7 +72,7 @@ export default function Gastos({ r, config, modo, guardarGastos, guardarParametr
               <div className="fila" style={{ justifyContent: "space-between", borderTop: "1px solid var(--line)", paddingTop: 8 }}>
                 <strong>Total gastos fijos</strong><strong className="num">{pesos(total + r.compras.fijos)}</strong>
               </div>
-              <span className="small muted">No cargues a mano lo que ya viene facturado en ARCA: se sumaría dos veces.</span>
+              <span className="small muted">No cargues a mano lo que ya viene en las compras de Tango o ARCA: se sumaría dos veces.</span>
             </div>
           )}
           <label className="fila small" style={{ gap: 6, marginTop: 12 }}>
@@ -90,7 +90,7 @@ export default function Gastos({ r, config, modo, guardarGastos, guardarParametr
             {r.sinMercaderia ? (
               <>Mercadería este mes: <strong>sin compras cargadas</strong>. Subí las compras de ARCA y marcá los proveedores de mercadería; mientras tanto se calcula con 0 %.</>
             ) : (
-              <>Mercadería este mes: <strong>{pct(r.insumosPct)}</strong> de la venta, según las compras de ARCA.</>
+              <>Mercadería este mes: <strong>{pct(r.insumosPct)}</strong> de la venta, según las compras (Tango o ARCA).</>
             )}{" "}
             Acá van los demás gastos que suben con cada venta.
           </p>

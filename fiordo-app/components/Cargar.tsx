@@ -151,7 +151,7 @@ export default function Cargar({ meses, ivaComputable, guardar, deshacer, verRes
         >
           <IcoCargar />
           <strong>{guardando ? "Guardando…" : "Subí el Detalle de Transacciones de Bistrosoft"}</strong>
-          <span className="small muted">También las compras de ARCA (Mis Comprobantes Recibidos). Se guarda solo y podés elegir varios archivos a la vez.</span>
+          <span className="small muted">También las compras: el Listado por imputación contable de Tango o Mis Comprobantes Recibidos de ARCA. Se guarda solo y podés elegir varios archivos a la vez.</span>
           <input id="archivo" type="file" multiple accept=".xlsx,.xls,.csv,.txt" onChange={(e) => { abrir(e.target.files); e.target.value = ""; }} />
         </label>
         {estado && <div className={`aviso ${estado.tipo}`} style={{ marginTop: 12 }} role="status">{estado.texto}</div>}
